@@ -70,6 +70,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   ],
   callbacks: {
     async jwt({ token, user }) {
+      console.log("[auth] jwt callback: user =", !!user, "AUTH_URL =", process.env.AUTH_URL ?? "(not set)", "AUTH_SECRET =", !!process.env.AUTH_SECRET);
       if (user) {
         token.id = user.id;
         token.role = (user as any).role;

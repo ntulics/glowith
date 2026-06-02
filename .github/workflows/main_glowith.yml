@@ -157,7 +157,11 @@ jobs:
           az webapp config appsettings set \
             --resource-group glowith_rg \
             --name glowith \
-            --settings SCM_DO_BUILD_DURING_DEPLOYMENT=false WEBSITE_NODE_DEFAULT_VERSION=~22
+            --settings \
+              SCM_DO_BUILD_DURING_DEPLOYMENT=false \
+              WEBSITE_NODE_DEFAULT_VERSION=~22 \
+              AUTH_URL=https://glowith.co.za \
+              NEXTAUTH_URL=https://glowith.co.za
 
           az webapp config set \
             --resource-group glowith_rg \
