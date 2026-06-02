@@ -9,7 +9,7 @@ on:
 env:
   APP_NAME: glowith
   AZURE_WEBAPP_NAME: glowith
-  AZURE_RESOURCE_GROUP: glowith-rg
+  AZURE_RESOURCE_GROUP: glowith_rg
   NODE_VERSION: '22.x'
   NEXT_PUBLIC_APP_NAME: Glowith
   NEXT_PUBLIC_APP_URL: https://glowith.co.za
@@ -78,6 +78,11 @@ jobs:
           cp -r node_modules/.prisma/client /tmp/deploy/node_modules/.prisma/client
           cp -r node_modules/prisma /tmp/deploy/node_modules/prisma
           cp -r node_modules/@prisma /tmp/deploy/node_modules/@prisma
+          mkdir -p /tmp/deploy/node_modules/@standard-schema
+          cp -r node_modules/@standard-schema/spec /tmp/deploy/node_modules/@standard-schema/spec
+          for package in c12 chokidar confbox deepmerge-ts defu destr dotenv effect empathic exsolve fast-check giget jiti nypm ohash pathe perfect-debounce pkg-types pure-rand rc9 readdirp; do
+            cp -r "node_modules/$package" "/tmp/deploy/node_modules/$package"
+          done
 
           # Write a production package manifest with an Azure-friendly start command.
           node -e "
@@ -120,6 +125,13 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_F2DCFCD8872A47F2B2BC7609EA8EB5CE }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_24724B3B0963430FA21F2D0F013F63AC }}
 
+      - name: Set Azure startup command
+        run: |
+          az webapp config set \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name ${{ env.AZURE_WEBAPP_NAME }} \
+            --startup-file 'sh start.sh'
+
       - name: Deploy to Azure Web App
         id: deploy-to-webapp
         uses: azure/webapps-deploy@v3
@@ -139,5 +151,12 @@ jobs:
             APP_URL="https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net"
           fi
           echo "Checking $APP_URL"
-          curl --fail --show-error --location --max-time 30 "$APP_URL" > /tmp/glowith-home.html
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if curl --fail --show-error --location --max-time 30 "$APP_URL" > /tmp/glowith-home.html; then
+              break
+            fi
+            echo "App not ready yet; retry $attempt/10..."
+            sleep 15
+          done
+          test -s /tmp/glowith-home.html
           head -c 500 /tmp/glowith-home.html
