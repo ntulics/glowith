@@ -21,9 +21,9 @@ env:
   NEXT_PUBLIC_FEATURE_MARKETPLACE: 'true'
   NEXT_PUBLIC_FEATURE_PAYMENTS: 'true'
   NEXT_PUBLIC_FEATURE_CALENDAR_SYNC: 'true'
-  # Placeholder used only for Prisma schema validation + client generation.
-  # The real DATABASE_URL is injected from GitHub secrets for the migrate step
-  # and from Azure App Settings at runtime.
+  # Placeholder only — used for Prisma schema validation + client generation in CI.
+  # The real DATABASE_URL lives in Azure App Settings (VNet-only, not reachable from CI).
+  # Migrations run inside Azure via start.sh on each deployment.
   DATABASE_URL: postgresql://glowith:glowith@localhost:5432/glowith
 
 jobs:
@@ -56,20 +56,6 @@ jobs:
 
       - name: Security audit
         run: npm audit --audit-level=moderate
-
-      - name: Run database migrations
-        # Uses secrets.DATABASE_URL if configured; skips gracefully otherwise.
-        # Add DATABASE_URL to GitHub repository secrets to enable CI migrations.
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: |
-          if [ -z "$DATABASE_URL" ] || [ "$DATABASE_URL" = "postgresql://glowith:glowith@localhost:5432/glowith" ]; then
-            echo "DATABASE_URL secret not configured — skipping CI migrations (start.sh will run them on Azure startup)."
-            exit 0
-          fi
-          echo "Running Prisma migrations against production database..."
-          npx prisma migrate deploy --schema=prisma/schema.prisma
-          echo "Migrations complete."
 
       - name: Build Next.js app
         env:
