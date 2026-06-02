@@ -169,11 +169,10 @@ jobs:
             --startup-file 'sh start.sh'
 
       - name: Deploy to Azure Web App
-        # --clean true wipes /home/site/wwwroot before extracting the zip.
-        # This permanently removes the stale oryx-manifest.toml and
-        # node_modules.tar.gz that Oryx persists between deployments.
-        # Without --clean, Azure overlays the zip and old Oryx artifacts survive,
-        # causing Oryx to extract a stale tar.gz that overwrites our node_modules.
+        # --clean true wipes /home/site/wwwroot before extracting the zip,
+        # removing stale oryx-manifest.toml / node_modules.tar.gz.
+        # --async true avoids 502 timeout on large zips — Kudu processes
+        # the upload in the background while we wait in the next step.
         run: |
           az webapp deploy \
             --resource-group glowith_rg \
@@ -181,7 +180,7 @@ jobs:
             --src-path /tmp/node-app.zip \
             --type zip \
             --clean true \
-            --async false
+            --async true
 
       - name: Print startup logs
         if: always()
