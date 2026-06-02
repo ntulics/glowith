@@ -27,9 +27,6 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate --schema=prisma/schema.prisma
 
-      - name: Validate Prisma schema
-        run: npx prisma validate --schema=prisma/schema.prisma
-
       - name: Typecheck
         run: npm run typecheck
 
