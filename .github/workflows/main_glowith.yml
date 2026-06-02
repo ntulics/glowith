@@ -65,19 +65,28 @@ jobs:
             cp -r prisma/migrations /tmp/deploy/migrations
           fi
 
-          # Write package.json with start script
+          # Write package.json with start script.
+          # Promote prisma CLI from devDependencies → dependencies so that
+          # npm install --omit=dev below installs it (needed by start.sh migrate).
           node -e "
             const fs = require('fs');
             const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
             pkg.name = 'glowith';
             pkg.scripts = { start: 'sh start.sh' };
             pkg.engines = { node: '>=22.0.0' };
+            pkg.dependencies['prisma'] = pkg.devDependencies['prisma'];
             delete pkg.devDependencies;
             fs.writeFileSync('/tmp/deploy/package.json', JSON.stringify(pkg, null, 2));
           "
 
-          # Install production deps inside deploy dir — this pulls in @prisma/engines
-          # (the migration engine binary) automatically, no manual copying needed
+          # Remove oryx-manifest.toml — Next.js standalone emits this file and
+          # Azure Oryx uses it to extract a stale node_modules.tar.gz, overwriting
+          # our freshly installed node_modules and dropping the Prisma CLI.
+          rm -f /tmp/deploy/oryx-manifest.toml
+
+          # Install production deps inside deploy dir.
+          # With prisma now in dependencies, this pulls in prisma CLI + @prisma/engines
+          # (the migration engine binary) automatically — no manual copying needed.
           cd /tmp/deploy
           PRISMA_SKIP_POSTINSTALL_GENERATE=1 npm install --omit=dev
 
