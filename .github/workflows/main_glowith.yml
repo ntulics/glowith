@@ -121,19 +121,23 @@ jobs:
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_24724B3B0963430FA21F2D0F013F63AC }}
 
       - name: Deploy to Azure Web App
+        id: deploy-to-webapp
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ env.AZURE_WEBAPP_NAME }}
           slot-name: Production
           package: /tmp/node-app.zip
 
-      - name: Print startup logs
+      - name: Check deployed app
         if: always()
         continue-on-error: true
         run: |
           echo "Waiting 30s for app to boot..."
           sleep 30
-          az webapp log tail \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --name ${{ env.AZURE_WEBAPP_NAME }} \
-            --timeout 20 2>&1 | tail -50
+          APP_URL="${{ steps.deploy-to-webapp.outputs.webapp-url }}"
+          if [ -z "$APP_URL" ]; then
+            APP_URL="https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net"
+          fi
+          echo "Checking $APP_URL"
+          curl --fail --show-error --location --max-time 30 "$APP_URL" > /tmp/glowith-home.html
+          head -c 500 /tmp/glowith-home.html
