@@ -25,12 +25,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       },
       async authorize(credentials) {
         try {
-          if (!credentials?.email || !credentials?.password) {
-            console.log("[auth] authorize: missing credentials");
-            return null;
-          }
-
-          console.log("[auth] authorize: looking up", credentials.email);
+          if (!credentials?.email || !credentials?.password) return null;
 
           const user = await prisma.user.findUnique({
             where: { email: credentials.email as string },
@@ -41,16 +36,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             }
           });
 
-          console.log("[auth] authorize: user found =", !!user, "has hash =", !!user?.passwordHash);
-
           if (!user || !user.passwordHash) return null;
 
           const valid = await bcrypt.compare(
             credentials.password as string,
             user.passwordHash
           );
-
-          console.log("[auth] authorize: password valid =", valid);
 
           if (!valid) return null;
 
@@ -62,7 +53,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             handle: user.providerProfile?.handle?.replace("@", "") ?? null
           };
         } catch (err: any) {
-          console.error("[auth] authorize error:", err.message, err.code ?? "");
+          console.error("[auth] authorize error:", err.message);
           return null;
         }
       }
@@ -70,7 +61,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   ],
   callbacks: {
     async jwt({ token, user }) {
-      console.log("[auth] jwt callback: user =", !!user, "AUTH_URL =", process.env.AUTH_URL ?? "(not set)", "AUTH_SECRET =", !!process.env.AUTH_SECRET);
       if (user) {
         token.id = user.id;
         token.role = (user as any).role;
