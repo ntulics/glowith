@@ -12,7 +12,6 @@ import {
   MapPin,
   MessageCircle,
   Search,
-  SlidersHorizontal,
   Sparkles,
   Star,
   Store,
@@ -29,12 +28,19 @@ import { cn } from "@/lib/utils";
 
 const categories: Array<ServiceCategory | "All"> = ["All", "Hair", "Nails", "Makeup", "Lashes", "Brows", "Barber", "Spa"];
 
+const categoryEmoji: Record<string, string> = {
+  All: "✦",
+  Hair: "💇",
+  Nails: "💅",
+  Makeup: "💄",
+  Lashes: "👁️",
+  Brows: "🪮",
+  Barber: "✂️",
+  Spa: "🌿"
+};
+
 const formatCurrency = (cents: number) =>
-  new Intl.NumberFormat("en-ZA", {
-    style: "currency",
-    currency: "ZAR",
-    maximumFractionDigits: 0
-  }).format(cents / 100);
+  new Intl.NumberFormat("en-ZA", { style: "currency", currency: "ZAR", maximumFractionDigits: 0 }).format(cents / 100);
 
 export function MarketplaceApp() {
   const [query, setQuery] = useState("");
@@ -52,19 +58,18 @@ export function MarketplaceApp() {
           .join(" ")
           .toLowerCase()
           .includes(value);
-
       return categoryMatch && searchMatch;
     });
   }, [category, query]);
 
   useEffect(() => {
-    if (filteredProviders.length > 0 && !filteredProviders.some((provider) => provider.id === selectedProvider.id)) {
+    if (filteredProviders.length > 0 && !filteredProviders.some((p) => p.id === selectedProvider.id)) {
       selectProvider(filteredProviders[0]);
     }
   }, [filteredProviders, selectedProvider.id]);
 
   const selectedService =
-    selectedProvider.services.find((service) => service.id === selectedServiceId) ?? selectedProvider.services[0];
+    selectedProvider.services.find((s) => s.id === selectedServiceId) ?? selectedProvider.services[0];
 
   function selectProvider(provider: Provider) {
     setSelectedProvider(provider);
@@ -72,60 +77,152 @@ export function MarketplaceApp() {
   }
 
   return (
-    <main className="app-shell min-h-screen pb-24 text-[var(--ink)] lg:pb-0">
+    <div className="min-h-screen bg-[var(--background)]">
       <TopBar />
 
-      <section className="mx-auto grid w-full max-w-7xl gap-5 px-4 py-4 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:px-8 lg:py-8">
-        <div className="space-y-5">
-          <HeroPanel />
-          <SearchPanel query={query} category={category} onQueryChange={setQuery} onCategoryChange={setCategory} />
-          <ProviderRail providers={filteredProviders} selectedProvider={selectedProvider} onSelectProvider={selectProvider} />
-          <PortfolioFeed provider={selectedProvider} />
+      {/* Hero — full width gradient, no image overlay */}
+      <HeroSearch query={query} onQueryChange={setQuery} />
+
+      {/* Page body — single scroll */}
+      <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pb-24 lg:pb-12">
+
+        {/* Category pills */}
+        <div className="flex gap-2 overflow-x-auto scroll-x py-6 -mx-1 px-1">
+          {categories.map((item) => (
+            <button
+              key={item}
+              onClick={() => setCategory(item)}
+              className={cn(
+                "focus-ring inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-4 text-sm font-semibold transition",
+                item === category
+                  ? "border-[var(--brand)] bg-[var(--brand)] text-white shadow-sm"
+                  : "border-[var(--line)] bg-white text-[var(--muted)] hover:border-[var(--brand)]/40 hover:text-[var(--ink)]"
+              )}
+            >
+              <span className="text-xs">{categoryEmoji[item]}</span>
+              {item}
+            </button>
+          ))}
         </div>
 
-        <aside className="space-y-5 lg:sticky lg:top-5 lg:h-[calc(100vh-2.5rem)] lg:overflow-y-auto lg:pr-1">
-          <ProviderDetail provider={selectedProvider} />
-          <BookingPanel
-            provider={selectedProvider}
-            selectedServiceId={selectedServiceId}
-            onServiceChange={setSelectedServiceId}
-          />
-          <OperationsPanel provider={selectedProvider} deposit={selectedService.depositCents} />
-        </aside>
-      </section>
+        {/* Two-column layout: provider list + detail panel */}
+        <div className="grid gap-6 lg:grid-cols-[1fr_380px] lg:items-start">
+
+          {/* ── Left: provider list ── */}
+          <section className="space-y-3" aria-label="Providers">
+            <h2 className="text-sm font-bold uppercase tracking-widest text-[var(--muted)]">
+              {filteredProviders.length} provider{filteredProviders.length !== 1 ? "s" : ""}
+              {category !== "All" ? ` in ${category}` : " near you"}
+            </h2>
+            <AnimatePresence initial={false}>
+              {filteredProviders.map((provider) => (
+                <motion.button
+                  layout
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  key={provider.id}
+                  onClick={() => selectProvider(provider)}
+                  className={cn(
+                    "focus-ring grid w-full grid-cols-[80px_1fr_auto] gap-3 rounded-2xl border bg-white p-3 text-left shadow-sm transition",
+                    selectedProvider.id === provider.id
+                      ? "border-[var(--brand)] ring-1 ring-[var(--brand)]/20"
+                      : "border-[var(--line)] hover:border-[var(--brand)]/40 hover:shadow-md"
+                  )}
+                >
+                  <div className="relative h-20 overflow-hidden rounded-xl bg-[var(--blush)]">
+                    <Image src={provider.portfolio[0].image} alt="" fill sizes="80px" className="object-cover" />
+                  </div>
+                  <div className="min-w-0 py-0.5">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <h3 className="truncate text-sm font-bold">{provider.businessName}</h3>
+                      {provider.verified && <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-[var(--sage)]" aria-label="Verified" />}
+                    </div>
+                    <p className="mt-0.5 truncate text-xs text-[var(--muted)]">{provider.handle} · {provider.category}</p>
+                    <div className="mt-2 flex flex-wrap gap-3 text-xs font-semibold text-[var(--muted)]">
+                      <span className="inline-flex items-center gap-1">
+                        <Star className="h-3 w-3 fill-[var(--gold)] text-[var(--gold)]" />
+                        {provider.rating} <span className="font-normal">({provider.reviewCount})</span>
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <MapPin className="h-3 w-3" />{provider.distanceKm} km
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <Clock3 className="h-3 w-3" />{provider.nextAvailable}
+                      </span>
+                    </div>
+                  </div>
+                  <ChevronRight className={cn("mt-6 h-4 w-4 transition-transform", selectedProvider.id === provider.id ? "text-[var(--brand)]" : "text-[var(--line)]")} />
+                </motion.button>
+              ))}
+            </AnimatePresence>
+
+            {filteredProviders.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-[var(--line)] bg-white py-16 text-center">
+                <p className="font-semibold text-[var(--muted)]">No providers match your search</p>
+              </div>
+            )}
+          </section>
+
+          {/* ── Right: provider detail + booking — sticky, no independent scroll ── */}
+          <div className="space-y-4 lg:sticky lg:top-[4.75rem] lg:self-start">
+            <ProviderDetailCard provider={selectedProvider} />
+            <BookingCard
+              provider={selectedProvider}
+              selectedServiceId={selectedServiceId}
+              onServiceChange={setSelectedServiceId}
+            />
+          </div>
+        </div>
+
+        {/* Portfolio — full width below both columns */}
+        <PortfolioFeed provider={selectedProvider} />
+
+        {/* Inbox + Studio */}
+        <div className="mt-8 grid gap-4 sm:grid-cols-2">
+          <InboxCard provider={selectedProvider} deposit={selectedService.depositCents} />
+          <StudioCard />
+        </div>
+      </main>
 
       <MobileNav />
-    </main>
+    </div>
   );
 }
 
+/* ─── Top bar ─────────────────────────────────────────────── */
+
 function TopBar() {
   return (
-    <header className="sticky top-0 z-30 border-b border-[var(--line)] bg-[#fffaf7]/92 backdrop-blur">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-[var(--brand)] text-white">
-            <Sparkles className="h-5 w-5" aria-hidden="true" />
+    <header className="sticky top-0 z-30 border-b border-white/60 bg-white/80 backdrop-blur-md">
+      <div className="mx-auto flex h-[4.25rem] max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[var(--brand)] to-[var(--peach)]">
+            <Sparkles className="h-4.5 w-4.5 text-white" aria-hidden="true" />
           </div>
-          <div>
-            <p className="text-lg font-black leading-none">Glowith</p>
-            <p className="text-xs font-semibold text-[var(--muted)]">Beauty marketplace</p>
+          <div className="leading-none">
+            <p className="text-base font-black tracking-tight">Glowith</p>
+            <p className="text-[10px] font-semibold text-[var(--muted)]">Beauty marketplace</p>
           </div>
         </div>
 
-        <nav className="hidden items-center gap-1 md:flex" aria-label="Primary">
+        <nav className="hidden items-center gap-0.5 md:flex" aria-label="Primary">
           {["Discover", "Portfolio", "Bookings", "Inbox"].map((item) => (
-            <a key={item} className="rounded-md px-3 py-2 text-sm font-semibold text-[var(--muted)] hover:bg-white" href={`#${item.toLowerCase()}`}>
+            <a
+              key={item}
+              href={`#${item.toLowerCase()}`}
+              className="rounded-lg px-3 py-2 text-sm font-semibold text-[var(--muted)] transition hover:bg-[var(--blush)]/40 hover:text-[var(--ink)]"
+            >
               {item}
             </a>
           ))}
         </nav>
 
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" aria-label="Notifications">
-            <Bell className="h-4 w-4" />
-          </Button>
-          <Button className="hidden sm:inline-flex">
+          <button className="focus-ring flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--line)] bg-white transition hover:bg-[var(--blush)]/40" aria-label="Notifications">
+            <Bell className="h-4 w-4 text-[var(--muted)]" />
+          </button>
+          <Button className="hidden rounded-xl bg-gradient-to-r from-[var(--brand)] to-[#E8547A] text-white shadow-sm hover:opacity-90 sm:inline-flex">
             <UserRoundPlus className="h-4 w-4" />
             Join
           </Button>
@@ -135,224 +232,112 @@ function TopBar() {
   );
 }
 
-function HeroPanel() {
+/* ─── Hero + search ────────────────────────────────────────── */
+
+function HeroSearch({ query, onQueryChange }: { query: string; onQueryChange: (v: string) => void }) {
   return (
-    <section id="discover" className="relative min-h-[430px] overflow-hidden rounded-lg bg-[var(--ink)] text-white shadow-sm">
-      <Image
-        src="/images/glowith-hero.png"
-        alt="Beauty professionals preparing client hair, makeup, and nails in a modern studio"
-        fill
-        priority
-        sizes="(min-width: 1024px) 58vw, 100vw"
-        className="object-cover"
-      />
-      <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/26 to-transparent" />
-      <div className="relative flex min-h-[430px] max-w-xl flex-col justify-between p-5 sm:p-7">
-        <div className="inline-flex w-fit items-center gap-2 rounded-md bg-white/14 px-3 py-2 text-xs font-bold backdrop-blur">
-          <BadgeCheck className="h-4 w-4" />
-          Verified local beauty talent
-        </div>
-        <div className="space-y-4">
-          <h1 className="text-balance text-4xl font-black leading-[1.02] sm:text-6xl">Glowith</h1>
-          <p className="max-w-md text-base font-medium leading-7 text-white/86">
-            Browse real portfolios, chat before you commit, reserve a time, and secure the slot with a deposit.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <Button>
-              <Search className="h-4 w-4" />
-              Explore providers
-            </Button>
-            <Button variant="outline" className="border-white/24 bg-white/12 text-white hover:bg-white/20">
-              <Store className="h-4 w-4" />
-              Provider studio
-            </Button>
+    <section
+      className="relative overflow-hidden px-4 pb-10 pt-14 sm:px-6 lg:px-8"
+      style={{
+        background:
+          "linear-gradient(135deg, #FCEEE8 0%, #FCDDE8 40%, #F7D0F0 100%)"
+      }}
+    >
+      {/* Decorative blobs */}
+      <div className="pointer-events-none absolute -right-24 -top-20 h-80 w-80 rounded-full bg-[var(--brand)]/8 blur-3xl" />
+      <div className="pointer-events-none absolute -left-16 bottom-0 h-60 w-60 rounded-full bg-[var(--peach)]/20 blur-3xl" />
+
+      <div className="relative mx-auto max-w-3xl text-center">
+        <p className="mb-3 text-xs font-bold uppercase tracking-[0.2em] text-[var(--brand)]">
+          South Africa&apos;s beauty marketplace
+        </p>
+        <h1 className="text-balance text-4xl font-black leading-tight text-[var(--ink)] sm:text-5xl lg:text-6xl">
+          Book beauty you&apos;ll{" "}
+          <span className="text-[var(--brand)]">love</span>
+        </h1>
+        <p className="mx-auto mt-4 max-w-lg text-base font-medium text-[var(--muted)]">
+          Browse real portfolios, chat before you commit, and secure your slot with a deposit.
+        </p>
+
+        {/* Search bar */}
+        <div className="mt-8 flex overflow-hidden rounded-2xl border border-white/80 bg-white shadow-lg shadow-[var(--brand)]/10">
+          <div className="flex flex-1 items-center gap-2 px-4 py-3">
+            <Search className="h-4 w-4 shrink-0 text-[var(--muted)]" />
+            <input
+              value={query}
+              onChange={(e) => onQueryChange(e.target.value)}
+              placeholder="Search hair, nails, makeup, location…"
+              className="min-w-0 flex-1 bg-transparent text-sm font-medium text-[var(--ink)] placeholder:text-[var(--muted)] outline-none"
+            />
           </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function SearchPanel({
-  query,
-  category,
-  onQueryChange,
-  onCategoryChange
-}: {
-  query: string;
-  category: ServiceCategory | "All";
-  onQueryChange: (value: string) => void;
-  onCategoryChange: (value: ServiceCategory | "All") => void;
-}) {
-  return (
-    <section className="space-y-3">
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
-          <Input
-            value={query}
-            onChange={(event) => onQueryChange(event.target.value)}
-            placeholder="Search hair, nails, makeup, location"
-            className="pl-9"
-          />
-        </div>
-        <Button variant="outline" size="icon" aria-label="Filters">
-          <SlidersHorizontal className="h-4 w-4" />
-        </Button>
-      </div>
-
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {categories.map((item) => (
-          <button
-            key={item}
-            onClick={() => onCategoryChange(item)}
-            className={cn(
-              "focus-ring h-9 shrink-0 rounded-md border px-3 text-sm font-bold transition",
-              item === category
-                ? "border-[var(--brand)] bg-[var(--brand)] text-white"
-                : "border-[var(--line)] bg-white text-[var(--muted)] hover:text-[var(--ink)]"
-            )}
-          >
-            {item}
+          <button className="focus-ring m-1.5 rounded-xl bg-gradient-to-r from-[var(--brand)] to-[#E8547A] px-5 py-2 text-sm font-bold text-white shadow-sm transition hover:opacity-90">
+            Search
           </button>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function ProviderRail({
-  providers: providerList,
-  selectedProvider,
-  onSelectProvider
-}: {
-  providers: Provider[];
-  selectedProvider: Provider;
-  onSelectProvider: (provider: Provider) => void;
-}) {
-  return (
-    <section className="grid gap-3" aria-label="Providers">
-      <AnimatePresence initial={false}>
-        {providerList.map((provider) => (
-          <motion.button
-            layout
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            key={provider.id}
-            onClick={() => onSelectProvider(provider)}
-            className={cn(
-              "focus-ring grid w-full grid-cols-[76px_1fr_auto] gap-3 rounded-lg border bg-white p-3 text-left shadow-sm transition",
-              selectedProvider.id === provider.id ? "border-[var(--brand)]" : "border-[var(--line)] hover:border-[#d8c8c2]"
-            )}
-          >
-            <div className="relative h-[76px] overflow-hidden rounded-md bg-[#f3e8e2]">
-              <Image src={provider.portfolio[0].image} alt="" fill sizes="76px" className="object-cover" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="truncate text-base font-black">{provider.businessName}</h2>
-                {provider.verified ? <BadgeCheck className="h-4 w-4 text-[var(--sage)]" aria-label="Verified" /> : null}
-              </div>
-              <p className="truncate text-sm font-semibold text-[var(--muted)]">{provider.handle} · {provider.category}</p>
-              <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold text-[var(--muted)]">
-                <span className="inline-flex items-center gap-1">
-                  <Star className="h-3.5 w-3.5 fill-[var(--gold)] text-[var(--gold)]" />
-                  {provider.rating} ({provider.reviewCount})
-                </span>
-                <span className="inline-flex items-center gap-1">
-                  <MapPin className="h-3.5 w-3.5" />
-                  {provider.distanceKm} km
-                </span>
-                <span className="inline-flex items-center gap-1">
-                  <Clock3 className="h-3.5 w-3.5" />
-                  {provider.nextAvailable}
-                </span>
-              </div>
-            </div>
-            <ChevronRight className="mt-6 h-5 w-5 text-[var(--muted)]" />
-          </motion.button>
-        ))}
-      </AnimatePresence>
-    </section>
-  );
-}
-
-function PortfolioFeed({ provider }: { provider: Provider }) {
-  return (
-    <section id="portfolio" className="space-y-3">
-      <div className="flex items-end justify-between">
-        <div>
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--brand-dark)]">Portfolio</p>
-          <h2 className="text-2xl font-black">{provider.businessName}</h2>
         </div>
-        <Button variant="ghost" size="sm">
-          Follow
-          <Heart className="h-4 w-4" />
-        </Button>
-      </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        {provider.portfolio.map((post) => (
-          <Card key={post.id} className="overflow-hidden">
-            <div className="relative aspect-square bg-[#f1e7e1]">
-              <Image src={post.image} alt={post.caption} fill sizes="(min-width: 768px) 290px, 50vw" className="object-cover" />
-            </div>
-            <CardContent className="space-y-2 p-3">
-              <p className="line-clamp-2 text-sm font-bold">{post.caption}</p>
-              <div className="flex items-center justify-between text-xs font-bold text-[var(--muted)]">
-                <span>{post.likes} likes</span>
-                <span>{post.saves} saves</span>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+        <p className="mt-4 text-xs font-semibold text-[var(--muted)]">
+          Verified talent · Deposit-secured bookings · Chat first
+        </p>
       </div>
     </section>
   );
 }
 
-function ProviderDetail({ provider }: { provider: Provider }) {
+/* ─── Provider detail card ─────────────────────────────────── */
+
+function ProviderDetailCard({ provider }: { provider: Provider }) {
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-start justify-between gap-4">
+    <Card className="overflow-hidden rounded-2xl border-[var(--line)] shadow-sm">
+      {/* Cover strip */}
+      <div className="relative h-28 bg-gradient-to-br from-[#FCEEE8] to-[#F9D0E8]">
+        <Image
+          src={provider.portfolio[0].image}
+          alt=""
+          fill
+          sizes="380px"
+          className="object-cover opacity-60"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+      </div>
+
+      <CardContent className="space-y-4 p-4">
+        <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-sm font-bold text-[var(--muted)]">{provider.name}</p>
-            <h2 className="text-2xl font-black">{provider.businessName}</h2>
+            <p className="text-xs font-semibold text-[var(--muted)]">{provider.name}</p>
+            <h2 className="text-lg font-black leading-tight">{provider.businessName}</h2>
           </div>
-          <Button variant="outline" size="icon" aria-label="Save provider">
-            <Heart className="h-4 w-4" />
-          </Button>
+          <button className="focus-ring flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-white transition hover:bg-[var(--blush)]/40" aria-label="Save">
+            <Heart className="h-3.5 w-3.5 text-[var(--muted)]" />
+          </button>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <p className="text-sm leading-6 text-[var(--muted)]">{provider.bio}</p>
+
+        <p className="text-xs leading-5 text-[var(--muted)]">{provider.bio}</p>
+
         <div className="grid grid-cols-3 gap-2">
           {[
             ["Rating", provider.rating.toFixed(1)],
             ["Reviews", String(provider.reviewCount)],
             ["Distance", `${provider.distanceKm} km`]
           ].map(([label, value]) => (
-            <div key={label} className="rounded-md bg-[#f8f0ec] p-3">
-              <p className="text-xs font-bold text-[var(--muted)]">{label}</p>
-              <p className="text-lg font-black">{value}</p>
+            <div key={label} className="rounded-xl bg-gradient-to-b from-[#FFF3EE] to-[#FDEEE9] p-2.5 text-center">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">{label}</p>
+              <p className="mt-0.5 text-base font-black">{value}</p>
             </div>
           ))}
         </div>
-        <div className="rounded-md border border-[var(--line)] bg-[#fdf8f4] p-3">
-          <div className="flex items-center gap-2 text-sm font-black">
-            <MapPin className="h-4 w-4 text-[var(--sage)]" />
-            {provider.location.label}
-          </div>
-          <div className="mt-3 h-32 rounded-md border border-[#e5d6ce] bg-[linear-gradient(135deg,#ead9d0_25%,#f8f0ec_25%,#f8f0ec_50%,#ead9d0_50%,#ead9d0_75%,#f8f0ec_75%)] bg-[length:28px_28px]" />
+
+        <div className="flex items-center gap-2 rounded-xl bg-[#F8F2EE] px-3 py-2 text-xs font-semibold">
+          <MapPin className="h-3.5 w-3.5 shrink-0 text-[var(--sage)]" />
+          {provider.location.label}
         </div>
       </CardContent>
     </Card>
   );
 }
 
-function BookingPanel({
+/* ─── Booking card ─────────────────────────────────────────── */
+
+function BookingCard({
   provider,
   selectedServiceId,
   onServiceChange
@@ -361,51 +346,58 @@ function BookingPanel({
   selectedServiceId: string;
   onServiceChange: (id: string) => void;
 }) {
-  const selectedService = provider.services.find((service) => service.id === selectedServiceId) ?? provider.services[0];
+  const selectedService = provider.services.find((s) => s.id === selectedServiceId) ?? provider.services[0];
 
   return (
-    <Card id="bookings">
-      <CardHeader>
+    <Card className="rounded-2xl border-[var(--line)] shadow-sm" id="bookings">
+      <CardHeader className="pb-2 pt-4">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--brand-dark)]">Booking</p>
-            <h2 className="text-xl font-black">Reserve a slot</h2>
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--brand)]">Booking</p>
+            <h3 className="text-base font-black">Reserve a slot</h3>
           </div>
-          <CalendarDays className="h-5 w-5 text-[var(--sage)]" />
+          <CalendarDays className="h-4.5 w-4.5 text-[var(--sage)]" />
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid gap-2">
+      <CardContent className="space-y-3 pb-4">
+        {/* Services */}
+        <div className="space-y-2">
           {provider.services.map((service) => (
             <button
               key={service.id}
               onClick={() => onServiceChange(service.id)}
               className={cn(
-                "focus-ring flex items-center justify-between rounded-md border p-3 text-left transition",
-                selectedServiceId === service.id ? "border-[var(--brand)] bg-[#fff3f6]" : "border-[var(--line)] bg-white"
+                "focus-ring flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left text-sm transition",
+                selectedServiceId === service.id
+                  ? "border-[var(--brand)] bg-[#FFF0F4]"
+                  : "border-[var(--line)] bg-white hover:border-[var(--brand)]/30"
               )}
             >
               <span>
-                <span className="block text-sm font-black">{service.name}</span>
-                <span className="text-xs font-bold text-[var(--muted)]">{service.durationMinutes} min</span>
+                <span className="block font-bold">{service.name}</span>
+                <span className="text-xs text-[var(--muted)]">{service.durationMinutes} min</span>
               </span>
-              <span className="text-right text-sm font-black">
-                {formatCurrency(service.priceCents)}
-                <span className="block text-xs text-[var(--muted)]">{formatCurrency(service.depositCents)} deposit</span>
+              <span className="text-right">
+                <span className="block font-black">{formatCurrency(service.priceCents)}</span>
+                <span className="text-xs text-[var(--muted)]">{formatCurrency(service.depositCents)} deposit</span>
               </span>
             </button>
           ))}
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        {/* Time slots */}
+        <div className="grid grid-cols-4 gap-1.5">
           {["09:00", "12:30", "15:30", "17:00"].map((time) => (
-            <button key={time} className="focus-ring rounded-md border border-[var(--line)] bg-white py-3 text-sm font-black hover:border-[var(--brand)]">
+            <button
+              key={time}
+              className="focus-ring rounded-xl border border-[var(--line)] bg-white py-2 text-xs font-bold transition hover:border-[var(--brand)] hover:text-[var(--brand)]"
+            >
               {time}
             </button>
           ))}
         </div>
 
-        <Button className="w-full">
+        <Button className="w-full rounded-xl bg-gradient-to-r from-[var(--brand)] to-[#E8547A] text-white shadow-sm hover:opacity-90">
           <CreditCard className="h-4 w-4" />
           Pay {formatCurrency(selectedService.depositCents)} deposit
         </Button>
@@ -414,60 +406,107 @@ function BookingPanel({
   );
 }
 
-function OperationsPanel({ provider, deposit }: { provider: Provider; deposit: number }) {
-  return (
-    <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-      <Card id="inbox">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-black">Inbox</h2>
-            <MessageCircle className="h-5 w-5 text-[var(--brand)]" />
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="rounded-md bg-[#f8f0ec] p-3 text-sm">
-            <p className="font-black">{provider.name}</p>
-            <p className="mt-1 leading-6 text-[var(--muted)]">I can confirm once the {formatCurrency(deposit)} deposit reflects.</p>
-          </div>
-          <div className="flex gap-2">
-            <Input placeholder="Message provider" aria-label="Message provider" />
-            <Button size="icon" aria-label="Send message">
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+/* ─── Portfolio feed ───────────────────────────────────────── */
 
-      <Card>
-        <CardHeader>
-          <h2 className="text-lg font-black">Provider studio</h2>
-        </CardHeader>
-        <CardContent className="grid gap-3 text-sm font-bold text-[var(--muted)]">
-          <div className="flex items-center justify-between">
-            <span>Portfolio posts</span>
-            <span className="text-[var(--ink)]">2 queued</span>
+function PortfolioFeed({ provider }: { provider: Provider }) {
+  return (
+    <section id="portfolio" className="mt-10 space-y-4">
+      <div className="flex items-end justify-between">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--brand)]">Portfolio</p>
+          <h2 className="text-xl font-black">{provider.businessName}</h2>
+        </div>
+        <button className="focus-ring inline-flex items-center gap-1.5 rounded-xl border border-[var(--line)] bg-white px-3 py-1.5 text-xs font-bold transition hover:bg-[var(--blush)]/40">
+          <Heart className="h-3.5 w-3.5" />
+          Follow
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {provider.portfolio.map((post) => (
+          <div key={post.id} className="overflow-hidden rounded-2xl border border-[var(--line)] bg-white shadow-sm">
+            <div className="relative aspect-square bg-[var(--blush)]">
+              <Image src={post.image} alt={post.caption} fill sizes="(min-width: 640px) 25vw, 50vw" className="object-cover" />
+            </div>
+            <div className="space-y-1 p-3">
+              <p className="line-clamp-1 text-xs font-bold">{post.caption}</p>
+              <div className="flex items-center justify-between text-[10px] font-semibold text-[var(--muted)]">
+                <span>♥ {post.likes}</span>
+                <span>⊕ {post.saves}</span>
+              </div>
+            </div>
           </div>
-          <div className="flex items-center justify-between">
-            <span>Calendar sync</span>
-            <span className="text-[var(--sage)]">Google + Outlook</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span>Notifications</span>
-            <span className="text-[var(--sage)]">WhatsApp ready</span>
-          </div>
-          <Button variant="secondary" className="mt-1 w-full">
-            <Store className="h-4 w-4" />
-            Open studio
-          </Button>
-        </CardContent>
-      </Card>
+        ))}
+      </div>
     </section>
   );
 }
 
+/* ─── Inbox card ───────────────────────────────────────────── */
+
+function InboxCard({ provider, deposit }: { provider: Provider; deposit: number }) {
+  return (
+    <Card className="rounded-2xl border-[var(--line)] shadow-sm" id="inbox">
+      <CardHeader className="pb-2 pt-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-black">Inbox</h3>
+          <MessageCircle className="h-4.5 w-4.5 text-[var(--brand)]" />
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3 pb-4">
+        <div className="rounded-xl bg-gradient-to-b from-[#FFF3EE] to-[#FDEEE9] p-3 text-sm">
+          <p className="font-bold">{provider.name}</p>
+          <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
+            I can confirm once the {formatCurrency(deposit)} deposit reflects.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Input placeholder="Message provider…" className="rounded-xl border-[var(--line)]" />
+          <button className="focus-ring flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-r from-[var(--brand)] to-[#E8547A] text-white transition hover:opacity-90" aria-label="Send">
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ─── Studio card ──────────────────────────────────────────── */
+
+function StudioCard() {
+  return (
+    <Card className="rounded-2xl border-[var(--line)] shadow-sm">
+      <CardHeader className="pb-2 pt-4">
+        <h3 className="text-base font-black">Provider studio</h3>
+      </CardHeader>
+      <CardContent className="space-y-3 pb-4 text-sm font-semibold text-[var(--muted)]">
+        {[
+          ["Portfolio posts", "2 queued", "text-[var(--ink)]"],
+          ["Calendar sync", "Google + Outlook", "text-[var(--sage)]"],
+          ["Notifications", "WhatsApp ready", "text-[var(--sage)]"]
+        ].map(([label, value, cls]) => (
+          <div key={label} className="flex items-center justify-between">
+            <span>{label}</span>
+            <span className={cls}>{value}</span>
+          </div>
+        ))}
+        <Button variant="secondary" className="mt-1 w-full rounded-xl">
+          <Store className="h-4 w-4" />
+          Open studio
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ─── Mobile nav ───────────────────────────────────────────── */
+
 function MobileNav() {
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--line)] bg-white/94 px-4 py-2 backdrop-blur lg:hidden" aria-label="Mobile">
+    <nav
+      className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--line)] bg-white/90 px-4 py-2 backdrop-blur-md lg:hidden"
+      aria-label="Mobile navigation"
+    >
       <div className="mx-auto grid max-w-md grid-cols-4 gap-1">
         {[
           [Search, "Discover"],
@@ -475,7 +514,10 @@ function MobileNav() {
           [CalendarDays, "Book"],
           [MessageCircle, "Inbox"]
         ].map(([Icon, label]) => (
-          <button key={label as string} className="focus-ring flex h-12 flex-col items-center justify-center gap-1 rounded-md text-xs font-black text-[var(--muted)]">
+          <button
+            key={label as string}
+            className="focus-ring flex h-12 flex-col items-center justify-center gap-1 rounded-xl text-[10px] font-bold text-[var(--muted)] transition hover:text-[var(--brand)]"
+          >
             <Icon className="h-5 w-5" />
             {label as string}
           </button>

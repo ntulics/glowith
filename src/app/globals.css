@@ -2,15 +2,18 @@
 
 :root {
   color-scheme: light;
-  --background: #fffaf7;
+  --background: #FFF7F3;
   --foreground: #231f20;
-  --muted: #746c70;
-  --line: #eadfda;
-  --brand: #d94772;
+  --muted: #7A6C6E;
+  --line: #EDE0DA;
+  --brand: #D94472;
   --brand-dark: #9f2852;
+  --peach: #F4A07A;
+  --blush: #F9D4CA;
   --sage: #577568;
-  --gold: #be8b3f;
+  --gold: #C9A84C;
   --ink: #1f2326;
+  --card: #FFFFFF;
 }
 
 * {
@@ -41,13 +44,15 @@ textarea {
   outline-offset: 3px;
 }
 
-.app-shell {
-  background:
-    linear-gradient(180deg, rgba(255, 250, 247, 0.92), rgba(255, 250, 247, 1) 42%),
-    radial-gradient(circle at 80% 10%, rgba(190, 139, 63, 0.18), transparent 32%),
-    radial-gradient(circle at 10% 20%, rgba(87, 117, 104, 0.16), transparent 28%);
-}
-
 .text-balance {
   text-wrap: balance;
+}
+
+/* Horizontal scroll - hide scrollbar visually but keep functional */
+.scroll-x {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scroll-x::-webkit-scrollbar {
+  display: none;
 }
