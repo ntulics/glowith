@@ -120,13 +120,6 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_F2DCFCD8872A47F2B2BC7609EA8EB5CE }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_24724B3B0963430FA21F2D0F013F63AC }}
 
-      - name: Set Azure startup command
-        run: |
-          az webapp config set \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --name ${{ env.AZURE_WEBAPP_NAME }} \
-            --startup-file 'sh start.sh'
-
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
