@@ -90,12 +90,18 @@ jobs:
           cd /tmp/deploy
           PRISMA_SKIP_POSTINSTALL_GENERATE=1 npm install --omit=dev
 
+          # Final cleanup — ensure no oryx artifacts make it into the zip
+          rm -f /tmp/deploy/oryx-manifest.toml /tmp/deploy/node_modules.tar.gz
+
           # Override with the CI-generated Prisma client (built against this exact schema)
           cp -r $GITHUB_WORKSPACE/node_modules/.prisma /tmp/deploy/node_modules/.prisma
 
+          # Admin seed script — reads ADMIN_EMAIL + ADMIN_PASSWORD from Azure App Settings
+          cp $GITHUB_WORKSPACE/scripts/seed-admin.js /tmp/deploy/seed-admin.js
+
           echo "=== .prisma/client present: $(ls /tmp/deploy/node_modules/.prisma/client/ | wc -l) files ==="
 
-          # Startup script: migrate inside Azure (VNet), self-heal P3005, then start server
+          # Startup script: migrate → seed admin → start server
           # P3005 = existing DB with no migration history → baseline then re-run
           # Note: printf used instead of heredoc to avoid YAML << parse conflicts
           printf '%s\n' \
@@ -118,6 +124,9 @@ jobs:
             '    exit 1' \
             '  fi' \
             'fi' \
+            '' \
+            'echo "Seeding admin user..."' \
+            'node seed-admin.js' \
             '' \
             'echo "Database ready. Starting Glowith..."' \
             'export HOSTNAME=0.0.0.0' \
