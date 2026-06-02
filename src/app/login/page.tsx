@@ -30,9 +30,34 @@ function LoginForm() {
 
     if (result?.error) {
       setError("Invalid email or password");
-    } else {
-      const callbackUrl = params.get("callbackUrl") ?? "/dashboard";
+      return;
+    }
+
+    // Fetch the session to get role + handle for redirect
+    const sessionRes = await fetch("/api/auth/session");
+    const session = await sessionRes.json();
+    const user = session?.user;
+
+    // Explicit callbackUrl always wins (e.g. from middleware redirect)
+    const callbackUrl = params.get("callbackUrl");
+    if (callbackUrl) {
       router.push(callbackUrl);
+      return;
+    }
+
+    if (user?.role === "ADMIN") {
+      router.push("/admin");
+    } else if (user?.role === "PROVIDER" && user?.handle) {
+      // Redirect to their subdomain in production, /dashboard in dev
+      const isProd = window.location.hostname !== "localhost";
+      if (isProd) {
+        const baseDomain = window.location.hostname.split(".").slice(-2).join(".");
+        window.location.href = `https://${user.handle}.${baseDomain}/dashboard`;
+      } else {
+        router.push("/dashboard");
+      }
+    } else {
+      router.push("/dashboard");
     }
   }
 
@@ -49,6 +74,11 @@ function LoginForm() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 rounded-2xl border border-[#E8E0DC] bg-white p-6 shadow-sm">
+          {params.get("registered") && (
+            <div className="rounded-xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+              Studio created! Sign in below.
+            </div>
+          )}
           {error && (
             <div className="rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
               {error}

@@ -1,11 +1,15 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { PrismaAdapter } from "@auth/prisma-adapter";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 
+// Note: PrismaAdapter is intentionally NOT used here.
+// We use JWT sessions + credentials-only auth. PrismaAdapter is only needed
+// for OAuth providers or database sessions — using it with credentials+JWT
+// causes NextAuth to call createUser/linkAccount on sign-in which conflicts
+// with our own user creation flow.
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
-  adapter: PrismaAdapter(prisma),
   session: { strategy: "jwt" },
   trustHost: true,
   pages: {
@@ -29,7 +33,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         if (!user || !user.passwordHash) return null;
 
-        const valid = await bcrypt.compare(credentials.password as string, user.passwordHash);
+        const valid = await bcrypt.compare(
+          credentials.password as string,
+          user.passwordHash
+        );
         if (!valid) return null;
 
         return {
@@ -37,7 +44,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           email: user.email,
           name: user.name,
           role: user.role,
-          handle: user.providerProfile?.handle ?? null
+          handle: user.providerProfile?.handle?.replace("@", "") ?? null
         };
       }
     })
@@ -45,6 +52,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
+        token.id = user.id;
         token.role = (user as any).role;
         token.handle = (user as any).handle;
       }
@@ -52,7 +60,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     },
     async session({ session, token }) {
       if (session.user) {
-        (session.user as any).id = token.sub;
+        (session.user as any).id = token.id ?? token.sub;
         (session.user as any).role = token.role;
         (session.user as any).handle = token.handle;
       }
