@@ -147,8 +147,17 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_F2DCFCD8872A47F2B2BC7609EA8EB5CE }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_24724B3B0963430FA21F2D0F013F63AC }}
 
-      - name: Set Azure startup command
+      - name: Configure Azure App Settings
         run: |
+          # Disable Oryx build-on-deploy — our zip is self-contained.
+          # Without this, Oryx finds the persisted oryx-manifest.toml from a previous
+          # deployment (Azure overlays zips, doesn't clean /home/site/wwwroot) and
+          # extracts a stale node_modules.tar.gz that overwrites our node_modules.
+          az webapp config appsettings set \
+            --resource-group glowith_rg \
+            --name glowith \
+            --settings SCM_DO_BUILD_DURING_DEPLOYMENT=false WEBSITE_NODE_DEFAULT_VERSION=~22
+
           az webapp config set \
             --resource-group glowith_rg \
             --name glowith \
