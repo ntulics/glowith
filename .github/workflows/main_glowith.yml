@@ -58,12 +58,15 @@ jobs:
         run: npm audit --audit-level=moderate
 
       - name: Run database migrations
-        # Skipped if DATABASE_URL secret is not configured (e.g. first-time setup).
-        # Add DATABASE_URL and AUTH_SECRET to GitHub repository secrets to enable.
-        if: ${{ secrets.DATABASE_URL != '' }}
+        # Uses secrets.DATABASE_URL if configured; skips gracefully otherwise.
+        # Add DATABASE_URL to GitHub repository secrets to enable CI migrations.
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
+          if [ -z "$DATABASE_URL" ] || [ "$DATABASE_URL" = "postgresql://glowith:glowith@localhost:5432/glowith" ]; then
+            echo "DATABASE_URL secret not configured — skipping CI migrations (start.sh will run them on Azure startup)."
+            exit 0
+          fi
           echo "Running Prisma migrations against production database..."
           npx prisma migrate deploy --schema=prisma/schema.prisma
           echo "Migrations complete."
