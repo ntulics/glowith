@@ -84,15 +84,22 @@ jobs:
           #   1. prisma CLI (JS only, ~5 MB) — for "prisma migrate deploy" in start.sh
           #   2. schema-engine binary — used by migrate deploy (NOT the query engine)
           #   3. .prisma/client override — ensure CI-generated client is used
+          # Prisma CLI + client JS (no large binaries)
+          cp -r node_modules/prisma                         /tmp/deploy/node_modules/prisma
+          cp -r node_modules/@prisma/client                 /tmp/deploy/node_modules/@prisma/client
+
+          # @prisma/engines: JS dist files (needed by Prisma CLI to resolve engine paths)
+          # + only the schema-engine binary (for migrate deploy) — query engine is already
+          # in the standalone traced node_modules
           mkdir -p /tmp/deploy/node_modules/@prisma/engines
-          cp -r node_modules/prisma                       /tmp/deploy/node_modules/prisma
-          cp -r node_modules/@prisma/client               /tmp/deploy/node_modules/@prisma/client
-          cp    node_modules/@prisma/engines/package.json /tmp/deploy/node_modules/@prisma/engines/
-          # schema-engine is the migration binary in Prisma 5+
+          cp    node_modules/@prisma/engines/package.json   /tmp/deploy/node_modules/@prisma/engines/
+          cp -r node_modules/@prisma/engines/dist           /tmp/deploy/node_modules/@prisma/engines/dist
           find node_modules/@prisma/engines -maxdepth 1 -name "schema-engine-*" \
             -exec cp {} /tmp/deploy/node_modules/@prisma/engines/ \;
+
+          # Generated client (query engine binary for runtime)
           cp -r node_modules/.prisma /tmp/deploy/node_modules/.prisma
-          echo "=== Prisma engines dir size: $(du -sh /tmp/deploy/node_modules/@prisma/engines | cut -f1) ==="
+          echo "=== @prisma/engines size: $(du -sh /tmp/deploy/node_modules/@prisma/engines | cut -f1) ==="
 
           # Remove oryx-manifest.toml so Azure doesn't try to re-build on deploy
           rm -f /tmp/deploy/oryx-manifest.toml /tmp/deploy/node_modules.tar.gz
