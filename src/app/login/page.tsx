@@ -48,13 +48,13 @@ function LoginForm() {
     if (user?.role === "ADMIN") {
       router.push("/admin");
     } else if (user?.role === "PROVIDER" && user?.handle) {
-      // Redirect to their subdomain in production, /dashboard in dev
-      const isProd = window.location.hostname !== "localhost";
-      if (isProd) {
-        const baseDomain = window.location.hostname.split(".").slice(-2).join(".");
-        window.location.href = `https://${user.handle}.${baseDomain}/dashboard`;
-      } else {
+      const isLocalhost = window.location.hostname === "localhost";
+      if (isLocalhost) {
         router.push("/dashboard");
+      } else {
+        // Use the full current hostname as base — works correctly for
+        // multi-part TLDs like .co.za (.slice(-2) would give "co.za" not "glowith.co.za")
+        window.location.href = `https://${user.handle}.${window.location.hostname}/dashboard`;
       }
     } else {
       router.push("/dashboard");

@@ -1,10 +1,10 @@
 /**
  * seed-admin.js — runs inside Azure at startup via start.sh
  *
- * Reads ADMIN_EMAIL and ADMIN_PASSWORD from env vars (set in Azure App Settings).
- * - If the user doesn't exist: creates them as ADMIN with a ProviderProfile stub
- * - If they exist but aren't ADMIN: promotes them
- * - If they're already ADMIN: no-op
+ * Reads ADMIN_EMAIL and ADMIN_PASSWORD from env vars (Azure App Settings).
+ * - If the user doesn't exist: creates them as ADMIN
+ * - If they exist: promotes to ADMIN if needed AND always re-syncs the password hash
+ *   so that changing ADMIN_PASSWORD in Azure App Settings takes effect on next deploy
  *
  * Safe to run on every boot — idempotent.
  */
@@ -26,20 +26,20 @@ async function main() {
   const prisma = new PrismaClient();
 
   try {
+    const passwordHash = await bcrypt.hash(password, 12);
     const existing = await prisma.user.findUnique({ where: { email } });
 
     if (existing) {
-      if (existing.role !== "ADMIN") {
-        await prisma.user.update({ where: { id: existing.id }, data: { role: "ADMIN" } });
-        console.log(`[seed-admin] Promoted ${email} to ADMIN.`);
-      } else {
-        console.log(`[seed-admin] Admin ${email} already exists — no changes.`);
-      }
+      // Always re-sync role + password hash so Azure App Setting changes take effect
+      await prisma.user.update({
+        where: { id: existing.id },
+        data: { role: "ADMIN", passwordHash }
+      });
+      console.log(`[seed-admin] Admin ${email} updated (role=ADMIN, password synced).`);
       return;
     }
 
-    const passwordHash = await bcrypt.hash(password, 12);
-
+    // Create fresh admin user with ProviderProfile stub
     await prisma.user.create({
       data: {
         email,
@@ -60,11 +60,9 @@ async function main() {
         }
       }
     });
-
     console.log(`[seed-admin] Admin user created: ${email}`);
   } catch (err) {
     console.error("[seed-admin] Failed:", err.message);
-    // Non-fatal — server starts regardless
   } finally {
     await prisma.$disconnect();
   }
