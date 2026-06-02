@@ -13,7 +13,8 @@ import {
   MessageCircle,
   Settings,
   Sparkles,
-  Users
+  Users,
+  X
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -27,7 +28,14 @@ const nav = [
   { href: "/dashboard/settings", label: "Settings", icon: Settings }
 ];
 
-export function Sidebar({ businessName, handle, role }: { businessName: string; handle: string; role?: string }) {
+interface Props {
+  businessName: string;
+  handle: string;
+  role?: string;
+  onClose?: () => void;
+}
+
+export function Sidebar({ businessName, handle, role, onClose }: Props) {
   const pathname = usePathname();
 
   return (
@@ -37,10 +45,20 @@ export function Sidebar({ businessName, handle, role }: { businessName: string; 
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#D94472]">
           <Sparkles className="h-4 w-4 text-white" />
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-black">Glowith</p>
           <p className="truncate text-[10px] text-gray-400">Studio</p>
         </div>
+        {/* Mobile close button */}
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="ml-auto rounded-lg p-1 text-gray-400 hover:bg-gray-100 md:hidden"
+            aria-label="Close menu"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
       {/* Business selector */}
@@ -53,7 +71,11 @@ export function Sidebar({ businessName, handle, role }: { businessName: string; 
           <ChevronDown className="h-3.5 w-3.5 shrink-0 text-gray-400" />
         </div>
         {role === "ADMIN" && (
-          <Link href="/admin" className="mt-1.5 block rounded-lg bg-[#D94472]/10 px-2 py-1 text-center text-[10px] font-black text-[#D94472] hover:bg-[#D94472]/20">
+          <Link
+            href="/admin"
+            onClick={onClose}
+            className="mt-1.5 block rounded-lg bg-[#D94472]/10 px-2 py-1 text-center text-[10px] font-black text-[#D94472] hover:bg-[#D94472]/20"
+          >
             ⚡ Super Admin
           </Link>
         )}
@@ -68,6 +90,7 @@ export function Sidebar({ businessName, handle, role }: { businessName: string; 
               <li key={href}>
                 <Link
                   href={href}
+                  onClick={onClose}
                   className={cn(
                     "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-semibold transition",
                     active

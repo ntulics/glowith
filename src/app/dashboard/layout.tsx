@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { Sidebar } from "@/components/dashboard/sidebar";
+import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -43,11 +43,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // ──────────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#F7F8FA]">
-      <Sidebar businessName={profile.businessName} handle={profile.handle} role={user.role} />
-      <div className="flex flex-1 flex-col overflow-hidden">
-        {children}
-      </div>
-    </div>
+    <DashboardShell businessName={profile.businessName} handle={profile.handle} role={user.role}>
+      {children}
+    </DashboardShell>
   );
 }
