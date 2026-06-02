@@ -9,9 +9,29 @@ import { prisma } from "@/lib/prisma";
 // causes NextAuth to call createUser/linkAccount on sign-in which conflicts
 // with our own user creation flow.
 
+// Cookie domain — set to .glowith.co.za in production so the session cookie
+// is valid across all subdomains (handle.glowith.co.za, admin.glowith.co.za, etc).
+// Without the leading dot, a cookie set on glowith.co.za won't be sent to subdomains.
+const cookieDomain =
+  process.env.NODE_ENV === "production"
+    ? (process.env.AUTH_COOKIE_DOMAIN ?? ".glowith.co.za")
+    : undefined;
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   session: { strategy: "jwt" },
   trustHost: true,
+  cookies: {
+    sessionToken: {
+      name: "next-auth.session-token",
+      options: {
+        httpOnly: true,
+        sameSite: "lax" as const,
+        path: "/",
+        secure: true,
+        domain: cookieDomain
+      }
+    }
+  },
   pages: {
     signIn: "/login",
     error: "/login"
