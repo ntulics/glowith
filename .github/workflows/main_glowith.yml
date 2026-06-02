@@ -20,9 +20,8 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: '22.x'
-          cache: 'npm'          # ← caches ~/.npm between runs — saves ~60-90s
+          cache: 'npm'
 
-      # Restore Next.js incremental build cache
       - name: Restore Next.js build cache
         uses: actions/cache@v4
         with:
@@ -64,46 +63,47 @@ jobs:
         run: |
           mkdir -p /tmp/deploy
 
-          # Next.js standalone output — traced server + production deps
+          # Standalone output already contains traced node_modules for the server —
+          # this is the whole point of Next.js standalone mode. No full node_modules copy needed.
           cp -r .next/standalone/. /tmp/deploy
           mkdir -p /tmp/deploy/.next
           cp -r .next/static /tmp/deploy/.next/static
           cp -r public /tmp/deploy/public
 
-          # Schema + migrations so prisma migrate deploy can run inside Azure
+          # Schema + migrations for prisma migrate deploy inside Azure
           cp prisma/schema.prisma /tmp/deploy/schema.prisma
           if [ -d prisma/migrations ]; then
             cp -r prisma/migrations /tmp/deploy/migrations
           fi
 
-          # Prune dev deps from the workspace node_modules in-place,
-          # then copy the result — avoids a second full npm install from scratch.
-          npm prune --omit=dev
-          cp -r node_modules /tmp/deploy/node_modules
-
-          # Restore the CI-generated Prisma client (built against this exact schema)
-          cp -r node_modules/.prisma /tmp/deploy/node_modules/.prisma
-
-          # Write a minimal package.json (needed by Azure for the start script)
-          node -e "
-            const fs = require('fs');
-            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-            pkg.name = 'glowith';
-            pkg.scripts = { start: 'sh start.sh' };
-            pkg.engines = { node: '>=22.0.0' };
-            delete pkg.devDependencies;
-            fs.writeFileSync('/tmp/deploy/package.json', JSON.stringify(pkg, null, 2));
-          "
+          # Copy only Prisma (CLI + engines + generated client) from workspace.
+          # Standalone node_modules already has all Next.js/app runtime deps.
+          mkdir -p /tmp/deploy/node_modules
+          cp -r node_modules/prisma       /tmp/deploy/node_modules/prisma
+          cp -r node_modules/@prisma      /tmp/deploy/node_modules/@prisma
+          cp -r node_modules/.prisma      /tmp/deploy/node_modules/.prisma
 
           # Remove oryx-manifest.toml so Azure doesn't try to re-build on deploy
           rm -f /tmp/deploy/oryx-manifest.toml /tmp/deploy/node_modules.tar.gz
+
+          # Minimal package.json (Azure needs it for the start command)
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            fs.writeFileSync('/tmp/deploy/package.json', JSON.stringify({
+              name: 'glowith',
+              version: pkg.version,
+              engines: { node: '>=22.0.0' },
+              scripts: { start: 'sh start.sh' }
+            }, null, 2));
+          "
 
           # Admin seed script
           cp scripts/seed-admin.js /tmp/deploy/seed-admin.js
 
           echo "=== .prisma/client present: $(ls /tmp/deploy/node_modules/.prisma/client/ | wc -l) files ==="
 
-          # Startup script: migrate → seed admin → start server
+          # Startup: migrate → seed → start
           printf '%s\n' \
             '#!/bin/sh' \
             'echo "Glowith startup — running database migrations..."' \
@@ -135,7 +135,6 @@ jobs:
             > /tmp/deploy/start.sh
           chmod +x /tmp/deploy/start.sh
 
-          # Zip for fast OneDeploy upload
           cd /tmp/deploy
           zip -r /tmp/node-app.zip .
           echo "=== Zip size: $(du -sh /tmp/node-app.zip | cut -f1) ==="
@@ -177,9 +176,23 @@ jobs:
         if: always()
         continue-on-error: true
         run: |
-          echo "Waiting 20s for app to boot..."
           sleep 20
           az webapp log tail \
             --resource-group glowith_rg \
             --name glowith \
             --timeout 15 2>&1 | tail -50
+
+      - name: Clean up old workflow runs
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Keep the 10 most recent runs, delete everything older
+          gh run list \
+            --repo ${{ github.repository }} \
+            --limit 100 \
+            --json databaseId,status \
+            --jq '.[] | select(.status == "completed") | .databaseId' \
+          | tail -n +11 \
+          | xargs -r -I {} gh run delete {} --repo ${{ github.repository }} 2>/dev/null || true
+          echo "Cleanup complete."
