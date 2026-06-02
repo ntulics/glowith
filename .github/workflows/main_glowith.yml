@@ -6,26 +6,6 @@ on:
       - main
   workflow_dispatch:
 
-env:
-  APP_NAME: glowith
-  AZURE_WEBAPP_NAME: glowith
-  AZURE_RESOURCE_GROUP: glowith_rg
-  NODE_VERSION: '22.x'
-  NEXT_PUBLIC_APP_NAME: Glowith
-  NEXT_PUBLIC_APP_URL: https://glowith.co.za
-  NEXT_PUBLIC_API_URL: https://glowith.co.za/api
-  NEXT_PUBLIC_DEFAULT_LOCALE: en-ZA
-  NEXT_PUBLIC_DEFAULT_CURRENCY: ZAR
-  NEXT_PUBLIC_DEFAULT_CURRENCY_SYMBOL: R
-  NEXT_PUBLIC_DEFAULT_TIMEZONE: Africa/Johannesburg
-  NEXT_PUBLIC_FEATURE_MARKETPLACE: 'true'
-  NEXT_PUBLIC_FEATURE_PAYMENTS: 'true'
-  NEXT_PUBLIC_FEATURE_CALENDAR_SYNC: 'true'
-  # Placeholder only — used for Prisma schema validation + client generation in CI.
-  # The real DATABASE_URL lives in Azure App Settings (VNet-only, not reachable from CI).
-  # Migrations run inside Azure via start.sh on each deployment.
-  DATABASE_URL: postgresql://glowith:glowith@localhost:5432/glowith
-
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -39,8 +19,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
+          node-version: '22.x'
 
       - name: Install dependencies
         run: npm ci --cache /tmp/npm-cache
@@ -59,74 +38,89 @@ jobs:
 
       - name: Build Next.js app
         env:
+          DATABASE_URL: postgresql://glowith:glowith@localhost:5432/glowith
           AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+          NEXT_PUBLIC_APP_NAME: Glowith
+          NEXT_PUBLIC_APP_URL: https://glowith.co.za
+          NEXT_PUBLIC_API_URL: https://glowith.co.za/api
+          NEXT_PUBLIC_DEFAULT_LOCALE: en-ZA
+          NEXT_PUBLIC_DEFAULT_CURRENCY: ZAR
+          NEXT_PUBLIC_DEFAULT_CURRENCY_SYMBOL: R
+          NEXT_PUBLIC_DEFAULT_TIMEZONE: Africa/Johannesburg
+          NEXT_PUBLIC_FEATURE_MARKETPLACE: 'true'
+          NEXT_PUBLIC_FEATURE_PAYMENTS: 'true'
+          NEXT_PUBLIC_FEATURE_CALENDAR_SYNC: 'true'
         run: npm run build
 
       - name: Assemble deployment package
         run: |
           mkdir -p /tmp/deploy
 
-          # The standalone output contains the traced Next.js server and production dependencies.
+          # Next.js standalone output — traced server + production deps
           cp -r .next/standalone/. /tmp/deploy
           mkdir -p /tmp/deploy/.next
           cp -r .next/static /tmp/deploy/.next/static
           cp -r public /tmp/deploy/public
 
-          # Keep Prisma schema available for runtime migration commands inside Azure.
+          # Schema + migrations so prisma migrate deploy can run inside Azure (VNet access)
           cp prisma/schema.prisma /tmp/deploy/schema.prisma
           if [ -d prisma/migrations ]; then
             cp -r prisma/migrations /tmp/deploy/migrations
           fi
 
-          # Carry Prisma runtime + CLI + engines into the deploy bundle.
-          # @prisma/engines contains the Linux migration engine binary needed by `prisma migrate deploy`.
-          mkdir -p /tmp/deploy/node_modules/.prisma
-          cp -r node_modules/.prisma/client /tmp/deploy/node_modules/.prisma/client
-          cp -r node_modules/prisma /tmp/deploy/node_modules/prisma
-          cp -r node_modules/@prisma /tmp/deploy/node_modules/@prisma
-          # Bundle the engines package (migration + query engine binaries for linux-musl/openssl)
-          if [ -d node_modules/@prisma/engines ]; then
-            cp -r node_modules/@prisma/engines /tmp/deploy/node_modules/@prisma/engines
-          fi
-          mkdir -p /tmp/deploy/node_modules/@standard-schema
-          cp -r node_modules/@standard-schema/spec /tmp/deploy/node_modules/@standard-schema/spec
-          for package in c12 chokidar confbox deepmerge-ts defu destr dotenv effect empathic exsolve fast-check giget jiti nypm ohash pathe perfect-debounce pkg-types pure-rand rc9 readdirp; do
-            cp -r "node_modules/$package" "/tmp/deploy/node_modules/$package"
-          done
-
-          # Write a production package manifest with an Azure-friendly start command.
+          # Write package.json with start script
           node -e "
             const fs = require('fs');
             const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-            pkg.name = process.env.APP_NAME;
+            pkg.name = 'glowith';
             pkg.scripts = { start: 'sh start.sh' };
             pkg.engines = { node: '>=22.0.0' };
             delete pkg.devDependencies;
             fs.writeFileSync('/tmp/deploy/package.json', JSON.stringify(pkg, null, 2));
           "
 
-          # Startup script: attempt safety-net migrate then unconditionally start the server.
-          # Migration is non-fatal — CI is the primary migration path; this is a fallback.
-          # The server must always start even if migrations fail (e.g. missing engine binary).
+          # Install production deps inside deploy dir — this pulls in @prisma/engines
+          # (the migration engine binary) automatically, no manual copying needed
+          cd /tmp/deploy
+          PRISMA_SKIP_POSTINSTALL_GENERATE=1 npm install --omit=dev
+
+          # Override with the CI-generated Prisma client (built against this exact schema)
+          cp -r $GITHUB_WORKSPACE/node_modules/.prisma /tmp/deploy/node_modules/.prisma
+
+          echo "=== .prisma/client present: $(ls /tmp/deploy/node_modules/.prisma/client/ | wc -l) files ==="
+
+          # Startup script: migrate inside Azure (VNet), self-heal P3005, then start server
+          # P3005 = existing DB with no migration history → baseline then re-run
+          # Note: printf used instead of heredoc to avoid YAML << parse conflicts
           printf '%s\n' \
             '#!/bin/sh' \
-            'echo "Glowith startup — checking for pending migrations..."' \
+            'echo "Glowith startup — running database migrations..."' \
             '' \
-            'if [ -n "$DATABASE_URL" ] && [ -d "migrations" ]; then' \
-            '  node node_modules/prisma/build/index.js migrate deploy --schema=schema.prisma \' \
-            '    && echo "Migrations OK." \' \
-            '    || echo "WARNING: Migration step failed or was skipped (non-fatal). CI should have handled this."' \
-            'else' \
-            '  echo "Skipping migrations: DATABASE_URL or migrations directory not present."' \
+            'node node_modules/prisma/build/index.js migrate deploy --schema=schema.prisma 2>/tmp/migrate_err' \
+            'MIGRATE_EXIT=$?' \
+            '' \
+            'if [ "$MIGRATE_EXIT" != "0" ]; then' \
+            '  if grep -q "P3005" /tmp/migrate_err; then' \
+            '    echo "Non-empty DB without migration history — baselining existing schema..."' \
+            '    cat /tmp/migrate_err' \
+            '    node node_modules/prisma/build/index.js migrate resolve --applied "20260520000000_baseline" --schema=schema.prisma || { echo "Baseline failed"; exit 1; }' \
+            '    echo "Baseline complete. Re-running migrations..."' \
+            '    node node_modules/prisma/build/index.js migrate deploy --schema=schema.prisma || { echo "Post-baseline migration failed"; exit 1; }' \
+            '  else' \
+            '    echo "Migration failed with unexpected error:"' \
+            '    cat /tmp/migrate_err >&2' \
+            '    exit 1' \
+            '  fi' \
             'fi' \
             '' \
-            'echo "Starting Glowith server..."' \
+            'echo "Database ready. Starting Glowith..."' \
             'export HOSTNAME=0.0.0.0' \
             'export PORT="${PORT:-8080}"' \
             'exec node server.js' \
             > /tmp/deploy/start.sh
           chmod +x /tmp/deploy/start.sh
 
+          # Zip for fast OneDeploy upload
           cd /tmp/deploy
           zip -r /tmp/node-app.zip .
           echo "=== Zip size: $(du -sh /tmp/node-app.zip | cut -f1) ==="
@@ -141,35 +135,24 @@ jobs:
       - name: Set Azure startup command
         run: |
           az webapp config set \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --name ${{ env.AZURE_WEBAPP_NAME }} \
+            --resource-group glowith_rg \
+            --name glowith \
             --startup-file 'sh start.sh'
 
       - name: Deploy to Azure Web App
-        id: deploy-to-webapp
         uses: azure/webapps-deploy@v3
         with:
-          app-name: ${{ env.AZURE_WEBAPP_NAME }}
-          slot-name: Production
+          app-name: 'glowith'
+          slot-name: 'Production'
           package: /tmp/node-app.zip
 
-      - name: Check deployed app
+      - name: Print startup logs
         if: always()
         continue-on-error: true
         run: |
           echo "Waiting 30s for app to boot..."
           sleep 30
-          APP_URL="${{ steps.deploy-to-webapp.outputs.webapp-url }}"
-          if [ -z "$APP_URL" ]; then
-            APP_URL="https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net"
-          fi
-          echo "Checking $APP_URL"
-          for attempt in 1 2 3 4 5 6 7 8 9 10; do
-            if curl --fail --show-error --location --max-time 30 "$APP_URL" > /tmp/glowith-home.html; then
-              break
-            fi
-            echo "App not ready yet; retry $attempt/10..."
-            sleep 15
-          done
-          test -s /tmp/glowith-home.html
-          head -c 500 /tmp/glowith-home.html
+          az webapp log tail \
+            --resource-group glowith_rg \
+            --name glowith \
+            --timeout 20 2>&1 | tail -50
