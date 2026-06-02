@@ -5,7 +5,8 @@ import { DashboardHome } from "@/components/dashboard/dashboard-home";
 
 export default async function DashboardPage() {
   const session = await auth();
-  const user = session?.user as any;
+  if (!session?.user) redirect("/login");
+  const user = session.user as any;
 
   const profile = await prisma.providerProfile.findUnique({
     where: { userId: user.id },

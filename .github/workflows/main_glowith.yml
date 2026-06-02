@@ -96,8 +96,9 @@ jobs:
           # Override with the CI-generated Prisma client (built against this exact schema)
           cp -r $GITHUB_WORKSPACE/node_modules/.prisma /tmp/deploy/node_modules/.prisma
 
-          # Admin seed script — reads ADMIN_EMAIL + ADMIN_PASSWORD from Azure App Settings
+          # Admin seed + auth check scripts
           cp $GITHUB_WORKSPACE/scripts/seed-admin.js /tmp/deploy/seed-admin.js
+          cp $GITHUB_WORKSPACE/scripts/check-auth.js /tmp/deploy/check-auth.js
 
           echo "=== .prisma/client present: $(ls /tmp/deploy/node_modules/.prisma/client/ | wc -l) files ==="
 
