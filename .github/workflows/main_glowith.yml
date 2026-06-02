@@ -24,6 +24,8 @@ jobs:
 
       - name: Restore Next.js build cache
         uses: actions/cache@v4
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
         with:
           path: .next/cache
           key: nextjs-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**/*.ts','**/*.tsx','**/*.css') }}
@@ -76,12 +78,21 @@ jobs:
             cp -r prisma/migrations /tmp/deploy/migrations
           fi
 
-          # Copy only Prisma (CLI + engines + generated client) from workspace.
-          # Standalone node_modules already has all Next.js/app runtime deps.
-          mkdir -p /tmp/deploy/node_modules
-          cp -r node_modules/prisma       /tmp/deploy/node_modules/prisma
-          cp -r node_modules/@prisma      /tmp/deploy/node_modules/@prisma
-          cp -r node_modules/.prisma      /tmp/deploy/node_modules/.prisma
+          # Add only the Prisma pieces not already in the standalone traced output.
+          # Standalone already includes @prisma/client + the query-engine binary via tracing.
+          # We only need to add:
+          #   1. prisma CLI (JS only, ~5 MB) — for "prisma migrate deploy" in start.sh
+          #   2. schema-engine binary — used by migrate deploy (NOT the query engine)
+          #   3. .prisma/client override — ensure CI-generated client is used
+          mkdir -p /tmp/deploy/node_modules/@prisma/engines
+          cp -r node_modules/prisma                       /tmp/deploy/node_modules/prisma
+          cp -r node_modules/@prisma/client               /tmp/deploy/node_modules/@prisma/client
+          cp    node_modules/@prisma/engines/package.json /tmp/deploy/node_modules/@prisma/engines/
+          # schema-engine is the migration binary in Prisma 5+
+          find node_modules/@prisma/engines -maxdepth 1 -name "schema-engine-*" \
+            -exec cp {} /tmp/deploy/node_modules/@prisma/engines/ \;
+          cp -r node_modules/.prisma /tmp/deploy/node_modules/.prisma
+          echo "=== Prisma engines dir size: $(du -sh /tmp/deploy/node_modules/@prisma/engines | cut -f1) ==="
 
           # Remove oryx-manifest.toml so Azure doesn't try to re-build on deploy
           rm -f /tmp/deploy/oryx-manifest.toml /tmp/deploy/node_modules.tar.gz
@@ -147,17 +158,13 @@ jobs:
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_24724B3B0963430FA21F2D0F013F63AC }}
 
       - name: Deploy to Azure Web App
-        # App settings and startup-file are stable — skip updating them every run
-        # to avoid the extra Azure restart they trigger before our zip even lands.
-        # Re-enable the Configure step below only when env vars actually change.
         run: |
           az webapp deploy \
             --resource-group glowith_rg \
             --name glowith \
             --src-path /tmp/node-app.zip \
             --type zip \
-            --clean true \
-            --async true
+            --clean true
 
       - name: Print startup logs
         if: always()
