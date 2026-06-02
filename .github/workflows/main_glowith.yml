@@ -146,23 +146,10 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_F2DCFCD8872A47F2B2BC7609EA8EB5CE }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_24724B3B0963430FA21F2D0F013F63AC }}
 
-      - name: Configure Azure App Settings
-        run: |
-          az webapp config appsettings set \
-            --resource-group glowith_rg \
-            --name glowith \
-            --settings \
-              SCM_DO_BUILD_DURING_DEPLOYMENT=false \
-              WEBSITE_NODE_DEFAULT_VERSION=~22 \
-              AUTH_URL=https://glowith.co.za \
-              NEXTAUTH_URL=https://glowith.co.za
-
-          az webapp config set \
-            --resource-group glowith_rg \
-            --name glowith \
-            --startup-file 'sh start.sh'
-
       - name: Deploy to Azure Web App
+        # App settings and startup-file are stable — skip updating them every run
+        # to avoid the extra Azure restart they trigger before our zip even lands.
+        # Re-enable the Configure step below only when env vars actually change.
         run: |
           az webapp deploy \
             --resource-group glowith_rg \
