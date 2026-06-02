@@ -114,32 +114,45 @@ jobs:
 
           echo "=== .prisma/client present: $(ls /tmp/deploy/node_modules/.prisma/client/ | wc -l) files ==="
 
-          # Startup: migrate → seed → start
+          # Startup: migrate (once) → seed (once) → start
           printf '%s\n' \
             '#!/bin/sh' \
-            'echo "Glowith startup — running database migrations..."' \
+            'SENTINEL=/home/site/wwwroot/.glowith_seeded' \
             '' \
-            'node node_modules/prisma/build/index.js migrate deploy --schema=schema.prisma 2>/tmp/migrate_err' \
-            'MIGRATE_EXIT=$?' \
+            '# Run migrations only if migration files are newer than last run' \
+            'MIGRATION_SENTINEL=/home/site/wwwroot/.glowith_migrated' \
+            'SCHEMA_HASH=$(find migrations -name "*.sql" 2>/dev/null | sort | xargs md5sum 2>/dev/null | md5sum | cut -d" " -f1)' \
+            'LAST_HASH=$(cat "$MIGRATION_SENTINEL" 2>/dev/null || echo "")' \
             '' \
-            'if [ "$MIGRATE_EXIT" != "0" ]; then' \
-            '  if grep -q "P3005" /tmp/migrate_err; then' \
-            '    echo "Non-empty DB without migration history — baselining existing schema..."' \
-            '    cat /tmp/migrate_err' \
-            '    node node_modules/prisma/build/index.js migrate resolve --applied "20260520000000_baseline" --schema=schema.prisma || { echo "Baseline failed"; exit 1; }' \
-            '    echo "Baseline complete. Re-running migrations..."' \
-            '    node node_modules/prisma/build/index.js migrate deploy --schema=schema.prisma || { echo "Post-baseline migration failed"; exit 1; }' \
-            '  else' \
-            '    echo "Migration failed with unexpected error:"' \
-            '    cat /tmp/migrate_err >&2' \
-            '    exit 1' \
+            'if [ "$SCHEMA_HASH" != "$LAST_HASH" ]; then' \
+            '  echo "Glowith startup — running database migrations..."' \
+            '  node node_modules/prisma/build/index.js migrate deploy --schema=schema.prisma 2>/tmp/migrate_err' \
+            '  MIGRATE_EXIT=$?' \
+            '  if [ "$MIGRATE_EXIT" != "0" ]; then' \
+            '    if grep -q "P3005" /tmp/migrate_err; then' \
+            '      echo "Non-empty DB without migration history — baselining..."' \
+            '      node node_modules/prisma/build/index.js migrate resolve --applied "20260520000000_baseline" --schema=schema.prisma || { echo "Baseline failed"; exit 1; }' \
+            '      node node_modules/prisma/build/index.js migrate deploy --schema=schema.prisma || { echo "Post-baseline migration failed"; exit 1; }' \
+            '    else' \
+            '      cat /tmp/migrate_err >&2' \
+            '      exit 1' \
+            '    fi' \
             '  fi' \
+            '  echo "$SCHEMA_HASH" > "$MIGRATION_SENTINEL"' \
+            '  echo "Migrations complete."' \
+            'else' \
+            '  echo "No migration changes — skipping migrate deploy."' \
             'fi' \
             '' \
-            'echo "Seeding admin user..."' \
-            'node seed-admin.js' \
+            '# Seed admin only once' \
+            'if [ ! -f "$SENTINEL" ]; then' \
+            '  echo "Seeding admin user..."' \
+            '  node seed-admin.js && touch "$SENTINEL"' \
+            'else' \
+            '  echo "Admin already seeded — skipping."' \
+            'fi' \
             '' \
-            'echo "Database ready. Starting Glowith..."' \
+            'echo "Starting Glowith..."' \
             'export HOSTNAME=0.0.0.0' \
             'export PORT="${PORT:-8080}"' \
             'exec node server.js' \
@@ -158,23 +171,16 @@ jobs:
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_24724B3B0963430FA21F2D0F013F63AC }}
 
       - name: Deploy to Azure Web App
+        # --async true returns as soon as the zip is accepted by Kudu (~upload time only).
+        # App restart + migrations happen on Azure in the background — CI doesn't wait.
         run: |
           az webapp deploy \
             --resource-group glowith_rg \
             --name glowith \
             --src-path /tmp/node-app.zip \
             --type zip \
-            --clean true
-
-      - name: Print startup logs
-        if: always()
-        continue-on-error: true
-        run: |
-          sleep 20
-          az webapp log tail \
-            --resource-group glowith_rg \
-            --name glowith \
-            --timeout 15 2>&1 | tail -50
+            --clean true \
+            --async true
 
       - name: Clean up old workflow runs
         if: success()
