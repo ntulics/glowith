@@ -92,11 +92,16 @@ jobs:
             cp -r prisma/migrations /tmp/deploy/migrations
           fi
 
-          # Carry Prisma runtime pieces into the deploy bundle so startup can run migrate deploy.
+          # Carry Prisma runtime + CLI + engines into the deploy bundle.
+          # @prisma/engines contains the Linux migration engine binary needed by `prisma migrate deploy`.
           mkdir -p /tmp/deploy/node_modules/.prisma
           cp -r node_modules/.prisma/client /tmp/deploy/node_modules/.prisma/client
           cp -r node_modules/prisma /tmp/deploy/node_modules/prisma
           cp -r node_modules/@prisma /tmp/deploy/node_modules/@prisma
+          # Bundle the engines package (migration + query engine binaries for linux-musl/openssl)
+          if [ -d node_modules/@prisma/engines ]; then
+            cp -r node_modules/@prisma/engines /tmp/deploy/node_modules/@prisma/engines
+          fi
           mkdir -p /tmp/deploy/node_modules/@standard-schema
           cp -r node_modules/@standard-schema/spec /tmp/deploy/node_modules/@standard-schema/spec
           for package in c12 chokidar confbox deepmerge-ts defu destr dotenv effect empathic exsolve fast-check giget jiti nypm ohash pathe perfect-debounce pkg-types pure-rand rc9 readdirp; do
@@ -114,16 +119,17 @@ jobs:
             fs.writeFileSync('/tmp/deploy/package.json', JSON.stringify(pkg, null, 2));
           "
 
-          # Startup script: safety-net migrate (CI already ran it) then start server.
-          # Migrations are idempotent — re-running is harmless and catches any skipped CI run.
+          # Startup script: attempt safety-net migrate then unconditionally start the server.
+          # Migration is non-fatal — CI is the primary migration path; this is a fallback.
+          # The server must always start even if migrations fail (e.g. missing engine binary).
           printf '%s\n' \
             '#!/bin/sh' \
-            'set -e' \
             'echo "Glowith startup — checking for pending migrations..."' \
             '' \
             'if [ -n "$DATABASE_URL" ] && [ -d "migrations" ]; then' \
-            '  node node_modules/prisma/build/index.js migrate deploy --schema=schema.prisma' \
-            '  echo "Migrations OK."' \
+            '  node node_modules/prisma/build/index.js migrate deploy --schema=schema.prisma \' \
+            '    && echo "Migrations OK." \' \
+            '    || echo "WARNING: Migration step failed or was skipped (non-fatal). CI should have handled this."' \
             'else' \
             '  echo "Skipping migrations: DATABASE_URL or migrations directory not present."' \
             'fi' \
