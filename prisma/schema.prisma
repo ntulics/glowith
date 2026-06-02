@@ -1,0 +1,140 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CLIENT
+  PROVIDER
+  ADMIN
+}
+
+enum BookingStatus {
+  PENDING_DEPOSIT
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String?
+  name         String
+  role         UserRole @default(CLIENT)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  providerProfile ProviderProfile?
+  bookings        Booking[]
+  messages        Message[]
+}
+
+model ProviderProfile {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  handle       String   @unique
+  businessName String
+  category     String
+  bio          String
+  city         String
+  latitude     Float
+  longitude    Float
+  verified     Boolean  @default(false)
+  mobile       Boolean  @default(false)
+  studio       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  services  Service[]
+  posts     PortfolioPost[]
+  bookings  Booking[]
+  messages  Message[]
+  follows   Follow[]
+  saves     SavedProvider[]
+}
+
+model Service {
+  id                String   @id @default(cuid())
+  providerProfileId String
+  name              String
+  category          String
+  durationMinutes   Int
+  priceCents        Int
+  depositCents      Int
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+
+  providerProfile ProviderProfile @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
+  bookings        Booking[]
+}
+
+model PortfolioPost {
+  id                String   @id @default(cuid())
+  providerProfileId String
+  imageUrl          String
+  caption           String
+  tags              String[]
+  likes             Int      @default(0)
+  saves             Int      @default(0)
+  createdAt         DateTime @default(now())
+
+  providerProfile ProviderProfile @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
+}
+
+model Booking {
+  id                String        @id @default(cuid())
+  clientId          String
+  providerProfileId String
+  serviceId         String
+  startsAt          DateTime
+  notes             String?
+  status            BookingStatus @default(PENDING_DEPOSIT)
+  depositCents      Int
+  paymentProvider   String?
+  paymentIntentId   String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  client          User            @relation(fields: [clientId], references: [id])
+  providerProfile ProviderProfile @relation(fields: [providerProfileId], references: [id])
+  service         Service         @relation(fields: [serviceId], references: [id])
+}
+
+model Message {
+  id                String   @id @default(cuid())
+  senderId          String
+  providerProfileId String
+  body              String
+  createdAt         DateTime @default(now())
+
+  sender          User            @relation(fields: [senderId], references: [id])
+  providerProfile ProviderProfile @relation(fields: [providerProfileId], references: [id])
+}
+
+model Follow {
+  id                String   @id @default(cuid())
+  userId            String
+  providerProfileId String
+  createdAt         DateTime @default(now())
+
+  providerProfile ProviderProfile @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, providerProfileId])
+}
+
+model SavedProvider {
+  id                String   @id @default(cuid())
+  userId            String
+  providerProfileId String
+  createdAt         DateTime @default(now())
+
+  providerProfile ProviderProfile @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, providerProfileId])
+}

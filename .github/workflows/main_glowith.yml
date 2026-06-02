@@ -1,7 +1,4 @@
-# Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
-# More GitHub Actions for Azure: https://github.com/Azure/actions
-
-name: Build and deploy Node.js app to Azure Web App - glowith
+name: Build and deploy Next.js app to Azure Web App - glowith
 
 on:
   push:
@@ -9,57 +6,141 @@ on:
       - main
   workflow_dispatch:
 
+env:
+  APP_NAME: glowith
+  AZURE_WEBAPP_NAME: glowith
+  AZURE_RESOURCE_GROUP: glowith-rg
+  NODE_VERSION: '22.x'
+  NEXT_PUBLIC_APP_NAME: Glowith
+  NEXT_PUBLIC_APP_URL: https://glowith.co.za
+  NEXT_PUBLIC_API_URL: https://glowith.co.za/api
+  NEXT_PUBLIC_DEFAULT_LOCALE: en-ZA
+  NEXT_PUBLIC_DEFAULT_CURRENCY: ZAR
+  NEXT_PUBLIC_DEFAULT_CURRENCY_SYMBOL: R
+  NEXT_PUBLIC_DEFAULT_TIMEZONE: Africa/Johannesburg
+  NEXT_PUBLIC_FEATURE_MARKETPLACE: 'true'
+  NEXT_PUBLIC_FEATURE_PAYMENTS: 'true'
+  NEXT_PUBLIC_FEATURE_CALENDAR_SYNC: 'true'
+  DATABASE_URL: postgresql://glowith:glowith@localhost:5432/glowith
+
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     permissions:
-      contents: read #This is required for actions/checkout
+      id-token: write
+      contents: read
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - name: Set up Node.js version
-        uses: actions/setup-node@v3
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
         with:
-          node-version: '24.x'
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
 
-      - name: npm install, build, and test
+      - name: Install dependencies
+        run: npm ci --cache /tmp/npm-cache
+
+      - name: Generate Prisma client
+        run: npx prisma generate --schema=prisma/schema.prisma
+
+      - name: Validate Prisma schema
+        run: npx prisma validate --schema=prisma/schema.prisma
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Security audit
+        run: npm audit --audit-level=moderate
+
+      - name: Build Next.js app
+        run: npm run build
+
+      - name: Assemble deployment package
         run: |
-          npm install
-          npm run build --if-present
-          npm run test --if-present
+          mkdir -p /tmp/deploy
 
-      - name: Upload artifact for deployment job
-        uses: actions/upload-artifact@v4
-        with:
-          name: node-app
-          path: .
+          # The standalone output contains the traced Next.js server and production dependencies.
+          cp -r .next/standalone/. /tmp/deploy
+          mkdir -p /tmp/deploy/.next
+          cp -r .next/static /tmp/deploy/.next/static
+          cp -r public /tmp/deploy/public
 
-  deploy:
-    runs-on: ubuntu-latest
-    needs: build
-    permissions:
-      id-token: write #This is required for requesting the JWT
-      contents: read #This is required for actions/checkout
+          # Keep Prisma schema available for runtime migration commands inside Azure.
+          cp prisma/schema.prisma /tmp/deploy/schema.prisma
+          if [ -d prisma/migrations ]; then
+            cp -r prisma/migrations /tmp/deploy/migrations
+          fi
 
-    steps:
-      - name: Download artifact from build job
-        uses: actions/download-artifact@v4
-        with:
-          name: node-app
-      
+          # Carry Prisma runtime pieces into the deploy bundle so startup can run migrate deploy.
+          mkdir -p /tmp/deploy/node_modules/.prisma
+          cp -r node_modules/.prisma/client /tmp/deploy/node_modules/.prisma/client
+          cp -r node_modules/prisma /tmp/deploy/node_modules/prisma
+          cp -r node_modules/@prisma /tmp/deploy/node_modules/@prisma
+
+          # Write a production package manifest with an Azure-friendly start command.
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            pkg.name = process.env.APP_NAME;
+            pkg.scripts = { start: 'sh start.sh' };
+            pkg.engines = { node: '>=22.0.0' };
+            delete pkg.devDependencies;
+            fs.writeFileSync('/tmp/deploy/package.json', JSON.stringify(pkg, null, 2));
+          "
+
+          # Startup script runs migrations from inside Azure, then starts the standalone server.
+          printf '%s\n' \
+            '#!/bin/sh' \
+            'set -e' \
+            'echo "Preparing Glowith database..."' \
+            '' \
+            'if [ -n "$DATABASE_URL" ] && [ -d "migrations" ]; then' \
+            '  node node_modules/prisma/build/index.js migrate deploy --schema=schema.prisma' \
+            'else' \
+            '  echo "Skipping migrations: DATABASE_URL or migrations directory not present."' \
+            'fi' \
+            '' \
+            'echo "Starting Glowith..."' \
+            'export HOSTNAME=0.0.0.0' \
+            'export PORT="${PORT:-8080}"' \
+            'exec node server.js' \
+            > /tmp/deploy/start.sh
+          chmod +x /tmp/deploy/start.sh
+
+          cd /tmp/deploy
+          zip -r /tmp/node-app.zip .
+          echo "=== Zip size: $(du -sh /tmp/node-app.zip | cut -f1) ==="
+
       - name: Login to Azure
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_BF13B5F0AD114DF0B89E44F6F1189234 }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_F2DCFCD8872A47F2B2BC7609EA8EB5CE }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_24724B3B0963430FA21F2D0F013F63AC }}
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID }}
 
-      - name: 'Deploy to Azure Web App'
-        id: deploy-to-webapp
+      - name: Set Azure startup command
+        run: |
+          az webapp config set \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name ${{ env.AZURE_WEBAPP_NAME }} \
+            --startup-file 'sh start.sh'
+
+      - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
-          app-name: 'glowith'
-          slot-name: 'Production'
-          package: .
-          
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          slot-name: Production
+          package: /tmp/node-app.zip
+
+      - name: Print startup logs
+        if: always()
+        continue-on-error: true
+        run: |
+          echo "Waiting 30s for app to boot..."
+          sleep 30
+          az webapp log tail \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name ${{ env.AZURE_WEBAPP_NAME }} \
+            --timeout 20 2>&1 | tail -50
