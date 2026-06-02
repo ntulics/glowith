@@ -164,11 +164,19 @@ jobs:
             --startup-file 'sh start.sh'
 
       - name: Deploy to Azure Web App
-        uses: azure/webapps-deploy@v3
-        with:
-          app-name: 'glowith'
-          slot-name: 'Production'
-          package: /tmp/node-app.zip
+        # --clean true wipes /home/site/wwwroot before extracting the zip.
+        # This permanently removes the stale oryx-manifest.toml and
+        # node_modules.tar.gz that Oryx persists between deployments.
+        # Without --clean, Azure overlays the zip and old Oryx artifacts survive,
+        # causing Oryx to extract a stale tar.gz that overwrites our node_modules.
+        run: |
+          az webapp deploy \
+            --resource-group glowith_rg \
+            --name glowith \
+            --src-path /tmp/node-app.zip \
+            --type zip \
+            --clean true \
+            --async false
 
       - name: Print startup logs
         if: always()
