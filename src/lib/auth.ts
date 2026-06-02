@@ -24,28 +24,47 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         password: { label: "Password", type: "password" }
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null;
+        try {
+          if (!credentials?.email || !credentials?.password) {
+            console.log("[auth] authorize: missing credentials");
+            return null;
+          }
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email as string },
-          include: { providerProfile: true }
-        });
+          console.log("[auth] authorize: looking up", credentials.email);
 
-        if (!user || !user.passwordHash) return null;
+          const user = await prisma.user.findUnique({
+            where: { email: credentials.email as string },
+            select: {
+              id: true, email: true, name: true, role: true,
+              passwordHash: true,
+              providerProfile: { select: { handle: true } }
+            }
+          });
 
-        const valid = await bcrypt.compare(
-          credentials.password as string,
-          user.passwordHash
-        );
-        if (!valid) return null;
+          console.log("[auth] authorize: user found =", !!user, "has hash =", !!user?.passwordHash);
 
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-          handle: user.providerProfile?.handle?.replace("@", "") ?? null
-        };
+          if (!user || !user.passwordHash) return null;
+
+          const valid = await bcrypt.compare(
+            credentials.password as string,
+            user.passwordHash
+          );
+
+          console.log("[auth] authorize: password valid =", valid);
+
+          if (!valid) return null;
+
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+            handle: user.providerProfile?.handle?.replace("@", "") ?? null
+          };
+        } catch (err: any) {
+          console.error("[auth] authorize error:", err.message, err.code ?? "");
+          return null;
+        }
       }
     })
   ],
