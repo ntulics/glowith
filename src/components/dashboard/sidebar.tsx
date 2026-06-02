@@ -27,7 +27,7 @@ const nav = [
   { href: "/dashboard/settings", label: "Settings", icon: Settings }
 ];
 
-export function Sidebar({ businessName, handle }: { businessName: string; handle: string }) {
+export function Sidebar({ businessName, handle, role }: { businessName: string; handle: string; role?: string }) {
   const pathname = usePathname();
 
   return (
@@ -44,12 +44,19 @@ export function Sidebar({ businessName, handle }: { businessName: string; handle
       </div>
 
       {/* Business selector */}
-      <div className="mx-3 mt-3 flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2.5">
-        <div className="min-w-0">
-          <p className="truncate text-xs font-bold">{businessName}</p>
-          <p className="truncate text-[10px] text-gray-400">{handle}</p>
+      <div className="mx-3 mt-3 rounded-xl bg-gray-50 px-3 py-2.5">
+        <div className="flex items-center justify-between">
+          <div className="min-w-0">
+            <p className="truncate text-xs font-bold">{businessName}</p>
+            <p className="truncate text-[10px] text-gray-400">{handle}</p>
+          </div>
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-gray-400" />
         </div>
-        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+        {role === "ADMIN" && (
+          <Link href="/admin" className="mt-1.5 block rounded-lg bg-[#D94472]/10 px-2 py-1 text-center text-[10px] font-black text-[#D94472] hover:bg-[#D94472]/20">
+            ⚡ Super Admin
+          </Link>
+        )}
       </div>
 
       {/* Nav */}

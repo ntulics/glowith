@@ -21,6 +21,9 @@ env:
   NEXT_PUBLIC_FEATURE_MARKETPLACE: 'true'
   NEXT_PUBLIC_FEATURE_PAYMENTS: 'true'
   NEXT_PUBLIC_FEATURE_CALENDAR_SYNC: 'true'
+  # Placeholder used only for Prisma schema validation + client generation.
+  # The real DATABASE_URL is injected from GitHub secrets for the migrate step
+  # and from Azure App Settings at runtime.
   DATABASE_URL: postgresql://glowith:glowith@localhost:5432/glowith
 
 jobs:
@@ -54,7 +57,20 @@ jobs:
       - name: Security audit
         run: npm audit --audit-level=moderate
 
+      - name: Run database migrations
+        # Skipped if DATABASE_URL secret is not configured (e.g. first-time setup).
+        # Add DATABASE_URL and AUTH_SECRET to GitHub repository secrets to enable.
+        if: ${{ secrets.DATABASE_URL != '' }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          echo "Running Prisma migrations against production database..."
+          npx prisma migrate deploy --schema=prisma/schema.prisma
+          echo "Migrations complete."
+
       - name: Build Next.js app
+        env:
+          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
         run: npm run build
 
       - name: Assemble deployment package
@@ -95,19 +111,21 @@ jobs:
             fs.writeFileSync('/tmp/deploy/package.json', JSON.stringify(pkg, null, 2));
           "
 
-          # Startup script runs migrations from inside Azure, then starts the standalone server.
+          # Startup script: safety-net migrate (CI already ran it) then start server.
+          # Migrations are idempotent — re-running is harmless and catches any skipped CI run.
           printf '%s\n' \
             '#!/bin/sh' \
             'set -e' \
-            'echo "Preparing Glowith database..."' \
+            'echo "Glowith startup — checking for pending migrations..."' \
             '' \
             'if [ -n "$DATABASE_URL" ] && [ -d "migrations" ]; then' \
             '  node node_modules/prisma/build/index.js migrate deploy --schema=schema.prisma' \
+            '  echo "Migrations OK."' \
             'else' \
             '  echo "Skipping migrations: DATABASE_URL or migrations directory not present."' \
             'fi' \
             '' \
-            'echo "Starting Glowith..."' \
+            'echo "Starting Glowith server..."' \
             'export HOSTNAME=0.0.0.0' \
             'export PORT="${PORT:-8080}"' \
             'exec node server.js' \
