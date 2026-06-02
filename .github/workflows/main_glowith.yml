@@ -20,9 +20,20 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: '22.x'
+          cache: 'npm'          # ← caches ~/.npm between runs — saves ~60-90s
+
+      # Restore Next.js incremental build cache
+      - name: Restore Next.js build cache
+        uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: nextjs-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**/*.ts','**/*.tsx','**/*.css') }}
+          restore-keys: |
+            nextjs-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}-
+            nextjs-${{ runner.os }}-
 
       - name: Install dependencies
-        run: npm ci --cache /tmp/npm-cache
+        run: npm ci
 
       - name: Generate Prisma client
         run: npx prisma generate --schema=prisma/schema.prisma
@@ -59,51 +70,40 @@ jobs:
           cp -r .next/static /tmp/deploy/.next/static
           cp -r public /tmp/deploy/public
 
-          # Schema + migrations so prisma migrate deploy can run inside Azure (VNet access)
+          # Schema + migrations so prisma migrate deploy can run inside Azure
           cp prisma/schema.prisma /tmp/deploy/schema.prisma
           if [ -d prisma/migrations ]; then
             cp -r prisma/migrations /tmp/deploy/migrations
           fi
 
-          # Write package.json with start script.
-          # Promote prisma CLI from devDependencies → dependencies so that
-          # npm install --omit=dev below installs it (needed by start.sh migrate).
+          # Prune dev deps from the workspace node_modules in-place,
+          # then copy the result — avoids a second full npm install from scratch.
+          npm prune --omit=dev
+          cp -r node_modules /tmp/deploy/node_modules
+
+          # Restore the CI-generated Prisma client (built against this exact schema)
+          cp -r node_modules/.prisma /tmp/deploy/node_modules/.prisma
+
+          # Write a minimal package.json (needed by Azure for the start script)
           node -e "
             const fs = require('fs');
             const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
             pkg.name = 'glowith';
             pkg.scripts = { start: 'sh start.sh' };
             pkg.engines = { node: '>=22.0.0' };
-            pkg.dependencies['prisma'] = pkg.devDependencies['prisma'];
             delete pkg.devDependencies;
             fs.writeFileSync('/tmp/deploy/package.json', JSON.stringify(pkg, null, 2));
           "
 
-          # Remove oryx-manifest.toml — Next.js standalone emits this file and
-          # Azure Oryx uses it to extract a stale node_modules.tar.gz, overwriting
-          # our freshly installed node_modules and dropping the Prisma CLI.
-          rm -f /tmp/deploy/oryx-manifest.toml
-
-          # Install production deps inside deploy dir.
-          # With prisma now in dependencies, this pulls in prisma CLI + @prisma/engines
-          # (the migration engine binary) automatically — no manual copying needed.
-          cd /tmp/deploy
-          PRISMA_SKIP_POSTINSTALL_GENERATE=1 npm install --omit=dev
-
-          # Final cleanup — ensure no oryx artifacts make it into the zip
+          # Remove oryx-manifest.toml so Azure doesn't try to re-build on deploy
           rm -f /tmp/deploy/oryx-manifest.toml /tmp/deploy/node_modules.tar.gz
 
-          # Override with the CI-generated Prisma client (built against this exact schema)
-          cp -r $GITHUB_WORKSPACE/node_modules/.prisma /tmp/deploy/node_modules/.prisma
-
           # Admin seed script
-          cp $GITHUB_WORKSPACE/scripts/seed-admin.js /tmp/deploy/seed-admin.js
+          cp scripts/seed-admin.js /tmp/deploy/seed-admin.js
 
           echo "=== .prisma/client present: $(ls /tmp/deploy/node_modules/.prisma/client/ | wc -l) files ==="
 
           # Startup script: migrate → seed admin → start server
-          # P3005 = existing DB with no migration history → baseline then re-run
-          # Note: printf used instead of heredoc to avoid YAML << parse conflicts
           printf '%s\n' \
             '#!/bin/sh' \
             'echo "Glowith startup — running database migrations..."' \
@@ -149,10 +149,6 @@ jobs:
 
       - name: Configure Azure App Settings
         run: |
-          # Disable Oryx build-on-deploy — our zip is self-contained.
-          # Without this, Oryx finds the persisted oryx-manifest.toml from a previous
-          # deployment (Azure overlays zips, doesn't clean /home/site/wwwroot) and
-          # extracts a stale node_modules.tar.gz that overwrites our node_modules.
           az webapp config appsettings set \
             --resource-group glowith_rg \
             --name glowith \
@@ -168,10 +164,6 @@ jobs:
             --startup-file 'sh start.sh'
 
       - name: Deploy to Azure Web App
-        # --clean true wipes /home/site/wwwroot before extracting the zip,
-        # removing stale oryx-manifest.toml / node_modules.tar.gz.
-        # --async true avoids 502 timeout on large zips — Kudu processes
-        # the upload in the background while we wait in the next step.
         run: |
           az webapp deploy \
             --resource-group glowith_rg \
@@ -185,9 +177,9 @@ jobs:
         if: always()
         continue-on-error: true
         run: |
-          echo "Waiting 30s for app to boot..."
-          sleep 30
+          echo "Waiting 20s for app to boot..."
+          sleep 20
           az webapp log tail \
             --resource-group glowith_rg \
             --name glowith \
-            --timeout 20 2>&1 | tail -50
+            --timeout 15 2>&1 | tail -50
