@@ -224,15 +224,22 @@ export default function SignupPage() {
               ))}
             </div>
 
-            {/* Handle */}
+            {/* Handle / URL */}
             <div>
-              <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-[#7A6C6E]">Your subdomain</label>
+              <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-[#7A6C6E]">
+                {isFreelancer ? "Your profile URL" : "Your subdomain"}
+              </label>
               <div className={cn(
                 "flex overflow-hidden rounded-xl border bg-[#F9F5F3] transition",
                 handleStatus === "available" ? "border-emerald-400" :
                 handleStatus === "taken" || handleStatus === "restricted" || handleStatus === "invalid" ? "border-red-400" :
                 "border-[#E8E0DC]"
               )}>
+                {isFreelancer && (
+                  <span className="flex items-center border-r border-[#E8E0DC] bg-white px-3 text-sm font-semibold text-[#7A6C6E] whitespace-nowrap">
+                    freelancers.glowith.co.za/
+                  </span>
+                )}
                 <input
                   value={form.handle.replace("@", "")}
                   onChange={(e) => {
@@ -240,19 +247,28 @@ export default function SignupPage() {
                     setForm((f) => ({ ...f, handle: val }));
                     checkHandle(val);
                   }}
-                  placeholder="yourstudio"
+                  placeholder={isFreelancer ? "yourname" : "yourstudio"}
                   className="flex-1 bg-transparent px-4 py-3 text-sm font-medium outline-none"
                 />
                 {handleStatus === "checking" && <span className="flex items-center px-3 text-xs text-gray-400">Checking…</span>}
                 {handleStatus === "available" && <CheckCircle2 className="mr-3 mt-3.5 h-4 w-4 shrink-0 text-emerald-500" />}
                 {(handleStatus === "taken" || handleStatus === "restricted" || handleStatus === "invalid") && <XCircle className="mr-3 mt-3.5 h-4 w-4 shrink-0 text-red-500" />}
-                <span className="flex items-center border-l border-[#E8E0DC] bg-white px-3 text-sm font-semibold text-[#7A6C6E]">
-                  .glowith.co.za
-                </span>
+                {!isFreelancer && (
+                  <span className="flex items-center border-l border-[#E8E0DC] bg-white px-3 text-sm font-semibold text-[#7A6C6E]">
+                    .glowith.co.za
+                  </span>
+                )}
               </div>
               {handleStatus === "taken" && <p className="mt-1 text-xs font-semibold text-red-500">That name is already taken</p>}
               {handleStatus === "restricted" && <p className="mt-1 text-xs font-semibold text-red-500">That name is reserved</p>}
-              {handleStatus === "available" && <p className="mt-1 text-xs font-semibold text-emerald-600">✓ Available!</p>}
+              {handleStatus === "available" && (
+                <p className="mt-1 text-xs font-semibold text-emerald-600">
+                  ✓ Available — your {isFreelancer ? "profile" : "studio"} will be at{" "}
+                  {isFreelancer
+                    ? `freelancers.glowith.co.za/${form.handle.replace("@", "")}`
+                    : `${form.handle.replace("@", "")}.glowith.co.za`}
+                </p>
+              )}
             </div>
 
             {/* Category */}

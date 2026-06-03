@@ -11,15 +11,15 @@ type LookupResult = {
   firstName: string;
   role: "CLIENT" | "PROVIDER" | "ADMIN";
   handle: string | null;
+  tenantSlug: string | null;
   businessName: string | null;
 };
 
-function tenantHost(handle: string) {
+function tenantHost(tenantSlug: string) {
   const host = window.location.hostname;
   if (host === "localhost" || host === "127.0.0.1") return "";
-
   const root = host.endsWith(".glowith.co.za") ? "glowith.co.za" : host;
-  return `https://${handle}.${root}`;
+  return `https://${tenantSlug}.${root}`;
 }
 
 function LoginForm() {
@@ -88,8 +88,8 @@ function LoginForm() {
       return;
     }
 
-    if (user?.role === "PROVIDER" && user?.handle) {
-      const host = tenantHost(user.handle);
+    if (user?.role === "PROVIDER" && user?.tenantSlug) {
+      const host = tenantHost(user.tenantSlug);
       if (host) {
         window.location.href = `${host}/dashboard`;
       } else {

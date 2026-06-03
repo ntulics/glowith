@@ -251,5 +251,66 @@ export async function POST() {
     });
   }
 
+  // ── Demo client accounts ──────────────────────────────────────────────────
+  const DEMO_CLIENTS = [
+    { name: "Amahle Dube", email: "amahle.demo@glowith.co.za" },
+    { name: "Lesedi Khumalo", email: "lesedi.demo@glowith.co.za" },
+    { name: "Refilwe Mokoena", email: "refilwe.demo@glowith.co.za" },
+    { name: "Thabo Sithole", email: "thabo.demo@glowith.co.za" }
+  ];
+  const clientHash = await bcrypt.hash(AGENT_PASSWORD, 12);
+  const clientIds: string[] = [];
+  for (const c of DEMO_CLIENTS) {
+    let cu = await prisma.user.findUnique({ where: { email: c.email }, select: { id: true } });
+    if (!cu) cu = await prisma.user.create({ data: { name: c.name, email: c.email, passwordHash: clientHash, role: "CLIENT" }, select: { id: true } });
+    clientIds.push(cu.id);
+  }
+
+  // ── Dummy appointments ────────────────────────────────────────────────────
+  const now = Date.now();
+  const day = 86400000;
+  const STATUSES = ["COMPLETED", "COMPLETED", "CONFIRMED", "CONFIRMED", "PENDING_DEPOSIT", "CANCELLED"] as const;
+
+  const allProfiles = await prisma.providerProfile.findMany({
+    where: { isDemo: true },
+    include: { services: { where: { active: true }, take: 3 } }
+  });
+
+  for (const profile of allProfiles) {
+    if (!profile.services.length) continue;
+    const existingCount = await prisma.booking.count({ where: { providerProfileId: profile.id } });
+    if (existingCount >= 6) continue;
+
+    for (let i = 0; i < 6; i++) {
+      const service = profile.services[i % profile.services.length];
+      const clientId = clientIds[i % clientIds.length];
+      const offsetDays = i < 3 ? -(i + 1) * 5 : (i - 2) * 4; // past then future
+      const startsAt = new Date(now + offsetDays * day);
+      startsAt.setHours(9 + i * 1, 0, 0, 0);
+      const status = STATUSES[i];
+
+      await prisma.booking.create({
+        data: {
+          clientId,
+          providerProfileId: profile.id,
+          serviceId: service.id,
+          startsAt,
+          depositCents: service.depositCents,
+          status,
+          notes: i === 0 ? "First-time client, please confirm parking availability." : undefined
+        }
+      });
+    }
+  }
+
+  // ── Seed restricted names (platform-reserved slugs) ──────────────────────
+  for (const reserved of ["freelancers", "admin", "glowith", "support", "api", "www", "app", "dashboard"]) {
+    await prisma.restrictedName.upsert({
+      where: { name: reserved },
+      update: {},
+      create: { name: reserved, reason: "Platform reserved" }
+    });
+  }
+
   return NextResponse.json({ ok: true, credentials: created });
 }

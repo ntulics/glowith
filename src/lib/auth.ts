@@ -52,7 +52,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             select: {
               id: true, email: true, name: true, role: true,
               passwordHash: true,
-              providerProfile: { select: { handle: true } }
+              providerProfile: {
+                select: {
+                  handle: true,
+                  providerType: true,
+                  parentBusinessId: true
+                }
+              }
             }
           });
 
@@ -65,12 +71,32 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
           if (!valid) return null;
 
+          // Compute which subdomain tenant this user belongs to
+          let tenantSlug: string | null = null;
+          const profile = user.providerProfile;
+          if (profile) {
+            if (profile.providerType === "BUSINESS") {
+              tenantSlug = profile.handle.replace("@", "");
+            } else if (profile.parentBusinessId) {
+              // Agent — belongs to a business subdomain
+              const biz = await prisma.providerProfile.findUnique({
+                where: { id: profile.parentBusinessId },
+                select: { handle: true }
+              });
+              tenantSlug = biz?.handle.replace("@", "") ?? "freelancers";
+            } else {
+              // Standalone freelancer
+              tenantSlug = "freelancers";
+            }
+          }
+
           return {
             id: user.id,
             email: user.email,
             name: user.name,
             role: user.role,
-            handle: user.providerProfile?.handle?.replace("@", "") ?? null
+            handle: profile?.handle?.replace("@", "") ?? null,
+            tenantSlug
           };
         } catch (err: any) {
           console.error("[auth] authorize error:", err.message);
@@ -85,6 +111,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.id = user.id;
         token.role = (user as any).role;
         token.handle = (user as any).handle;
+        token.tenantSlug = (user as any).tenantSlug;
       }
       return token;
     },
@@ -93,6 +120,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         (session.user as any).id = token.id ?? token.sub;
         (session.user as any).role = token.role;
         (session.user as any).handle = token.handle;
+        (session.user as any).tenantSlug = token.tenantSlug;
       }
       return session;
     }

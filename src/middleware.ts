@@ -4,34 +4,59 @@ const APEX_HOSTS = new Set(["glowith.co.za", "www.glowith.co.za", "localhost", "
 
 export function middleware(request: NextRequest) {
   const hostname = request.headers.get("host") ?? "";
-  const host = hostname.split(":")[0]; // strip port in dev
+  const host = hostname.split(":")[0];
 
-  // Extract subdomain — e.g. "lumestudio" from "lumestudio.glowith.co.za"
   const parts = host.split(".");
   const isApex = APEX_HOSTS.has(host) || parts.length < 3;
 
-  if (isApex) {
-    // Root domain — normal marketplace routing
-    return NextResponse.next();
-  }
+  if (isApex) return NextResponse.next();
 
   const slug = parts[0];
-
-  // Rewrite /dashboard* to the tenant dashboard, passing slug as header
   const url = request.nextUrl.clone();
 
-  // If already under /dashboard, just pass slug header through
-  if (url.pathname.startsWith("/dashboard") || url.pathname.startsWith("/login") || url.pathname.startsWith("/api")) {
-    const response = NextResponse.next();
-    response.headers.set("x-tenant-slug", slug);
-    return response;
+  // ── freelancers.glowith.co.za ──────────────────────────────────────────────
+  // /dashboard, /login, /api → pass through with slug header
+  // /[handle]               → rewrite to public provider profile page
+  // /                       → rewrite to apex marketplace (discovery page)
+  if (slug === "freelancers") {
+    if (
+      url.pathname.startsWith("/dashboard") ||
+      url.pathname.startsWith("/login") ||
+      url.pathname.startsWith("/signup") ||
+      url.pathname.startsWith("/api")
+    ) {
+      const res = NextResponse.next();
+      res.headers.set("x-tenant-slug", "freelancers");
+      return res;
+    }
+
+    const segments = url.pathname.split("/").filter(Boolean);
+    if (segments.length === 1) {
+      // freelancers.glowith.co.za/naledi → public provider profile
+      url.pathname = `/provider/@${segments[0]}`;
+      const res = NextResponse.rewrite(url);
+      res.headers.set("x-tenant-slug", "freelancers");
+      return res;
+    }
+
+    // Root → apex marketplace
+    url.hostname = parts.slice(1).join(".");
+    url.pathname = "/";
+    return NextResponse.redirect(url);
   }
 
-  // Tenant subdomain root → their dashboard
+  // ── Business subdomain (e.g. lumegroup.glowith.co.za) ─────────────────────
+  if (url.pathname.startsWith("/dashboard") || url.pathname.startsWith("/login") || url.pathname.startsWith("/api") || url.pathname.startsWith("/signup")) {
+    const res = NextResponse.next();
+    res.headers.set("x-tenant-slug", slug);
+    return res;
+  }
+
+  // Subdomain root → tenant dashboard
   url.pathname = "/dashboard";
-  const response = NextResponse.rewrite(url);
-  response.headers.set("x-tenant-slug", slug);
-  return response;
+  const res = NextResponse.rewrite(url);
+  res.headers.set("x-tenant-slug", slug);
+  return res;
 }
 
 export const config = {

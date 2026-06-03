@@ -34,10 +34,11 @@ interface Props {
   businessName: string;
   handle: string;
   role?: string;
+  providerType?: string;
   onClose?: () => void;
 }
 
-export function Sidebar({ businessName, handle, role, onClose }: Props) {
+export function Sidebar({ businessName, handle, role, providerType, onClose }: Props) {
   const pathname = usePathname();
 
   return (
@@ -72,13 +73,24 @@ export function Sidebar({ businessName, handle, role, onClose }: Props) {
           </div>
           <ChevronDown className="h-3.5 w-3.5 shrink-0 text-gray-400" />
         </div>
+        {/* Tenant context badge */}
+        <div className="mt-1.5 flex items-center gap-1">
+          {providerType === "BUSINESS" ? (
+            <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[9px] font-bold text-indigo-600">Business</span>
+          ) : providerType === "FREELANCER" ? (
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold text-amber-600">Freelancer</span>
+          ) : null}
+          {role === "ADMIN" && (
+            <span className="rounded-full bg-[#D94472]/10 px-2 py-0.5 text-[9px] font-bold text-[#D94472]">Super Admin</span>
+          )}
+        </div>
         {role === "ADMIN" && (
           <Link
             href="/admin"
             onClick={onClose}
             className="mt-1.5 block rounded-lg bg-[#D94472]/10 px-2 py-1 text-center text-[10px] font-black text-[#D94472] hover:bg-[#D94472]/20"
           >
-            ⚡ Super Admin
+            ⚡ Platform control
           </Link>
         )}
       </div>
