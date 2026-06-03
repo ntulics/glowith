@@ -12,13 +12,14 @@ import {
   MapPin,
   MessageCircle,
   Search,
+  Sliders,
   Star,
   Store,
   UserRoundPlus,
   X
 } from "lucide-react";
 import Image from "next/image";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { providers } from "@/domain/seed";
 import type { Provider, ServiceCategory } from "@/domain/types";
 import { Button } from "@/components/ui/button";
@@ -27,78 +28,162 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 const categories: Array<ServiceCategory | "All"> = ["All", "Hair", "Nails", "Makeup", "Lashes", "Brows", "Barber", "Spa"];
-const fallbackLocation = { label: "Rosebank, Johannesburg", lat: -26.1458, lng: 28.042 };
+const fallbackLocation = { label: "Rosebank, Johannesburg", areaName: "Rosebank", lat: -26.1458, lng: 28.042 };
+const RADIUS_OPTIONS = [5, 10, 25, 50] as const;
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 const formatCurrency = (cents: number) =>
   new Intl.NumberFormat("en-ZA", { style: "currency", currency: "ZAR", maximumFractionDigits: 0 }).format(cents / 100);
 
+function getHeroHeadline(areaName: string | null): { headline: ReactNode; subtext: string } {
+  if (areaName) {
+    return {
+      headline: (
+        <>
+          Your glow awaits<br />
+          <span style={{ color: "#D94472" }}>in {areaName}</span>
+        </>
+      ),
+      subtext: `Discover top-rated salons, hair artists, nail techs and beauty experts in and around ${areaName}.`
+    };
+  }
+  return {
+    headline: (
+      <>
+        Beauty, on<br />
+        <span style={{ color: "#D94472" }}>your terms</span>
+      </>
+    ),
+    subtext: "Discover top-rated salons, hair artists, nail techs and beauty experts near you."
+  };
+}
+
 export function MarketplaceApp() {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<ServiceCategory | "All">("All");
-  const [locationQuery, setLocationQuery] = useState("Current location");
+  const [locationQuery, setLocationQuery] = useState("Detecting location…");
   const [userLocation, setUserLocation] = useState(fallbackLocation);
+  const [areaName, setAreaName] = useState<string | null>(null);
   const [timeFilter, setTimeFilter] = useState("Any time");
+  const [radiusKm, setRadiusKm] = useState<number>(10);
   const [distanceByProvider, setDistanceByProvider] = useState<Record<string, number>>({});
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
   const [selectedServiceId, setSelectedServiceId] = useState<string>("");
+  const [searchInTopBar, setSearchInTopBar] = useState(false);
+  const heroSearchRef = useRef<HTMLDivElement>(null);
+  const geocodeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // GPS location + reverse geocode for area name
   useEffect(() => {
     if (!navigator.geolocation) {
       setLocationQuery(fallbackLocation.label);
+      setAreaName(fallbackLocation.areaName);
       return;
     }
 
     navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const nextLocation = {
-          label: "Current location",
-          lat: position.coords.latitude,
-          lng: position.coords.longitude
-        };
-        setUserLocation(nextLocation);
-        setLocationQuery(nextLocation.label);
+      async (position) => {
+        const { latitude: lat, longitude: lng } = position.coords;
+        let label = "Current location";
+        let area: string | null = null;
+
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
+            { headers: { "Accept-Language": "en" } }
+          );
+          if (res.ok) {
+            const data = await res.json();
+            const addr = data.address ?? {};
+            area = addr.suburb ?? addr.neighbourhood ?? addr.city_district ?? addr.city ?? addr.town ?? addr.village ?? null;
+            label = area ?? "Current location";
+          }
+        } catch {
+          // silently fall through
+        }
+
+        setUserLocation({ label, areaName: area ?? "", lat, lng });
+        setLocationQuery(label);
+        setAreaName(area);
       },
-      () => setLocationQuery(fallbackLocation.label),
-      { enableHighAccuracy: true, timeout: 6000, maximumAge: 300000 }
+      () => {
+        setLocationQuery(fallbackLocation.label);
+        setAreaName(fallbackLocation.areaName);
+        setUserLocation(fallbackLocation);
+      },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 300000 }
     );
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadDistances() {
+  // When locationQuery changes (typed by user), debounce forward geocode
+  const geocodeTypedLocation = useCallback((value: string) => {
+    if (geocodeTimer.current) clearTimeout(geocodeTimer.current);
+    geocodeTimer.current = setTimeout(async () => {
+      if (!value || value === "Current location" || value === "Detecting location…") return;
       try {
-        const response = await fetch(`/api/maps/distance?lat=${userLocation.lat}&lng=${userLocation.lng}`);
-        if (!response.ok) return;
-        const data = await response.json();
-        if (cancelled) return;
-        setDistanceByProvider(
-          Object.fromEntries(
-            (data.distances ?? []).map((item: { id: string; distanceKm: number }) => [item.id, item.distanceKm])
-          )
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(value)}&format=json&limit=1&countrycodes=za`,
+          { headers: { "Accept-Language": "en" } }
         );
+        if (res.ok) {
+          const data = await res.json();
+          if (data[0]) {
+            setUserLocation({
+              label: value,
+              areaName: value,
+              lat: parseFloat(data[0].lat),
+              lng: parseFloat(data[0].lon)
+            });
+          }
+        }
       } catch {
-        setDistanceByProvider({});
+        // silently fall through
       }
-    }
+    }, 600);
+  }, []);
 
-    loadDistances();
-    return () => {
-      cancelled = true;
-    };
+  // Compute distances client-side whenever userLocation changes
+  useEffect(() => {
+    const distances: Record<string, number> = {};
+    for (const p of providers) {
+      distances[p.id] = haversineKm(userLocation.lat, userLocation.lng, p.location.lat, p.location.lng);
+    }
+    setDistanceByProvider(distances);
   }, [userLocation.lat, userLocation.lng]);
+
+  // Observe hero search bar to know when to move it to the top bar
+  useEffect(() => {
+    const el = heroSearchRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setSearchInTopBar(!entry.isIntersecting),
+      { threshold: 0, rootMargin: "-72px 0px 0px 0px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   const displayProviders = useMemo(
     () => providers.map((provider) => ({
       ...provider,
-      distanceKm: distanceByProvider[provider.id] ?? provider.distanceKm
+      distanceKm: distanceByProvider[provider.id] !== undefined
+        ? Math.round(distanceByProvider[provider.id] * 10) / 10
+        : provider.distanceKm
     })),
     [distanceByProvider]
   );
 
   const filteredProviders = useMemo(() => {
     const value = query.trim().toLowerCase();
-    const locationValue = locationQuery.trim().toLowerCase();
     return displayProviders.filter((provider) => {
       const categoryMatch = category === "All" || provider.category === category;
       const searchMatch =
@@ -113,13 +198,10 @@ export function MarketplaceApp() {
           ...provider.services.map((service) => service.name)
         ]
           .join(" ").toLowerCase().includes(value);
-      const locationMatch =
-        !locationValue ||
-        locationValue === "current location" ||
-        provider.location.label.toLowerCase().includes(locationValue);
-      return categoryMatch && searchMatch && locationMatch;
+      const withinRadius = (distanceByProvider[provider.id] ?? 0) <= radiusKm;
+      return categoryMatch && searchMatch && withinRadius;
     });
-  }, [category, displayProviders, locationQuery, query]);
+  }, [category, displayProviders, distanceByProvider, radiusKm, query]);
 
   function openProvider(provider: Provider) {
     setSelectedProvider(provider);
@@ -131,22 +213,26 @@ export function MarketplaceApp() {
     setSelectedServiceId("");
   }
 
+  function handleLocationChange(val: string) {
+    setLocationQuery(val);
+    geocodeTypedLocation(val);
+  }
+
   const selectedService = selectedProvider?.services.find((s) => s.id === selectedServiceId)
     ?? selectedProvider?.services[0];
 
+  const searchProps = { query, locationQuery, timeFilter, radiusKm, onQueryChange: setQuery, onLocationChange: handleLocationChange, onTimeChange: setTimeFilter, onRadiusChange: setRadiusKm };
+
   return (
     <div className="min-h-screen bg-white">
-      <TopBar />
+      <TopBar searchInTopBar={searchInTopBar} searchProps={searchProps} providers={displayProviders} />
 
       {/* Hero */}
       <HeroSection
-        query={query}
-        locationQuery={locationQuery}
-        timeFilter={timeFilter}
+        heroSearchRef={heroSearchRef}
+        areaName={areaName}
+        {...searchProps}
         providers={displayProviders}
-        onQueryChange={setQuery}
-        onLocationChange={setLocationQuery}
-        onTimeChange={setTimeFilter}
       />
 
       {/* Main discovery */}
@@ -194,8 +280,13 @@ export function MarketplaceApp() {
 
           {filteredProviders.length === 0 && (
             <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-[var(--line)] py-20 text-center">
-              <p className="text-lg font-bold text-[var(--muted)]">No providers found</p>
-              <p className="mt-1 text-sm text-[var(--muted)]">Try a different category or search term</p>
+              <MapPin className="mb-3 h-10 w-10 text-[var(--muted)]/40" />
+              <p className="text-lg font-bold text-[var(--muted)]">
+                No beauty providers within {radiusKm} km
+              </p>
+              <p className="mt-1 text-sm text-[var(--muted)]">
+                of {locationQuery}. Try a wider radius or different location.
+              </p>
             </div>
           )}
         </section>
@@ -221,35 +312,67 @@ export function MarketplaceApp() {
 
 /* ─── Top bar ─────────────────────────────────────────────── */
 
-function TopBar() {
+type SearchBarProps = {
+  query: string;
+  locationQuery: string;
+  timeFilter: string;
+  radiusKm: number;
+  onQueryChange: (v: string) => void;
+  onLocationChange: (v: string) => void;
+  onTimeChange: (v: string) => void;
+  onRadiusChange: (v: number) => void;
+};
+
+function TopBar({ searchInTopBar, searchProps, providers }: { searchInTopBar: boolean; searchProps: SearchBarProps; providers: Provider[] }) {
   return (
     <header className="sticky top-0 z-40 border-b border-[var(--line)]/60 bg-white/90 backdrop-blur-md">
-      <div className="mx-auto flex h-[4.25rem] max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex h-[4.25rem] max-w-7xl items-center gap-3 px-4 sm:px-6 lg:px-8">
 
         {/* Logo */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex shrink-0 items-center gap-2">
           <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl">
             <Image src="/images/glowith-icon.png" alt="Glowith" width={36} height={36} className="object-cover" onError={() => {}} />
           </div>
-          <span className="text-base font-black tracking-tight">Glowith</span>
+          <span className={cn("text-base font-black tracking-tight transition-all duration-300", searchInTopBar ? "hidden sm:hidden" : "")}>
+            Glowith
+          </span>
         </div>
 
-        <nav className="hidden items-center gap-0.5 md:flex" aria-label="Primary">
-          {["Discover", "Portfolio", "Bookings", "Inbox"].map((item) => (
-            <a key={item} href={`#${item.toLowerCase()}`}
-              className="rounded-lg px-3 py-2 text-sm font-semibold text-[var(--muted)] transition hover:text-[var(--ink)]">
-              {item}
-            </a>
-          ))}
-        </nav>
+        {/* Sticky search bar (slides in on scroll) */}
+        <AnimatePresence>
+          {searchInTopBar && (
+            <motion.div
+              initial={{ opacity: 0, scaleX: 0.9 }}
+              animate={{ opacity: 1, scaleX: 1 }}
+              exit={{ opacity: 0, scaleX: 0.9 }}
+              className="flex min-w-0 flex-1 origin-center"
+            >
+              <CompactSearchBar {...searchProps} providers={providers} />
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-        <div className="flex items-center gap-2">
+        {/* Nav (hidden when search is showing) */}
+        {!searchInTopBar && (
+          <nav className="hidden flex-1 items-center gap-0.5 md:flex" aria-label="Primary">
+            {["Discover", "Portfolio", "Bookings", "Inbox"].map((item) => (
+              <a key={item} href={`#${item.toLowerCase()}`}
+                className="rounded-lg px-3 py-2 text-sm font-semibold text-[var(--muted)] transition hover:text-[var(--ink)]">
+                {item}
+              </a>
+            ))}
+          </nav>
+        )}
+
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           <button className="focus-ring flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--line)] transition hover:bg-[var(--background)]" aria-label="Notifications">
             <Bell className="h-4 w-4 text-[var(--muted)]" />
           </button>
-          <button className="focus-ring hidden h-9 items-center gap-1.5 rounded-xl border border-[var(--line)] px-3 text-sm font-semibold transition hover:bg-[var(--background)] sm:inline-flex">
-            List your business
-          </button>
+          {!searchInTopBar && (
+            <button className="focus-ring hidden h-9 items-center gap-1.5 rounded-xl border border-[var(--line)] px-3 text-sm font-semibold transition hover:bg-[var(--background)] sm:inline-flex">
+              List your business
+            </button>
+          )}
           <a
             href="/login"
             className="focus-ring hidden h-9 items-center gap-2 rounded-xl bg-[var(--brand)] px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--brand-dark)] sm:inline-flex"
@@ -263,24 +386,96 @@ function TopBar() {
   );
 }
 
+function CompactSearchBar({ query, locationQuery, timeFilter, radiusKm, onQueryChange, onLocationChange, onTimeChange, onRadiusChange, providers }: SearchBarProps & { providers: Provider[] }) {
+  const [activePanel, setActivePanel] = useState<"treatments" | "location" | "time" | null>(null);
+  const locationOptions = useMemo(() => Array.from(new Set(providers.map((p) => p.location.label))), [providers]);
+  const treatmentOptions = useMemo(() => Array.from(new Set(providers.flatMap((p) => p.services.map((s) => s.name)))), [providers]);
+
+  return (
+    <div className="relative w-full">
+      <div className="flex items-stretch overflow-hidden rounded-2xl border border-[var(--line)] bg-white shadow-md">
+        {/* Service */}
+        <div className="flex items-center gap-2 border-r border-[var(--line)] px-3 py-2">
+          <Search className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />
+          <input
+            value={query}
+            onFocus={() => setActivePanel("treatments")}
+            onChange={(e) => onQueryChange(e.target.value)}
+            placeholder="All treatments"
+            className="w-28 bg-transparent text-xs font-semibold text-[var(--ink)] placeholder:font-normal placeholder:text-[var(--muted)] outline-none"
+          />
+        </div>
+        {/* Location */}
+        <div className="flex flex-[2] items-center gap-2 border-r border-[var(--line)] px-3 py-2">
+          <MapPin className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />
+          <input
+            value={locationQuery}
+            onFocus={() => setActivePanel("location")}
+            onChange={(e) => onLocationChange(e.target.value)}
+            placeholder="Location"
+            className="min-w-0 flex-1 bg-transparent text-xs font-semibold text-[var(--ink)] placeholder:font-normal placeholder:text-[var(--muted)] outline-none"
+          />
+          <span className="shrink-0 rounded-full bg-[var(--background)] px-2 py-0.5 text-[10px] font-bold text-[var(--muted)]">{radiusKm}km</span>
+        </div>
+        {/* Search */}
+        <button
+          onClick={() => setActivePanel(null)}
+          className="flex items-center gap-1.5 rounded-r-[14px] bg-[var(--ink)] px-4 py-2 text-xs font-bold text-white hover:bg-[var(--ink)]/90"
+        >
+          <Search className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">Search</span>
+        </button>
+      </div>
+
+      <AnimatePresence>
+        {activePanel === "treatments" && (
+          <SearchPanel onClose={() => setActivePanel(null)} align="left">
+            <div className="flex flex-wrap gap-2">
+              {["All", ...categories.filter((c) => c !== "All")].map((item) => (
+                <button key={item} onClick={() => { onQueryChange(item === "All" ? "" : item); setActivePanel(null); }}
+                  className="rounded-full border border-[var(--line)] px-4 py-2 text-sm font-semibold hover:border-[var(--ink)]">
+                  {item === "All" ? "All treatments" : item}
+                </button>
+              ))}
+            </div>
+            <div className="mt-5 space-y-1">
+              {treatmentOptions.slice(0, 8).map((item) => (
+                <button key={item} onClick={() => { onQueryChange(item); setActivePanel(null); }}
+                  className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm font-semibold hover:bg-[#F9F5F3]">
+                  {item}<ChevronRight className="h-4 w-4 text-[var(--muted)]" />
+                </button>
+              ))}
+            </div>
+          </SearchPanel>
+        )}
+        {activePanel === "location" && (
+          <SearchPanel onClose={() => setActivePanel(null)} align="center">
+            <LocationPanel locationOptions={locationOptions} radiusKm={radiusKm} onLocationChange={onLocationChange} onRadiusChange={onRadiusChange} onClose={() => setActivePanel(null)} />
+          </SearchPanel>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 /* ─── Hero ────────────────────────────────────────────────── */
 
 function HeroSection({
+  heroSearchRef,
+  areaName,
   query,
   locationQuery,
   timeFilter,
+  radiusKm,
   providers,
   onQueryChange,
   onLocationChange,
-  onTimeChange
-}: {
-  query: string;
-  locationQuery: string;
-  timeFilter: string;
+  onTimeChange,
+  onRadiusChange
+}: SearchBarProps & {
+  heroSearchRef: React.RefObject<HTMLDivElement | null>;
+  areaName: string | null;
   providers: Provider[];
-  onQueryChange: (v: string) => void;
-  onLocationChange: (v: string) => void;
-  onTimeChange: (v: string) => void;
 }) {
   const [activePanel, setActivePanel] = useState<"treatments" | "location" | "time" | null>(null);
   const treatmentOptions = useMemo(
@@ -292,6 +487,7 @@ function HeroSection({
     [providers]
   );
   const calendarDays = Array.from({ length: 30 }, (_, index) => index + 1);
+  const { headline, subtext } = getHeroHeadline(areaName);
 
   return (
     <section
@@ -300,17 +496,17 @@ function HeroSection({
         background: "linear-gradient(160deg, #ffffff 0%, #fdf0fa 45%, #fce8f0 75%, #fde8dc 100%)"
       }}
     >
-      <h1 className="text-balance text-5xl font-black leading-[1.08] tracking-tight text-[var(--ink)] sm:text-6xl lg:text-7xl">
-        Book local beauty<br />
-        <span style={{ color: "#D94472" }}>services</span>
+      <h1 className="text-balance font-black leading-[1.08] tracking-tight text-[var(--ink)]"
+        style={{ fontSize: "clamp(2rem, 5vw, 3.6rem)" }}>
+        {headline}
       </h1>
 
       <p className="mx-auto mt-5 max-w-lg text-lg font-medium text-[var(--muted)]">
-        Discover top-rated salons, hair artists, nail techs and beauty experts near you.
+        {subtext}
       </p>
 
       {/* 3-part search bar */}
-      <div className="relative mt-10 w-full max-w-6xl rounded-[1.75rem] border border-[var(--line)] bg-white shadow-xl shadow-black/5">
+      <div ref={heroSearchRef} className="relative mt-10 w-full max-w-6xl rounded-[1.75rem] border border-[var(--line)] bg-white shadow-xl shadow-black/5">
         <div className="flex flex-col sm:flex-row sm:items-stretch">
           {/* Treatment */}
           <div className="flex flex-1 items-center gap-3 border-b border-[var(--line)] px-5 py-4 sm:border-b-0 sm:border-r">
@@ -323,16 +519,23 @@ function HeroSection({
               className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-[var(--ink)] placeholder:font-normal placeholder:text-[var(--muted)] outline-none"
             />
           </div>
-          {/* Location */}
-          <div className="flex flex-1 items-center gap-3 border-b border-[var(--line)] px-5 py-4 sm:border-b-0 sm:border-r">
+          {/* Location — wider (flex-[2]) */}
+          <div className="flex flex-[2] items-center gap-3 border-b border-[var(--line)] px-5 py-4 sm:border-b-0 sm:border-r">
             <MapPin className="h-4 w-4 shrink-0 text-[var(--muted)]" />
             <input
               value={locationQuery}
               onFocus={() => setActivePanel("location")}
               onChange={(e) => onLocationChange(e.target.value)}
-              placeholder="Current location"
+              placeholder="City, suburb or area"
               className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-[var(--ink)] placeholder:font-normal placeholder:text-[var(--muted)] outline-none"
             />
+            <button
+              onClick={(e) => { e.stopPropagation(); setActivePanel("location"); }}
+              className="shrink-0 inline-flex items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--background)] px-2.5 py-1 text-xs font-bold text-[var(--muted)] hover:border-[var(--ink)] hover:text-[var(--ink)]"
+            >
+              <Sliders className="h-3 w-3" />
+              {radiusKm} km
+            </button>
           </div>
           {/* Date */}
           <button
@@ -395,31 +598,13 @@ function HeroSection({
 
           {activePanel === "location" && (
             <SearchPanel onClose={() => setActivePanel(null)} align="center">
-              <div className="space-y-2 text-left">
-                <button
-                  onClick={() => {
-                    onLocationChange("Current location");
-                    setActivePanel(null);
-                  }}
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#F9F5F3]"
-                >
-                  <MapPin className="h-4 w-4 text-[var(--brand)]" />
-                  Use current location
-                </button>
-                {locationOptions.map((item) => (
-                  <button
-                    key={item}
-                    onClick={() => {
-                      onLocationChange(item);
-                      setActivePanel(null);
-                    }}
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#F9F5F3]"
-                  >
-                    <MapPin className="h-4 w-4 text-[var(--muted)]" />
-                    {item}
-                  </button>
-                ))}
-              </div>
+              <LocationPanel
+                locationOptions={locationOptions}
+                radiusKm={radiusKm}
+                onLocationChange={onLocationChange}
+                onRadiusChange={onRadiusChange}
+                onClose={() => setActivePanel(null)}
+              />
             </SearchPanel>
           )}
 
@@ -497,6 +682,96 @@ function HeroSection({
   );
 }
 
+/* ─── Location panel (shared between hero + compact) ──────── */
+
+function LocationPanel({
+  locationOptions,
+  radiusKm,
+  onLocationChange,
+  onRadiusChange,
+  onClose
+}: {
+  locationOptions: string[];
+  radiusKm: number;
+  onLocationChange: (v: string) => void;
+  onRadiusChange: (v: number) => void;
+  onClose: () => void;
+}) {
+  const [customRadius, setCustomRadius] = useState("");
+
+  return (
+    <div className="space-y-5 text-left">
+      {/* Quick location options */}
+      <div className="space-y-1">
+        <button
+          onClick={() => {
+            onLocationChange("Current location");
+            onClose();
+          }}
+          className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#F9F5F3]"
+        >
+          <MapPin className="h-4 w-4 text-[var(--brand)]" />
+          Use current location
+        </button>
+        {locationOptions.map((item) => (
+          <button
+            key={item}
+            onClick={() => {
+              onLocationChange(item);
+              onClose();
+            }}
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#F9F5F3]"
+          >
+            <MapPin className="h-4 w-4 text-[var(--muted)]" />
+            {item}
+          </button>
+        ))}
+      </div>
+
+      {/* Radius selector */}
+      <div className="border-t border-[var(--line)] pt-4">
+        <p className="mb-3 text-xs font-bold uppercase tracking-widest text-[var(--muted)]">Search radius</p>
+        <div className="flex flex-wrap gap-2">
+          {RADIUS_OPTIONS.map((r) => (
+            <button
+              key={r}
+              onClick={() => onRadiusChange(r)}
+              className={cn(
+                "rounded-full border px-4 py-2 text-sm font-bold transition",
+                radiusKm === r
+                  ? "border-[var(--brand)] bg-[#FFF0F4] text-[var(--brand)]"
+                  : "border-[var(--line)] hover:border-[var(--brand)] hover:text-[var(--brand)]"
+              )}
+            >
+              {r} km
+            </button>
+          ))}
+        </div>
+        <div className="mt-3 flex items-center gap-2">
+          <input
+            type="number"
+            min={1}
+            max={500}
+            value={customRadius}
+            onChange={(e) => setCustomRadius(e.target.value)}
+            placeholder="Custom km"
+            className="w-28 rounded-xl border border-[var(--line)] px-3 py-2 text-sm font-semibold outline-none focus:border-[var(--brand)]"
+          />
+          <button
+            onClick={() => {
+              const val = parseInt(customRadius, 10);
+              if (val > 0) { onRadiusChange(val); setCustomRadius(""); onClose(); }
+            }}
+            className="rounded-xl bg-[var(--ink)] px-4 py-2 text-sm font-bold text-white hover:bg-[var(--ink)]/90"
+          >
+            Apply
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SearchPanel({
   children,
   align,
@@ -564,14 +839,12 @@ function ProviderCard({
           sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
           className="object-cover transition duration-300 group-hover:scale-105"
         />
-        {/* Featured badge */}
         {provider.verified && (
           <div className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-white/90 px-2.5 py-1 text-xs font-bold backdrop-blur-sm">
             <BadgeCheck className="h-3.5 w-3.5 text-[var(--sage)]" />
             Verified
           </div>
         )}
-        {/* Save */}
         <button
           onClick={(e) => e.stopPropagation()}
           className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-white/90 backdrop-blur-sm transition hover:bg-white"
@@ -616,7 +889,7 @@ function ProviderCard({
   );
 }
 
-/* ─── Provider drawer (slides up from bottom) ─────────────── */
+/* ─── Provider drawer ─────────────────────────────────────── */
 
 function ProviderDrawer({
   provider,
@@ -633,7 +906,6 @@ function ProviderDrawer({
 }) {
   return (
     <>
-      {/* Backdrop */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -642,7 +914,6 @@ function ProviderDrawer({
         className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm"
       />
 
-      {/* Panel */}
       <motion.div
         initial={{ y: "100%" }}
         animate={{ y: 0 }}
@@ -650,7 +921,6 @@ function ProviderDrawer({
         transition={{ type: "spring", damping: 28, stiffness: 300 }}
         className="fixed inset-x-3 bottom-3 z-50 mx-auto max-h-[88vh] max-w-7xl overflow-y-auto rounded-3xl bg-white shadow-2xl sm:inset-x-6 lg:inset-x-8"
       >
-        {/* Drag handle */}
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--line)] bg-white px-5 py-4">
           <div className="mx-auto h-1 w-10 rounded-full bg-[var(--line)] sm:hidden" />
           <div className="hidden sm:block">
@@ -665,9 +935,7 @@ function ProviderDrawer({
         <div className="mx-auto max-w-5xl px-5 pb-10 pt-5">
           <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
 
-            {/* Left: info + portfolio */}
             <div className="space-y-6">
-              {/* Provider header */}
               <div className="flex gap-4">
                 <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-[#f3e8e4]">
                   <Image src={provider.portfolio[0].image} alt="" fill sizes="96px" className="object-cover" />
@@ -697,7 +965,6 @@ function ProviderDrawer({
                 </div>
               </div>
 
-              {/* Portfolio */}
               <div>
                 <div className="mb-3 flex items-center justify-between">
                   <h3 className="font-black">Portfolio</h3>
@@ -718,7 +985,6 @@ function ProviderDrawer({
                 </div>
               </div>
 
-              {/* Inbox */}
               <div className="rounded-2xl border border-[var(--line)] p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <h3 className="font-black">Message {provider.name.split(" ")[0]}</h3>
@@ -739,7 +1005,6 @@ function ProviderDrawer({
               </div>
             </div>
 
-            {/* Right: booking */}
             <div className="space-y-4">
               <Card className="rounded-2xl border-[var(--line)] shadow-sm">
                 <CardHeader className="pb-2 pt-4">
@@ -752,7 +1017,6 @@ function ProviderDrawer({
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3 pb-5">
-                  {/* Services */}
                   <div className="space-y-2">
                     {provider.services.map((service) => (
                       <button
@@ -777,7 +1041,6 @@ function ProviderDrawer({
                     ))}
                   </div>
 
-                  {/* Time slots */}
                   <div className="grid grid-cols-4 gap-1.5">
                     {(provider.availableSlots ?? ["09:00", "12:30", "15:30", "17:00"]).map((time) => (
                       <button key={time} className="focus-ring rounded-xl border border-[var(--line)] py-2.5 text-xs font-bold transition hover:border-[var(--brand)] hover:text-[var(--brand)]">
@@ -793,7 +1056,6 @@ function ProviderDrawer({
                 </CardContent>
               </Card>
 
-              {/* Studio */}
               <Card className="rounded-2xl border-[var(--line)] shadow-sm">
                 <CardHeader className="pb-2 pt-4">
                   <h3 className="font-black">Provider studio</h3>
