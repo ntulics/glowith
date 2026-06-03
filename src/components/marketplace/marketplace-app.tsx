@@ -3,7 +3,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import {
   BadgeCheck,
-  Bell,
   CalendarDays,
   ChevronRight,
   Clock3,
@@ -304,7 +303,7 @@ export function MarketplaceApp() {
             {filteredProviders.map((provider, index) => (
               <div
                 key={provider.id}
-                className="sticky pb-[5px]"
+                className="sticky pb-[9px]"
                 style={{ top: `calc(4.25rem + ${index * 6}px)`, zIndex: index + 1 }}
               >
                 <ProviderCard
@@ -450,9 +449,6 @@ function TopBar({ searchInTopBar, searchProps, providers, areaName }: { searchIn
 
           {/* Actions */}
           <div className="ml-auto flex shrink-0 items-center gap-2">
-            <button className="focus-ring flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--line)] transition hover:bg-[var(--background)]" aria-label="Notifications">
-              <Bell className="h-4 w-4 text-[var(--muted)]" />
-            </button>
             {!searchInTopBar && (
               <button className="focus-ring hidden h-9 items-center gap-1.5 rounded-xl border border-[var(--line)] px-3 text-sm font-semibold transition hover:bg-[var(--background)] sm:inline-flex">
                 List your business
@@ -465,10 +461,10 @@ function TopBar({ searchInTopBar, searchProps, providers, areaName }: { searchIn
               <UserRoundPlus className="h-4 w-4" />
               Log in
             </a>
-            {/* Hamburger — mobile only */}
+            {/* Hamburger — mobile only, larger touch target */}
             <button
               onClick={() => setMobileMenuOpen(true)}
-              className="focus-ring flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--line)] transition hover:bg-[var(--background)] sm:hidden"
+              className="focus-ring flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--ink)] text-white transition hover:bg-[var(--ink)]/90 sm:hidden"
               aria-label="Open menu"
             >
               <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
