@@ -11,7 +11,7 @@ const PROTECTED_BUSINESS_NAMES = new Set(["Glowith Admin", "Freelancers"]);
 
 type Provider = {
   id: string; businessName: string; handle: string; category: string;
-  city: string; verified: boolean; isDemo: boolean; providerType: string;
+  city: string; verified: boolean; isDemo: boolean; providerType: string; plan: "STARTER" | "PRO" | "BUSINESS";
   parentBusinessId: string | null; parentBusinessName: string | null; parentBusinessHandle: string | null;
   email: string;
   bookings: number; services: number; posts: number; createdAt: string;
@@ -131,6 +131,11 @@ export function ProvidersTable({ providers: initial, freelancerCount }: { provid
     await fetch(`/api/admin/providers/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ verified }) });
     setProviders((prev) => prev.map((p) => p.id === id ? { ...p, verified } : p));
     setLoading(null);
+  }
+
+  async function setPlan(id: string, plan: string) {
+    await fetch(`/api/admin/providers/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plan }) });
+    setProviders((prev) => prev.map((p) => p.id === id ? { ...p, plan: plan as any } : p));
   }
 
   async function toggleDemo(id: string, isDemo: boolean) {
@@ -287,7 +292,7 @@ export function ProvidersTable({ providers: initial, freelancerCount }: { provid
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-gray-50">
               <tr>
-                {["Studio", "Type", "Category", "City", "Svcs", "Bookings", "Joined", "Status", "Actions"].map((h) => (
+                {["Studio", "Type", "Plan", "Category", "City", "Svcs", "Bookings", "Joined", "Status", "Actions"].map((h) => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-400">{h}</th>
                 ))}
               </tr>
@@ -334,6 +339,18 @@ export function ProvidersTable({ providers: initial, freelancerCount }: { provid
                         <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-600">
                           <Scissors className="h-3 w-3" /> Freelancer
                         </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {p.parentBusinessId ? (
+                        <span className="text-[10px] text-gray-400">—</span>
+                      ) : (
+                        <select value={p.plan} onChange={(e) => setPlan(p.id, e.target.value)}
+                          className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-[11px] font-bold outline-none focus:border-[#D94472]">
+                          <option value="STARTER">Starter</option>
+                          <option value="PRO">Pro</option>
+                          <option value="BUSINESS">Business</option>
+                        </select>
                       )}
                     </td>
                     <td className="px-4 py-3 text-gray-500">{p.category}</td>

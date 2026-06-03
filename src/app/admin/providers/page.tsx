@@ -26,6 +26,7 @@ export default async function AdminProvidersPage() {
         verified: p.verified,
         isDemo: p.isDemo,
         providerType: p.providerType,
+        plan: p.plan,
         parentBusinessId: p.parentBusinessId,
         parentBusinessName: p.parentBusiness?.businessName ?? null,
         parentBusinessHandle: p.parentBusiness?.handle ?? null,

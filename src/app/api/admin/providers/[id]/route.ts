@@ -22,6 +22,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     data.verifiedBy = body.verified ? "GLOWITH" : null;
   }
   if (typeof body.isDemo === "boolean") data.isDemo = body.isDemo;
+  if (typeof body.plan === "string" && ["STARTER", "PRO", "BUSINESS"].includes(body.plan)) data.plan = body.plan;
 
   const profile = await prisma.providerProfile.update({ where: { id }, data });
   return NextResponse.json({ profile });

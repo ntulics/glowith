@@ -18,6 +18,18 @@ enum VerificationSource {
   EMPLOYER
 }
 
+enum Plan {
+  STARTER
+  PRO
+  BUSINESS
+}
+
+model PlatformConfig {
+  id             String   @id @default("global")
+  depositPercent Int      @default(20)
+  updatedAt      DateTime @updatedAt
+}
+
 enum ProviderType {
   FREELANCER
   BUSINESS
@@ -100,6 +112,7 @@ model ProviderProfile {
   verified         Boolean  @default(false)
   verifiedBy       VerificationSource?
   canPostToCompany Boolean  @default(false)
+  plan             Plan     @default(STARTER)
   isDemo           Boolean  @default(false)
   mobile           Boolean  @default(false)
   studio           Boolean  @default(true)

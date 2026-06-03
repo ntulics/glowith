@@ -57,7 +57,20 @@ export async function POST(request: Request) {
     }
   }
 
-  const depositCents = service.depositCents ?? 0;
+  // Deposit Glowith collects upfront. Only charged to STARTER (free) providers;
+  // paid plans (PRO/BUSINESS) keep 100% and arrange their own deposits.
+  // The percentage is configured by the super admin (PlatformConfig).
+  const requiresDeposit = (service.depositCents ?? 0) > 0;
+  let depositCents = 0;
+  if (requiresDeposit) {
+    const provider = await prisma.providerProfile.findUnique({ where: { id: providerProfileId }, select: { plan: true } });
+    if (provider?.plan === "STARTER") {
+      const config = await prisma.platformConfig.findUnique({ where: { id: "global" } });
+      const pct = config?.depositPercent ?? 20;
+      depositCents = Math.round(((service.priceCents - discountCents) * pct) / 100);
+    }
+  }
+
   const booking = await prisma.booking.create({
     data: {
       clientId: user.id,
