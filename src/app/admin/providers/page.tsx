@@ -18,6 +18,7 @@ export default async function AdminProvidersPage() {
       category: p.category,
       city: p.city,
       verified: p.verified,
+      isDemo: p.isDemo,
       email: p.user.email,
       bookings: p._count.bookings,
       services: p._count.services,

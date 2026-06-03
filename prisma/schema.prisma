@@ -84,6 +84,7 @@ model ProviderProfile {
   latitude     Float
   longitude    Float
   verified     Boolean  @default(false)
+  isDemo       Boolean  @default(false)
   mobile       Boolean  @default(false)
   studio       Boolean  @default(true)
   createdAt    DateTime @default(now())

@@ -104,7 +104,11 @@ export function MarketplaceApp() {
           if (res.ok) {
             const data = await res.json();
             const addr = data.address ?? {};
-            area = addr.suburb ?? addr.neighbourhood ?? addr.city_district ?? addr.city ?? addr.town ?? addr.village ?? null;
+            const candidates = [
+          addr.suburb, addr.neighbourhood, addr.hamlet,
+          addr.city_district, addr.city, addr.town, addr.village
+        ].filter((v): v is string => typeof v === "string" && !/^ward\b/i.test(v) && !/^\d/.test(v));
+        area = candidates[0] ?? null;
             label = area ?? "Current location";
           }
         } catch {
