@@ -120,7 +120,7 @@ jobs:
             }
           }
 
-          for (const name of ['prisma', '@prisma/client']) {
+          for (const name of ['prisma', '@prisma/client', 'bcryptjs']) {
             copyPackage(name);
           }
           NODE
