@@ -8,7 +8,7 @@ export async function POST(request: Request) {
   const user = session?.user as any;
   if (!user) return NextResponse.json({ error: "Please sign in to book" }, { status: 401 });
 
-  const { providerProfileId, serviceId, startsAt, notes } = await request.json();
+  const { providerProfileId, serviceId, startsAt, notes, couponCode } = await request.json();
   if (!providerProfileId || !serviceId || !startsAt) {
     return NextResponse.json({ error: "Missing booking details" }, { status: 400 });
   }
@@ -38,6 +38,25 @@ export async function POST(request: Request) {
   });
   if (clash) return NextResponse.json({ error: "That slot was just taken — pick another time" }, { status: 409 });
 
+  // Apply coupon if supplied (re-validated server-side)
+  let couponId: string | null = null;
+  let discountCents = 0;
+  if (couponCode) {
+    const coupon = await prisma.coupon.findUnique({
+      where: { providerProfileId_code: { providerProfileId, code: couponCode.toString().trim().toUpperCase() } }
+    });
+    const usable = coupon && coupon.active
+      && (!coupon.expiresAt || coupon.expiresAt.getTime() >= Date.now())
+      && (coupon.maxRedemptions == null || coupon.redemptions < coupon.maxRedemptions);
+    if (usable) {
+      const raw = coupon!.discountType === "PERCENT"
+        ? Math.round((service.priceCents * coupon!.discountValue) / 100)
+        : coupon!.discountValue;
+      discountCents = Math.max(0, Math.min(raw, service.priceCents));
+      couponId = coupon!.id;
+    }
+  }
+
   const depositCents = service.depositCents ?? 0;
   const booking = await prisma.booking.create({
     data: {
@@ -47,9 +66,15 @@ export async function POST(request: Request) {
       startsAt: start,
       notes: notes ? notes.toString().slice(0, 500) : null,
       depositCents,
+      couponId,
+      discountCents,
       status: depositCents > 0 ? "PENDING_DEPOSIT" : "CONFIRMED"
     }
   });
+
+  if (couponId) {
+    await prisma.coupon.update({ where: { id: couponId }, data: { redemptions: { increment: 1 } } });
+  }
 
   return NextResponse.json({
     booking: { id: booking.id, status: booking.status, depositCents: booking.depositCents }

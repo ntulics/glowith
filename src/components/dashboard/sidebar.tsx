@@ -9,6 +9,7 @@ import {
   Calendar,
   ChevronDown,
   Images,
+  Ticket,
   LayoutDashboard,
   LogOut,
   MessageCircle,
@@ -25,6 +26,7 @@ const nav = [
   { href: "/dashboard/calendar", label: "Calendar", icon: Calendar },
   { href: "/dashboard/catalog", label: "Catalog", icon: BookOpen },
   { href: "/dashboard/portfolio", label: "Portfolio", icon: Images },
+  { href: "/dashboard/coupons", label: "Coupons", icon: Ticket },
   { href: "/dashboard/agents", label: "Agents", icon: UserCog },
   { href: "/dashboard/clients", label: "Clients", icon: Users },
   { href: "/dashboard/inbox", label: "Inbox", icon: MessageCircle },
@@ -46,7 +48,7 @@ export function Sidebar({ businessName, handle, role, providerType, parentBusine
   const isAgent = !!parentBusinessName;
   // Agents work under a business — team & client management live at company level
   const visibleNav = isAgent
-    ? nav.filter((item) => item.href !== "/dashboard/agents" && item.href !== "/dashboard/clients")
+    ? nav.filter((item) => !["/dashboard/agents", "/dashboard/clients", "/dashboard/coupons"].includes(item.href))
     : nav;
 
   return (

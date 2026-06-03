@@ -44,6 +44,13 @@ export function BookingFlow({
   const [busyLoading, setBusyLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  // Coupon
+  const [couponInput, setCouponInput] = useState("");
+  const [appliedCode, setAppliedCode] = useState<string | null>(null);
+  const [discountCents, setDiscountCents] = useState(0);
+  const [couponLabel, setCouponLabel] = useState("");
+  const [couponError, setCouponError] = useState("");
+  const [applyingCoupon, setApplyingCoupon] = useState(false);
 
   const service = useMemo(() => services.find((s) => s.id === serviceId) ?? null, [services, serviceId]);
 
@@ -116,7 +123,7 @@ export function BookingFlow({
       const startsAt = slotDate(slot).toISOString();
       const res = await fetch("/api/bookings/create", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ providerProfileId, serviceId: service.id, startsAt, notes })
+        body: JSON.stringify({ providerProfileId, serviceId: service.id, startsAt, notes, couponCode: appliedCode })
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error ?? "Could not create booking");
@@ -129,6 +136,22 @@ export function BookingFlow({
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function applyCoupon() {
+    if (!service || !couponInput.trim()) return;
+    setApplyingCoupon(true); setCouponError("");
+    try {
+      const res = await fetch("/api/coupons/validate", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ providerProfileId, code: couponInput.trim(), serviceId: service.id })
+      });
+      const d = await res.json();
+      if (!d.valid) { setCouponError(d.error ?? "Invalid code"); setAppliedCode(null); setDiscountCents(0); return; }
+      setAppliedCode(d.code); setDiscountCents(d.discountCents); setCouponLabel(d.label);
+    } finally {
+      setApplyingCoupon(false);
     }
   }
 
@@ -247,7 +270,29 @@ export function BookingFlow({
                     <Row label="When" value={`${date.toLocaleDateString("en-ZA", { weekday: "long", day: "numeric", month: "long" })} at ${slot}`} />
                     <Row label="Duration" value={fmtDur(service.durationMinutes)} />
                     <Row label="Price" value={ZAR(service.priceCents)} />
+                    {appliedCode && (
+                      <Row label={`Coupon ${appliedCode} (${couponLabel})`} value={`– ${ZAR(discountCents)}`} highlight />
+                    )}
+                    {appliedCode && <Row label="Total" value={ZAR(service.priceCents - discountCents)} />}
                     {service.depositCents > 0 && <Row label="Deposit due now" value={ZAR(service.depositCents)} highlight />}
+                  </div>
+
+                  {/* Coupon */}
+                  <div className="mt-3">
+                    {appliedCode ? (
+                      <button onClick={() => { setAppliedCode(null); setDiscountCents(0); setCouponInput(""); }}
+                        className="text-xs font-bold text-[var(--brand)] hover:underline">Remove coupon</button>
+                    ) : (
+                      <div className="flex gap-2">
+                        <input value={couponInput} onChange={(e) => setCouponInput(e.target.value.toUpperCase())} placeholder="Coupon code"
+                          className="flex-1 rounded-xl border border-[var(--line)] bg-white px-4 py-2.5 text-sm uppercase outline-none focus:border-[var(--brand)]" />
+                        <button onClick={applyCoupon} disabled={applyingCoupon || !couponInput.trim()}
+                          className="rounded-xl border border-[var(--line)] px-4 py-2.5 text-sm font-bold hover:border-[var(--brand)] disabled:opacity-50">
+                          {applyingCoupon ? "…" : "Apply"}
+                        </button>
+                      </div>
+                    )}
+                    {couponError && <p className="mt-1 text-xs font-semibold text-red-500">{couponError}</p>}
                   </div>
                   <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Anything the provider should know? (optional)"
                     className="mt-3 w-full resize-none rounded-xl border border-[var(--line)] bg-white px-4 py-3 text-sm outline-none focus:border-[var(--brand)]" />

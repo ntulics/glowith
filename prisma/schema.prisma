@@ -116,6 +116,29 @@ model ProviderProfile {
   follows   Follow[]
   saves     SavedProvider[]
   ratings   Rating[]
+  coupons   Coupon[]
+}
+
+enum DiscountType {
+  PERCENT
+  FIXED
+}
+
+model Coupon {
+  id                String       @id @default(cuid())
+  providerProfileId String
+  code              String
+  discountType      DiscountType
+  discountValue     Int          // percent (1-100) or amount in cents
+  maxRedemptions    Int?
+  redemptions       Int          @default(0)
+  expiresAt         DateTime?
+  active            Boolean      @default(true)
+  createdAt         DateTime     @default(now())
+
+  providerProfile ProviderProfile @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([providerProfileId, code])
 }
 
 model Rating {
@@ -172,6 +195,8 @@ model Booking {
   notes             String?
   status            BookingStatus @default(PENDING_DEPOSIT)
   depositCents      Int
+  couponId          String?
+  discountCents     Int           @default(0)
   paymentProvider   String?
   paymentIntentId   String?
   createdAt         DateTime      @default(now())
