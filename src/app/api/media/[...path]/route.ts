@@ -11,7 +11,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ path: s
   try {
     const file = await downloadBlob(blobPath);
     if (!file) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    return new NextResponse(file.buffer, {
+    return new NextResponse(new Uint8Array(file.buffer), {
       headers: {
         "Content-Type": file.contentType,
         "Cache-Control": "public, max-age=31536000, immutable"
