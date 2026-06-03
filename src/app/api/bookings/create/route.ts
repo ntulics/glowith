@@ -1,0 +1,57 @@
+import { NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+
+// Create a real DB booking. Requires the client to be signed in.
+export async function POST(request: Request) {
+  const session = await auth();
+  const user = session?.user as any;
+  if (!user) return NextResponse.json({ error: "Please sign in to book" }, { status: 401 });
+
+  const { providerProfileId, serviceId, startsAt, notes } = await request.json();
+  if (!providerProfileId || !serviceId || !startsAt) {
+    return NextResponse.json({ error: "Missing booking details" }, { status: 400 });
+  }
+
+  const service = await prisma.service.findUnique({ where: { id: serviceId } });
+  if (!service || service.providerProfileId !== providerProfileId || !service.active) {
+    return NextResponse.json({ error: "Service not available" }, { status: 404 });
+  }
+
+  const start = new Date(startsAt);
+  if (isNaN(start.getTime()) || start.getTime() < Date.now()) {
+    return NextResponse.json({ error: "Pick a future time slot" }, { status: 400 });
+  }
+  const end = new Date(start.getTime() + service.durationMinutes * 60000);
+
+  // Reject overlaps with this provider's existing (non-cancelled) bookings.
+  const dayStart = new Date(start); dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(start); dayEnd.setHours(23, 59, 59, 999);
+  const sameDay = await prisma.booking.findMany({
+    where: { providerProfileId, status: { not: "CANCELLED" }, startsAt: { gte: dayStart, lte: dayEnd } },
+    select: { startsAt: true, service: { select: { durationMinutes: true } } }
+  });
+  const clash = sameDay.some((b) => {
+    const bStart = b.startsAt.getTime();
+    const bEnd = bStart + b.service.durationMinutes * 60000;
+    return start.getTime() < bEnd && end.getTime() > bStart;
+  });
+  if (clash) return NextResponse.json({ error: "That slot was just taken — pick another time" }, { status: 409 });
+
+  const depositCents = service.depositCents ?? 0;
+  const booking = await prisma.booking.create({
+    data: {
+      clientId: user.id,
+      providerProfileId,
+      serviceId,
+      startsAt: start,
+      notes: notes ? notes.toString().slice(0, 500) : null,
+      depositCents,
+      status: depositCents > 0 ? "PENDING_DEPOSIT" : "CONFIRMED"
+    }
+  });
+
+  return NextResponse.json({
+    booking: { id: booking.id, status: booking.status, depositCents: booking.depositCents }
+  }, { status: 201 });
+}

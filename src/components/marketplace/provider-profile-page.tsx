@@ -7,6 +7,7 @@ import { format } from "date-fns";
 import { Briefcase, CalendarDays, Clock3, Heart, MapPin, Share2, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VerifiedBadge } from "@/components/verified-badge";
+import { BookingFlow } from "@/components/marketplace/booking-flow";
 
 type Service = { id: string; name: string; category: string; durationMinutes: number; priceCents: number; depositCents: number };
 type Post = { id: string; caption: string; imageUrl: string; tags: string[]; likes: number; saves: number };
@@ -35,7 +36,14 @@ type Tab = "services" | "portfolio" | "reviews" | "location";
 export function ProviderProfilePage({ profile }: { profile: Profile }) {
   const [tab, setTab] = useState<Tab>("services");
   const [showAllServices, setShowAllServices] = useState(false);
+  const [bookingOpen, setBookingOpen] = useState(false);
+  const [preselectService, setPreselectService] = useState<string | null>(null);
   const visibleServices = showAllServices ? profile.services : profile.services.slice(0, 4);
+
+  function openBooking(serviceId?: string) {
+    setPreselectService(serviceId ?? null);
+    setBookingOpen(true);
+  }
 
   return (
     <div className="min-h-screen bg-[#F9F5F3]">
@@ -94,7 +102,7 @@ export function ProviderProfilePage({ profile }: { profile: Profile }) {
             </div>
 
             {/* Book now */}
-            <button className="mt-5 w-full rounded-xl bg-[var(--ink)] py-3 text-sm font-bold text-white transition hover:bg-[var(--ink)]/90">
+            <button onClick={() => openBooking()} className="mt-5 w-full rounded-xl bg-[var(--ink)] py-3 text-sm font-bold text-white transition hover:bg-[var(--ink)]/90">
               Book now
             </button>
 
@@ -185,7 +193,7 @@ export function ProviderProfilePage({ profile }: { profile: Profile }) {
                     </p>
                     <p className="mt-1 text-sm font-black">{formatZAR(service.priceCents)}</p>
                   </div>
-                  <button className="shrink-0 rounded-xl border border-[var(--line)] px-4 py-2 text-sm font-bold transition hover:border-[var(--brand)] hover:text-[var(--brand)]">
+                  <button onClick={() => openBooking(service.id)} className="shrink-0 rounded-xl border border-[var(--line)] px-4 py-2 text-sm font-bold transition hover:border-[var(--brand)] hover:text-[var(--brand)]">
                     Book
                   </button>
                 </div>
@@ -265,6 +273,15 @@ export function ProviderProfilePage({ profile }: { profile: Profile }) {
           )}
         </main>
       </div>
+
+      <BookingFlow
+        open={bookingOpen}
+        onClose={() => setBookingOpen(false)}
+        providerProfileId={profile.id}
+        providerName={profile.businessName}
+        services={profile.services}
+        preselectedServiceId={preselectService}
+      />
     </div>
   );
 }
