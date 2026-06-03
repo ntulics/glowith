@@ -4,8 +4,9 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { format } from "date-fns";
-import { BadgeCheck, Briefcase, CalendarDays, Clock3, Heart, MapPin, Share2, Star } from "lucide-react";
+import { Briefcase, CalendarDays, Clock3, Heart, MapPin, Share2, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { VerifiedBadge } from "@/components/verified-badge";
 
 type Service = { id: string; name: string; category: string; durationMinutes: number; priceCents: number; depositCents: number };
 type Post = { id: string; caption: string; imageUrl: string; tags: string[]; likes: number; saves: number };
@@ -13,7 +14,8 @@ type Post = { id: string; caption: string; imageUrl: string; tags: string[]; lik
 type Profile = {
   id: string; handle: string; businessName: string; name: string;
   category: string; bio: string; city: string; avatarUrl: string | null;
-  verified: boolean; mobile: boolean; studio: boolean; providerType: string;
+  verified: boolean; verifiedBy?: "GLOWITH" | "EMPLOYER" | null;
+  mobile: boolean; studio: boolean; providerType: string;
   parentBusinessName?: string | null; parentBusinessCity?: string | null;
   memberSince: string; appointmentsCompleted: number;
   services: Service[]; posts: Post[];
@@ -72,7 +74,9 @@ export function ProviderProfilePage({ profile }: { profile: Profile }) {
             <div className="text-center">
               <div className="flex items-center justify-center gap-1.5">
                 <h1 className="text-lg font-black">{profile.businessName}</h1>
-                {profile.verified && <BadgeCheck className="h-4 w-4 text-[var(--sage)]" />}
+                {profile.verified && (
+                  <VerifiedBadge verifiedBy={profile.verifiedBy ?? "GLOWITH"} employerName={profile.parentBusinessName} />
+                )}
               </div>
               <p className="text-sm text-[var(--muted)]">{profile.category}</p>
 

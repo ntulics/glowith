@@ -29,6 +29,7 @@ export default async function AgentsPage() {
       businessHandle={profile.handle}
       providerType={profile.providerType}
       businessId={profile.id}
+      businessVerified={profile.verified}
       agents={profile.agents.map((a) => ({
         id: a.id,
         name: a.user.name,
@@ -38,6 +39,8 @@ export default async function AgentsPage() {
         bio: a.bio,
         city: a.city,
         verified: a.verified,
+        verifiedBy: a.verifiedBy,
+        canPostToCompany: a.canPostToCompany,
         avatarUrl: a.avatarUrl,
         serviceCount: a._count.services,
         bookingCount: a._count.bookings,

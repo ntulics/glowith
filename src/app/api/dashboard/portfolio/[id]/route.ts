@@ -37,7 +37,10 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
 
   const { id } = await params;
   const post = await prisma.portfolioPost.findUnique({ where: { id } });
-  if (!post || post.providerProfileId !== profile.id) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  // Owner of the portfolio, or the agent who authored a company post, may delete it.
+  if (!post || (post.providerProfileId !== profile.id && post.authorProfileId !== profile.id)) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
   await prisma.portfolioPost.delete({ where: { id } });
   return NextResponse.json({ ok: true });

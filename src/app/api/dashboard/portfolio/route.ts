@@ -24,18 +24,40 @@ export async function POST(request: Request) {
   const user = session?.user as any;
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const profile = await prisma.providerProfile.findUnique({ where: { userId: user.id }, select: { id: true } });
+  const profile = await prisma.providerProfile.findUnique({
+    where: { userId: user.id },
+    select: { id: true, businessName: true, providerType: true, parentBusinessId: true, canPostToCompany: true }
+  });
   if (!profile) return NextResponse.json({ error: "No provider profile" }, { status: 404 });
 
-  const { imageUrl, caption, tags } = await request.json();
+  const { imageUrl, caption, tags, target } = await request.json();
   if (!imageUrl) return NextResponse.json({ error: "imageUrl is required" }, { status: 400 });
+
+  // Resolve which portfolio this post lands in.
+  let providerProfileId = profile.id;
+  let authorProfileId: string | null = null;
+  let authorName: string | null = null;
+
+  if (target === "company") {
+    if (profile.providerType === "BUSINESS") {
+      // Owner posting to their own company portfolio — providerProfileId stays the business
+    } else if (profile.parentBusinessId && profile.canPostToCompany) {
+      providerProfileId = profile.parentBusinessId;
+      authorProfileId = profile.id;
+      authorName = profile.businessName;
+    } else {
+      return NextResponse.json({ error: "You are not approved to post to the company portfolio" }, { status: 403 });
+    }
+  }
 
   const post = await prisma.portfolioPost.create({
     data: {
-      providerProfileId: profile.id,
+      providerProfileId,
       imageUrl,
       caption: (caption ?? "").toString().slice(0, 280),
-      tags: Array.isArray(tags) ? tags.slice(0, 10).map((t: string) => t.toString().slice(0, 30)) : []
+      tags: Array.isArray(tags) ? tags.slice(0, 10).map((t: string) => t.toString().slice(0, 30)) : [],
+      authorProfileId,
+      authorName
     }
   });
   return NextResponse.json({ post });

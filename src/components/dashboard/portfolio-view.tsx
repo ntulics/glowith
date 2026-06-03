@@ -7,9 +7,24 @@ import { Heart, Bookmark, ImagePlus, Loader2, Trash2, Images } from "lucide-reac
 type Post = {
   id: string; imageUrl: string; caption: string; tags: string[];
   likes: number; saves: number;
+  providerProfileId: string; authorName: string | null;
 };
 
-export function PortfolioView({ posts: initial }: { posts: Post[] }) {
+export function PortfolioView({
+  posts: initial,
+  isBusiness,
+  canPostToCompany,
+  companyName,
+  companyProfileId,
+  ownProfileId
+}: {
+  posts: Post[];
+  isBusiness: boolean;
+  canPostToCompany: boolean;
+  companyName: string | null;
+  companyProfileId: string | null;
+  ownProfileId: string;
+}) {
   const [posts, setPosts] = useState<Post[]>(initial);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
@@ -18,7 +33,10 @@ export function PortfolioView({ posts: initial }: { posts: Post[] }) {
   const [tagsInput, setTagsInput] = useState("");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  // Where a new post goes: own profile, or the company portfolio (if allowed & not the owner)
+  const [target, setTarget] = useState<"self" | "company">(isBusiness ? "company" : "self");
   const fileRef = useRef<HTMLInputElement>(null);
+  const showTargetToggle = canPostToCompany && !isBusiness;
 
   async function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -50,7 +68,7 @@ export function PortfolioView({ posts: initial }: { posts: Post[] }) {
       const res = await fetch("/api/dashboard/portfolio", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageUrl: pendingUrl, caption, tags })
+        body: JSON.stringify({ imageUrl: pendingUrl, caption, tags, target: isBusiness ? "company" : target })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to save");
@@ -107,6 +125,21 @@ export function PortfolioView({ posts: initial }: { posts: Post[] }) {
                 <Image src={pendingUrl} alt="New portfolio photo" fill sizes="176px" className="object-cover" />
               </div>
               <div className="flex flex-1 flex-col gap-3">
+                {showTargetToggle && (
+                  <div>
+                    <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-gray-500">Post to</label>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => setTarget("self")}
+                        className={`flex-1 rounded-xl border px-3 py-2 text-sm font-bold transition ${target === "self" ? "border-[#D94472] bg-[#D94472]/5 text-[#D94472]" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
+                        My profile
+                      </button>
+                      <button type="button" onClick={() => setTarget("company")}
+                        className={`flex-1 rounded-xl border px-3 py-2 text-sm font-bold transition ${target === "company" ? "border-[#D94472] bg-[#D94472]/5 text-[#D94472]" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
+                        {companyName ?? "Company"}
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <div>
                   <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-gray-500">Caption</label>
                   <input value={caption} onChange={(e) => setCaption(e.target.value)} maxLength={280}
@@ -150,6 +183,12 @@ export function PortfolioView({ posts: initial }: { posts: Post[] }) {
                   </button>
                 </div>
                 <div className="p-3">
+                  {companyProfileId && post.providerProfileId === companyProfileId && !isBusiness && (
+                    <span className="mb-1 inline-block rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-600">On company portfolio</span>
+                  )}
+                  {post.authorName && isBusiness && (
+                    <span className="mb-1 inline-block rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-bold text-gray-500">by {post.authorName}</span>
+                  )}
                   {post.caption && <p className="line-clamp-2 text-sm font-semibold">{post.caption}</p>}
                   {post.tags.length > 0 && (
                     <div className="mt-1.5 flex flex-wrap gap-1">

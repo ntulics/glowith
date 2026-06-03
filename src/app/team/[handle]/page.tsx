@@ -63,6 +63,7 @@ export default async function Page({ params }: { params: Promise<{ handle: strin
         city: agent.city,
         avatarUrl: agent.avatarUrl,
         verified: agent.verified,
+        verifiedBy: agent.verifiedBy,
         mobile: agent.mobile,
         studio: agent.studio,
         providerType: agent.providerType,

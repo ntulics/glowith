@@ -49,6 +49,7 @@ export default async function Page({ params }: { params: Promise<{ handle: strin
         city: profile.city,
         avatarUrl: profile.avatarUrl,
         verified: profile.verified,
+        verifiedBy: profile.verifiedBy,
         mobile: profile.mobile,
         studio: profile.studio,
         providerType: profile.providerType,

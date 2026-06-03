@@ -13,6 +13,11 @@ enum UserRole {
   ADMIN
 }
 
+enum VerificationSource {
+  GLOWITH
+  EMPLOYER
+}
+
 enum ProviderType {
   FREELANCER
   BUSINESS
@@ -92,6 +97,8 @@ model ProviderProfile {
   parentBusinessId String?
   avatarUrl        String?
   verified         Boolean  @default(false)
+  verifiedBy       VerificationSource?
+  canPostToCompany Boolean  @default(false)
   isDemo           Boolean  @default(false)
   mobile           Boolean  @default(false)
   studio           Boolean  @default(true)
@@ -132,6 +139,8 @@ model PortfolioPost {
   tags              String[]
   likes             Int      @default(0)
   saves             Int      @default(0)
+  authorProfileId   String?
+  authorName        String?
   createdAt         DateTime @default(now())
 
   providerProfile ProviderProfile @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)

@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 type Agent = {
   id: string; name: string; email: string; handle: string;
   category: string; bio: string; city: string; verified: boolean;
+  verifiedBy: "GLOWITH" | "EMPLOYER" | null; canPostToCompany: boolean;
   avatarUrl: string | null; serviceCount: number; bookingCount: number;
   postCount: number; joinedAt: string;
 };
@@ -23,10 +24,28 @@ function CopyBtn({ text, label }: { text: string; label?: string }) {
   );
 }
 
-export function AgentsView({ businessName, businessHandle, providerType, businessId, agents: initial }: {
-  businessName: string; businessHandle: string; providerType: string; businessId: string; agents: Agent[];
+export function AgentsView({ businessName, businessHandle, providerType, businessId, businessVerified, agents: initial }: {
+  businessName: string; businessHandle: string; providerType: string; businessId: string; businessVerified: boolean; agents: Agent[];
 }) {
   const businessSlug = businessHandle.replace("@", "");
+
+  async function patchAgent(id: string, patch: Record<string, boolean>) {
+    const res = await fetch(`/api/dashboard/agents/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch)
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.error ?? "Update failed");
+      return;
+    }
+    setAgents((prev) => prev.map((a) => a.id === id ? {
+      ...a,
+      ...(data.agent.verified !== undefined ? { verified: data.agent.verified, verifiedBy: data.agent.verifiedBy } : {}),
+      ...(data.agent.canPostToCompany !== undefined ? { canPostToCompany: data.agent.canPostToCompany } : {})
+    } : a));
+  }
   const [agents, setAgents] = useState(initial);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviting, setInviting] = useState(false);
@@ -58,6 +77,7 @@ export function AgentsView({ businessName, businessHandle, providerType, busines
         if (fd.agents) setAgents(fd.agents.map((a: any) => ({
           id: a.id, name: a.user.name, email: a.user.email, handle: a.handle,
           category: a.category, bio: a.bio, city: a.city, verified: a.verified,
+          verifiedBy: a.verifiedBy ?? null, canPostToCompany: a.canPostToCompany ?? false,
           avatarUrl: a.avatarUrl, serviceCount: a._count.services,
           bookingCount: a._count.bookings, postCount: a._count.posts,
           joinedAt: a.createdAt
@@ -217,6 +237,38 @@ export function AgentsView({ businessName, businessHandle, providerType, busines
                     <span className="inline-flex items-center gap-1"><Briefcase className="h-3 w-3" />{agent.bookingCount} bookings</span>
                   </div>
 
+                  {/* Employer controls */}
+                  {isBusiness && (
+                    <div className="mt-3 space-y-2 border-t border-[var(--line)] pt-3">
+                      {/* Verification */}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-semibold text-[var(--muted)]">Verification</span>
+                        {agent.verifiedBy === "GLOWITH" ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-[#3B82F6]">
+                            <BadgeCheck className="h-3 w-3" /> By Glowith
+                          </span>
+                        ) : agent.verified ? (
+                          <button onClick={() => patchAgent(agent.id, { verified: false })}
+                            className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600 hover:bg-emerald-100">
+                            <BadgeCheck className="h-3 w-3" /> Verified by you
+                          </button>
+                        ) : (
+                          <button onClick={() => patchAgent(agent.id, { verified: true })}
+                            disabled={!businessVerified}
+                            title={businessVerified ? "Verify this agent" : "Your business must be verified by Glowith first"}
+                            className="rounded-full border border-[var(--line)] px-2 py-0.5 text-[10px] font-bold text-[var(--muted)] hover:border-emerald-400 hover:text-emerald-600 disabled:cursor-not-allowed disabled:opacity-50">
+                            Verify
+                          </button>
+                        )}
+                      </div>
+                      {/* Company portfolio posting */}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-semibold text-[var(--muted)]">Post to company portfolio</span>
+                        <ToggleSwitch on={agent.canPostToCompany} onToggle={() => patchAgent(agent.id, { canPostToCompany: !agent.canPostToCompany })} />
+                      </div>
+                    </div>
+                  )}
+
                   {/* Handle + joined */}
                   <div className="mt-3 flex items-center justify-between border-t border-[var(--line)] pt-3 text-xs text-[var(--muted)]">
                     <span className="font-mono">{agent.handle}</span>
@@ -244,5 +296,14 @@ export function AgentsView({ businessName, businessHandle, providerType, busines
         ) : null}
       </div>
     </div>
+  );
+}
+
+function ToggleSwitch({ on, onToggle }: { on: boolean; onToggle: () => void }) {
+  return (
+    <button type="button" onClick={onToggle} aria-pressed={on}
+      className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${on ? "bg-[#D94472]" : "bg-gray-200"}`}>
+      <span className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${on ? "translate-x-4" : "translate-x-0"}`} />
+    </button>
   );
 }
