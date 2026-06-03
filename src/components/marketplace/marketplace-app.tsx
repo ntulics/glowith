@@ -648,10 +648,7 @@ function HeroSection({
 
   return (
     <section
-      className="flex min-h-[480px] flex-col items-center justify-center px-4 py-20 text-center sm:min-h-[520px] sm:px-6 lg:px-8"
-      style={{
-        background: "linear-gradient(160deg, #ffffff 0%, #fdf0fa 45%, #fce8f0 75%, #fde8dc 100%)"
-      }}
+      className="hero-gradient flex min-h-[480px] flex-col items-center justify-center px-4 py-20 text-center sm:min-h-[520px] sm:px-6 lg:px-8"
     >
       <h1 className="text-balance font-black leading-[1.08] tracking-tight text-[var(--ink)]"
         style={{ fontSize: "clamp(2rem, 5vw, 3.6rem)" }}>

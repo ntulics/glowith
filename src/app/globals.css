@@ -19,6 +19,11 @@
 /* Logo — dark grey in light mode (light grey in dark mode handled below) */
 .logo-adaptive { filter: brightness(0) saturate(100%) invert(22%); }
 
+/* Hero gradient — soft blush in light mode (dark variant handled below) */
+.hero-gradient {
+  background: linear-gradient(160deg, #ffffff 0%, #fdf0fa 45%, #fce8f0 75%, #fde8dc 100%);
+}
+
 /* ── Dark mode — driven entirely by the OS / browser system setting ─────────
    Retrofits site-wide dark mode by remapping semantic tokens and the common
    hardcoded utility classes. Centralised here so components stay untouched. */
@@ -37,7 +42,25 @@
 
   .logo-adaptive { filter: brightness(0) saturate(100%) invert(88%); }
 
+  .hero-gradient {
+    background: linear-gradient(160deg, #17131500 0%, #221a20 45%, #241a1e 80%, #231c18 100%);
+    background-color: var(--background);
+  }
+
   .bg-white { background-color: var(--card) !important; }
+  .bg-white\/90 { background-color: color-mix(in srgb, var(--card) 90%, transparent) !important; }
+  .bg-white\/80 { background-color: color-mix(in srgb, var(--card) 80%, transparent) !important; }
+  .bg-white\/8 { background-color: color-mix(in srgb, #ffffff 8%, transparent) !important; }
+
+  /* Brand/blush tints used as section & card backgrounds */
+  .bg-\[\#FFF0F4\],
+  .bg-\[\#FFF8E7\],
+  .bg-\[\#FFF8F4\],
+  .bg-\[\#f3e8e4\],
+  .bg-\[\#fce8f0\],
+  .bg-\[\#fde8dc\],
+  .bg-\[\#fdf0fa\],
+  .bg-\[\#FFF5F8\] { background-color: #242022 !important; }
   .bg-\[\#F9F5F3\],
   .bg-\[\#F7F8FA\],
   .bg-\[\#fdfaf9\] { background-color: var(--background) !important; }
