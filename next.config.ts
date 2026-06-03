@@ -17,6 +17,14 @@ const nextConfig: NextConfig = {
   },
   turbopack: {
     root: __dirname
+  },
+  async rewrites() {
+    return [
+      {
+        source: "/.well-known/apple-developer-merchantid-domain-association",
+        destination: "/api/apple-pay-domain"
+      }
+    ];
   }
 };
 
