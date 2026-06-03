@@ -79,6 +79,33 @@ export const providers: Provider[] = [
       { id: "post_5", caption: "Chrome almond set", image: portfolioImages[2], tags: ["chrome", "gel"], likes: 382, saves: 109 },
       { id: "post_6", caption: "Micro floral detail", image: portfolioImages[3], tags: ["nailart"], likes: 244, saves: 66 }
     ]
+  },
+  {
+    id: "pro_glowith_demo",
+    handle: "@glowithdemo",
+    name: "Glowith Demo Stylist",
+    businessName: "Glowith Demo Salon",
+    category: "Hair",
+    rating: 4.9,
+    reviewCount: 58,
+    distanceKm: 2.2,
+    location: { label: "Rosebank, Johannesburg", lat: -26.1458, lng: 28.042 },
+    verified: true,
+    mobile: true,
+    studio: true,
+    nextAvailable: "Today 14:00",
+    bio: "Seeded salon for product demos, booking flows, dashboard testing, and marketplace walkthroughs.",
+    services: [
+      { id: "svc_demo_silk", name: "Demo silk press", category: "Hair", durationMinutes: 90, priceCents: 85000, depositCents: 25000 },
+      { id: "svc_demo_color", name: "Demo colour gloss", category: "Hair", durationMinutes: 120, priceCents: 125000, depositCents: 35000 },
+      { id: "svc_demo_gel", name: "Demo gel manicure", category: "Nails", durationMinutes: 75, priceCents: 52000, depositCents: 15000 },
+      { id: "svc_demo_glam", name: "Demo bridal soft glam", category: "Makeup", durationMinutes: 60, priceCents: 70000, depositCents: 20000 }
+    ],
+    portfolio: [
+      { id: "post_demo_1", caption: "Demo salon hero look", image: portfolioImages[0], tags: ["demo", "hair"], likes: 128, saves: 34 },
+      { id: "post_demo_2", caption: "Soft glam demo portfolio", image: portfolioImages[1], tags: ["demo", "makeup"], likes: 96, saves: 21 },
+      { id: "post_demo_3", caption: "Gel set demo portfolio", image: portfolioImages[2], tags: ["demo", "nails"], likes: 142, saves: 48 }
+    ]
   }
 ];
 

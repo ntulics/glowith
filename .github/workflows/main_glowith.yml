@@ -156,6 +156,7 @@ jobs:
 
           # Admin seed script
           cp scripts/seed-admin.js /tmp/deploy/seed-admin.js
+          cp scripts/seed-demo-salon.js /tmp/deploy/seed-demo-salon.js
 
           echo "=== .prisma/client present: $(ls /tmp/deploy/node_modules/.prisma/client/ | wc -l) files ==="
 
@@ -195,6 +196,14 @@ jobs:
             '  node seed-admin.js && touch "$SENTINEL"' \
             'else' \
             '  echo "Admin already seeded — skipping."' \
+            'fi' \
+            '' \
+            '# Optional demo salon seed for product walkthroughs and feature testing' \
+            'if [ "$GLOWITH_SEED_DEMO_SALON" = "true" ]; then' \
+            '  echo "Seeding demo salon..."' \
+            '  node seed-demo-salon.js || { echo "Demo salon seed failed"; exit 1; }' \
+            'else' \
+            '  echo "Demo salon seed disabled — skipping."' \
             'fi' \
             '' \
             'echo "Starting Glowith..."' \
