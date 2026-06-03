@@ -90,6 +90,7 @@ model ProviderProfile {
   longitude    Float
   providerType     ProviderType @default(FREELANCER)
   parentBusinessId String?
+  avatarUrl        String?
   verified         Boolean  @default(false)
   isDemo           Boolean  @default(false)
   mobile           Boolean  @default(false)

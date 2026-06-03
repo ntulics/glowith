@@ -79,6 +79,7 @@ export function MarketplaceApp() {
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
   const [selectedServiceId, setSelectedServiceId] = useState<string>("");
   const [searchInTopBar, setSearchInTopBar] = useState(false);
+  const [scrollProgress, setScrollProgress] = useState(0);
   const heroSearchRef = useRef<HTMLDivElement>(null);
   const geocodeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -167,6 +168,17 @@ export function MarketplaceApp() {
     }
     setDistanceByProvider(distances);
   }, [userLocation.lat, userLocation.lng]);
+
+  // Track scroll progress for back-to-top button
+  useEffect(() => {
+    function onScroll() {
+      const scrolled = window.scrollY;
+      const total = document.documentElement.scrollHeight - window.innerHeight;
+      setScrollProgress(total > 0 ? Math.min(scrolled / total, 1) : 0);
+    }
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   // Observe hero search bar to know when to move it to the top bar
   useEffect(() => {
@@ -292,7 +304,7 @@ export function MarketplaceApp() {
             {filteredProviders.map((provider, index) => (
               <div
                 key={provider.id}
-                className="sticky pb-[2px]"
+                className="sticky pb-[5px]"
                 style={{ top: `calc(4.25rem + ${index * 6}px)`, zIndex: index + 1 }}
               >
                 <ProviderCard
@@ -332,6 +344,36 @@ export function MarketplaceApp() {
       </AnimatePresence>
 
       <Footer />
+
+      {/* Scroll-to-top progress button */}
+      <AnimatePresence>
+        {scrollProgress > 0.05 && (
+          <motion.button
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+            className="fixed bottom-6 right-6 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-white shadow-lg shadow-black/10 ring-1 ring-[var(--line)]"
+            aria-label="Back to top"
+          >
+            {/* SVG progress ring */}
+            <svg className="absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 48 48">
+              <circle cx="24" cy="24" r="21" fill="none" stroke="var(--line)" strokeWidth="3" />
+              <circle
+                cx="24" cy="24" r="21" fill="none"
+                stroke="#D94472" strokeWidth="3"
+                strokeDasharray={`${2 * Math.PI * 21}`}
+                strokeDashoffset={`${2 * Math.PI * 21 * (1 - scrollProgress)}`}
+                strokeLinecap="round"
+                className="transition-all duration-150"
+              />
+            </svg>
+            <svg className="relative h-4 w-4 text-[var(--ink)]" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+            </svg>
+          </motion.button>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -365,7 +407,7 @@ function TopBar({ searchInTopBar, searchProps, providers, areaName }: { searchIn
               width={121}
               height={34}
               className="h-[2.125rem] w-auto object-contain"
-              style={{ filter: "brightness(0) saturate(100%) invert(27%) sepia(72%) saturate(820%) hue-rotate(308deg) brightness(117%)" }}
+              style={{ filter: "brightness(0) saturate(100%) invert(27%) sepia(72%) saturate(820%) hue-rotate(308deg) brightness(123%)" }}
               onError={() => {}}
               priority
             />
@@ -463,7 +505,7 @@ function TopBar({ searchInTopBar, searchProps, providers, areaName }: { searchIn
                   width={100}
                   height={28}
                   className="h-7 w-auto object-contain"
-                  style={{ filter: "brightness(0) saturate(100%) invert(27%) sepia(72%) saturate(820%) hue-rotate(308deg) brightness(117%)" }}
+                  style={{ filter: "brightness(0) saturate(100%) invert(27%) sepia(72%) saturate(820%) hue-rotate(308deg) brightness(123%)" }}
                 />
                 <button onClick={() => setMobileMenuOpen(false)} className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--line)]">
                   <X className="h-4 w-4" />
@@ -1223,7 +1265,7 @@ function Footer() {
               width={110}
               height={31}
               className="h-8 w-auto object-contain"
-              style={{ filter: "brightness(0) saturate(100%) invert(27%) sepia(72%) saturate(820%) hue-rotate(308deg) brightness(117%)" }}
+              style={{ filter: "brightness(0) saturate(100%) invert(27%) sepia(72%) saturate(820%) hue-rotate(308deg) brightness(123%)" }}
             />
             <p className="mt-4 text-sm leading-6 text-[var(--muted)]">
               Glowith is South Africa's social beauty marketplace — connecting clients with top-rated hair, nail, makeup, and wellness professionals in their area.
