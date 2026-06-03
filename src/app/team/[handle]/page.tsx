@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { ProviderProfilePage } from "@/components/marketplace/provider-profile-page";
+import { mediaUrl } from "@/lib/media";
 
 // Resolves the business that owns this subdomain from the x-tenant-slug header,
 // then finds the agent (by handle) that belongs to that business. An agent who
@@ -61,7 +62,7 @@ export default async function Page({ params }: { params: Promise<{ handle: strin
         category: agent.category,
         bio: agent.bio,
         city: agent.city,
-        avatarUrl: agent.avatarUrl,
+        avatarUrl: mediaUrl(agent.avatarUrl),
         verified: agent.verified,
         verifiedBy: agent.verifiedBy,
         mobile: agent.mobile,
@@ -80,7 +81,7 @@ export default async function Page({ params }: { params: Promise<{ handle: strin
         posts: agent.posts.map((p) => ({
           id: p.id,
           caption: p.caption,
-          imageUrl: p.imageUrl,
+          imageUrl: mediaUrl(p.imageUrl) ?? p.imageUrl,
           tags: p.tags,
           likes: p.likes,
           saves: p.saves

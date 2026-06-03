@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { PortfolioView } from "@/components/dashboard/portfolio-view";
+import { mediaUrl } from "@/lib/media";
 
 export default async function PortfolioPage() {
   const session = await auth();
@@ -31,7 +32,7 @@ export default async function PortfolioPage() {
       ownProfileId={profile.id}
       posts={posts.map((p) => ({
         id: p.id,
-        imageUrl: p.imageUrl,
+        imageUrl: mediaUrl(p.imageUrl) ?? p.imageUrl,
         caption: p.caption,
         tags: p.tags,
         likes: p.likes,

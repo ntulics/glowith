@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { ProviderProfilePage } from "@/components/marketplace/provider-profile-page";
+import { mediaUrl } from "@/lib/media";
 
 export async function generateMetadata({ params }: { params: Promise<{ handle: string }> }) {
   const { handle } = await params;
@@ -47,7 +48,7 @@ export default async function Page({ params }: { params: Promise<{ handle: strin
         category: profile.category,
         bio: profile.bio,
         city: profile.city,
-        avatarUrl: profile.avatarUrl,
+        avatarUrl: mediaUrl(profile.avatarUrl),
         verified: profile.verified,
         verifiedBy: profile.verifiedBy,
         mobile: profile.mobile,
@@ -66,7 +67,7 @@ export default async function Page({ params }: { params: Promise<{ handle: strin
         posts: profile.posts.map((p) => ({
           id: p.id,
           caption: p.caption,
-          imageUrl: p.imageUrl,
+          imageUrl: mediaUrl(p.imageUrl) ?? p.imageUrl,
           tags: p.tags,
           likes: p.likes,
           saves: p.saves

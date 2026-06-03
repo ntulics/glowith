@@ -55,3 +55,15 @@ export async function deleteBlob(blobPath: string): Promise<void> {
   const container = client.getContainerClient(containerName);
   await container.getBlockBlobClient(blobPath).deleteIfExists();
 }
+
+// Download a blob's bytes — used by the same-origin media proxy so images
+// render regardless of whether the container allows anonymous public reads.
+export async function downloadBlob(blobPath: string): Promise<{ buffer: Buffer; contentType: string } | null> {
+  const client = getClient();
+  const container = client.getContainerClient(containerName);
+  const blob = container.getBlockBlobClient(blobPath);
+  if (!(await blob.exists())) return null;
+  const buffer = await blob.downloadToBuffer();
+  const props = await blob.getProperties();
+  return { buffer, contentType: props.contentType ?? "application/octet-stream" };
+}

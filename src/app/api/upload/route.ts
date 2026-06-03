@@ -40,7 +40,11 @@ export async function POST(request: Request) {
   });
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const url = await uploadBlob(blobPath, buffer, file.type);
+  await uploadBlob(blobPath, buffer, file.type);
+
+  // Serve via the same-origin media proxy so it renders even when the
+  // storage container is private (no anonymous blob access required).
+  const url = `/api/media/${blobPath.split("/").map(encodeURIComponent).join("/")}`;
 
   // If uploading a profile avatar, save it to the provider profile
   if (folder === "profile") {
