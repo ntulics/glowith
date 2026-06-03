@@ -345,7 +345,7 @@ function TopBar({ searchInTopBar, searchProps, providers }: { searchInTopBar: bo
             width={121}
             height={34}
             className="h-[2.125rem] w-auto object-contain"
-            style={{ filter: "brightness(0) saturate(100%) invert(26%) sepia(80%) saturate(900%) hue-rotate(308deg) brightness(98%)" }}
+            style={{ filter: "brightness(0) saturate(100%) invert(35%) sepia(65%) saturate(750%) hue-rotate(303deg) brightness(125%)" }}
             onError={() => {}}
             priority
           />
