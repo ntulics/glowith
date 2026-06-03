@@ -81,6 +81,7 @@ model User {
   providerProfile ProviderProfile?
   bookings        Booking[]
   messages        Message[]
+  ratings         Rating[]
 }
 
 model ProviderProfile {
@@ -114,6 +115,22 @@ model ProviderProfile {
   messages  Message[]
   follows   Follow[]
   saves     SavedProvider[]
+  ratings   Rating[]
+}
+
+model Rating {
+  id                String   @id @default(cuid())
+  userId            String
+  providerProfileId String
+  stars             Int
+  comment           String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  providerProfile ProviderProfile @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, providerProfileId])
 }
 
 model Service {

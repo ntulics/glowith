@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { format } from "date-fns";
-import { Briefcase, CalendarDays, Clock3, Heart, MapPin, Share2, Star } from "lucide-react";
+import { Briefcase, CalendarDays, Clock3, Heart, MapPin, Share2, Star, UserCheck, UserPlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VerifiedBadge } from "@/components/verified-badge";
 import { BookingFlow } from "@/components/marketplace/booking-flow";
@@ -43,6 +43,51 @@ export function ProviderProfilePage({ profile }: { profile: Profile }) {
   function openBooking(serviceId?: string) {
     setPreselectService(serviceId ?? null);
     setBookingOpen(true);
+  }
+
+  const isAgent = !!profile.parentBusinessName;
+
+  // ── Social state (follow + ratings) ──────────────────────────────
+  const [followers, setFollowers] = useState(0);
+  const [following, setFollowing] = useState(false);
+  const [followBusy, setFollowBusy] = useState(false);
+  const [ratingAvg, setRatingAvg] = useState<number | null>(null);
+  const [ratingCount, setRatingCount] = useState(0);
+  const [reviews, setReviews] = useState<{ id: string; stars: number; comment: string | null; name: string; createdAt: string }[]>([]);
+  const [myRating, setMyRating] = useState<{ stars: number; comment: string | null } | null>(null);
+  const [rateOpen, setRateOpen] = useState(false);
+
+  function loadSocial() {
+    fetch(`/api/social/follow?providerProfileId=${profile.id}`).then((r) => r.json())
+      .then((d) => { setFollowers(d.followers ?? 0); setFollowing(!!d.following); }).catch(() => {});
+    fetch(`/api/social/rate?providerProfileId=${profile.id}`).then((r) => r.json())
+      .then((d) => { setRatingAvg(d.avg); setRatingCount(d.count ?? 0); setReviews(d.reviews ?? []); setMyRating(d.mine); }).catch(() => {});
+  }
+  useEffect(loadSocial, [profile.id]);
+
+  function requireSignIn(): boolean {
+    // booking flow handles its own auth; for follow/rate, bounce to login
+    window.location.href = `/login?callbackUrl=${encodeURIComponent(window.location.pathname)}`;
+    return true;
+  }
+
+  async function toggleFollow() {
+    setFollowBusy(true);
+    try {
+      const res = await fetch("/api/social/follow", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ providerProfileId: profile.id })
+      });
+      if (res.status === 401) { requireSignIn(); return; }
+      const d = await res.json();
+      setFollowing(!!d.following);
+      setFollowers((n) => n + (d.following ? 1 : -1));
+      if (d.alsoFollowedCompany) {
+        alert(`You're now following ${profile.parentBusinessName} too — agents are part of their company.`);
+      }
+    } finally {
+      setFollowBusy(false);
+    }
   }
 
   return (
@@ -89,11 +134,11 @@ export function ProviderProfilePage({ profile }: { profile: Profile }) {
               <p className="text-sm text-[var(--muted)]">{profile.category}</p>
 
               {/* Rating */}
-              <div className="mt-2 flex items-center justify-center gap-1">
+              <button onClick={() => setTab("reviews")} className="mt-2 flex w-full items-center justify-center gap-1">
                 <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-                <span className="text-sm font-bold">4.9</span>
-                <span className="text-xs text-[var(--muted)]">(168)</span>
-              </div>
+                <span className="text-sm font-bold">{ratingAvg != null ? ratingAvg.toFixed(1) : "—"}</span>
+                <span className="text-xs text-[var(--muted)]">({ratingCount})</span>
+              </button>
 
               {/* Location */}
               <p className="mt-1 flex items-center justify-center gap-1 text-xs text-[var(--muted)]">
@@ -104,6 +149,14 @@ export function ProviderProfilePage({ profile }: { profile: Profile }) {
             {/* Book now */}
             <button onClick={() => openBooking()} className="mt-5 w-full rounded-xl bg-[var(--ink)] py-3 text-sm font-bold text-white transition hover:bg-[var(--ink)]/90">
               Book now
+            </button>
+
+            {/* Follow */}
+            <button onClick={toggleFollow} disabled={followBusy}
+              className={`mt-2 flex w-full items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-bold transition disabled:opacity-60 ${following ? "border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]" : "border-[var(--line)] hover:border-[var(--brand)]"}`}>
+              {following ? <UserCheck className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
+              {following ? "Following" : "Follow"}
+              <span className="text-xs font-semibold text-[var(--muted)]">· {followers}</span>
             </button>
 
             {/* Stats */}
@@ -241,14 +294,42 @@ export function ProviderProfilePage({ profile }: { profile: Profile }) {
 
           {/* Reviews */}
           {tab === "reviews" && (
-            <div className="rounded-2xl border border-dashed border-[var(--line)] py-16 text-center">
-              <div className="flex justify-center gap-1">
-                {[...Array(5)].map((_, i) => (
-                  <Star key={i} className="h-6 w-6 fill-amber-400 text-amber-400" />
-                ))}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-white p-5">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Star className="h-6 w-6 fill-amber-400 text-amber-400" />
+                    <span className="text-2xl font-black">{ratingAvg != null ? ratingAvg.toFixed(1) : "—"}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-[var(--muted)]">{ratingCount} rating{ratingCount !== 1 ? "s" : ""}</p>
+                </div>
+                <button onClick={() => setRateOpen(true)}
+                  className="rounded-xl bg-[var(--brand)] px-4 py-2.5 text-sm font-bold text-white hover:bg-[var(--brand-dark)]">
+                  {myRating ? "Edit your rating" : "Rate"}
+                </button>
               </div>
-              <p className="mt-3 text-sm font-bold">4.9 average rating</p>
-              <p className="mt-1 text-xs text-[var(--muted)]">Reviews coming soon</p>
+
+              {reviews.length > 0 ? (
+                <div className="space-y-3">
+                  {reviews.map((r) => (
+                    <div key={r.id} className="rounded-2xl border border-[var(--line)] bg-white p-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-bold">{r.name}</span>
+                        <span className="flex items-center gap-0.5">
+                          {[...Array(5)].map((_, i) => (
+                            <Star key={i} className={`h-3.5 w-3.5 ${i < r.stars ? "fill-amber-400 text-amber-400" : "text-[var(--line)]"}`} />
+                          ))}
+                        </span>
+                      </div>
+                      {r.comment && <p className="mt-2 text-sm text-[var(--muted)]">{r.comment}</p>}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="rounded-2xl border border-dashed border-[var(--line)] py-12 text-center text-sm text-[var(--muted)]">
+                  No reviews yet — be the first to rate {profile.businessName}.
+                </p>
+              )}
             </div>
           )}
 
@@ -282,6 +363,111 @@ export function ProviderProfilePage({ profile }: { profile: Profile }) {
         services={profile.services}
         preselectedServiceId={preselectService}
       />
+
+      {rateOpen && (
+        <RateModal
+          providerProfileId={profile.id}
+          providerName={profile.businessName}
+          isAgent={isAgent}
+          businessName={profile.parentBusinessName ?? null}
+          initial={myRating}
+          onClose={() => setRateOpen(false)}
+          onSaved={() => { setRateOpen(false); loadSocial(); }}
+          onNeedSignIn={requireSignIn}
+        />
+      )}
+    </div>
+  );
+}
+
+function RateModal({
+  providerProfileId, providerName, isAgent, businessName, initial, onClose, onSaved, onNeedSignIn
+}: {
+  providerProfileId: string; providerName: string; isAgent: boolean; businessName: string | null;
+  initial: { stars: number; comment: string | null } | null;
+  onClose: () => void; onSaved: () => void; onNeedSignIn: () => void;
+}) {
+  const [stars, setStars] = useState(initial?.stars ?? 0);
+  const [comment, setComment] = useState(initial?.comment ?? "");
+  const [alsoBusiness, setAlsoBusiness] = useState(true);
+  const [sameForBusiness, setSameForBusiness] = useState(true);
+  const [businessStars, setBusinessStars] = useState(initial?.stars ?? 0);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit() {
+    if (stars < 1) { setError("Pick a star rating"); return; }
+    setSaving(true); setError("");
+    try {
+      const res = await fetch("/api/social/rate", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          providerProfileId, stars, comment,
+          alsoRateBusiness: isAgent && alsoBusiness,
+          businessStars: isAgent && alsoBusiness ? (sameForBusiness ? stars : businessStars) : undefined
+        })
+      });
+      if (res.status === 401) { onNeedSignIn(); return; }
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error ?? "Could not save"); }
+      onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const StarPicker = ({ value, onChange }: { value: number; onChange: (n: number) => void }) => (
+    <div className="flex gap-1">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button key={n} type="button" onClick={() => onChange(n)} aria-label={`${n} stars`}>
+          <Star className={`h-8 w-8 transition ${n <= value ? "fill-amber-400 text-amber-400" : "text-[var(--line)] hover:text-amber-300"}`} />
+        </button>
+      ))}
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-black">Rate {providerName}</h2>
+          <button onClick={onClose} className="text-[var(--muted)] hover:text-[var(--ink)]"><X className="h-5 w-5" /></button>
+        </div>
+
+        <StarPicker value={stars} onChange={setStars} />
+        <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={3} placeholder="Share your experience (optional)"
+          className="mt-4 w-full resize-none rounded-xl border border-[var(--line)] bg-[var(--background)] px-4 py-3 text-sm outline-none focus:border-[var(--brand)] focus:bg-white" />
+
+        {isAgent && businessName && (
+          <div className="mt-4 rounded-xl border border-[var(--line)] bg-[var(--background)] p-3">
+            <label className="flex items-center gap-2 text-sm font-semibold">
+              <input type="checkbox" checked={alsoBusiness} onChange={(e) => setAlsoBusiness(e.target.checked)} className="h-4 w-4 accent-[var(--brand)]" />
+              Also apply this rating to {businessName}
+            </label>
+            {alsoBusiness && (
+              <div className="mt-3 space-y-2 pl-6">
+                <label className="flex items-center gap-2 text-xs text-[var(--muted)]">
+                  <input type="checkbox" checked={sameForBusiness} onChange={(e) => setSameForBusiness(e.target.checked)} className="h-3.5 w-3.5 accent-[var(--brand)]" />
+                  Use the same rating for the business
+                </label>
+                {!sameForBusiness && (
+                  <div>
+                    <p className="mb-1 text-xs font-semibold text-[var(--muted)]">Rating for {businessName}</p>
+                    <StarPicker value={businessStars} onChange={setBusinessStars} />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {error && <p className="mt-3 text-sm font-semibold text-red-500">{error}</p>}
+        <button onClick={submit} disabled={saving}
+          className="mt-5 w-full rounded-xl bg-[var(--brand)] py-3 text-sm font-black text-white hover:bg-[var(--brand-dark)] disabled:opacity-60">
+          {saving ? "Saving…" : "Submit rating"}
+        </button>
+      </div>
     </div>
   );
 }
