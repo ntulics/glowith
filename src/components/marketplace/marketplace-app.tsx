@@ -337,31 +337,17 @@ function TopBar({ searchInTopBar, searchProps, providers }: { searchInTopBar: bo
       {/* Use relative + absolute centering so nav is truly centred independent of logo/action widths */}
       <div className="relative mx-auto flex h-[4.25rem] max-w-7xl items-center px-4 sm:px-6 lg:px-8">
 
-        {/* Logo — always left */}
-        <div className="flex shrink-0 items-center gap-2">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl">
-            <Image
-              src="/images/glowith-icon.png"
-              alt="Glowith"
-              width={36}
-              height={36}
-              className="object-contain mix-blend-multiply"
-              onError={() => {}}
-            />
-          </div>
-          {/* Full wordmark — hide when search is in topbar */}
-          {!searchInTopBar && (
-            <div className="hidden h-7 sm:block">
-              <Image
-                src="/images/glowith-logo.png"
-                alt="Glowith"
-                width={100}
-                height={28}
-                className="h-7 w-auto object-contain mix-blend-multiply"
-                onError={() => {}}
-              />
-            </div>
-          )}
+        {/* Logo — always left; full logo contains the icon, no separate icon needed */}
+        <div className="flex shrink-0 items-center">
+          <Image
+            src="/images/glowith-logo.png"
+            alt="Glowith"
+            width={121}
+            height={34}
+            className="h-[2.125rem] w-auto object-contain mix-blend-multiply"
+            onError={() => {}}
+            priority
+          />
         </div>
 
         {/* Nav — absolutely centred, hidden when search is active */}
@@ -392,7 +378,7 @@ function TopBar({ searchInTopBar, searchProps, providers }: { searchInTopBar: bo
               initial={{ opacity: 0, scaleX: 0.95 }}
               animate={{ opacity: 1, scaleX: 1 }}
               exit={{ opacity: 0, scaleX: 0.95 }}
-              className="absolute left-1/2 w-full max-w-sm -translate-x-1/2 px-2 sm:max-w-md lg:max-w-lg"
+              className="absolute left-1/2 w-full max-w-md -translate-x-1/2 px-2 sm:max-w-xl lg:max-w-2xl"
             >
               <CompactSearchBar {...searchProps} providers={providers} />
             </motion.div>
