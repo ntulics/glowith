@@ -344,7 +344,8 @@ function TopBar({ searchInTopBar, searchProps, providers }: { searchInTopBar: bo
             alt="Glowith"
             width={121}
             height={34}
-            className="h-[2.125rem] w-auto object-contain mix-blend-multiply"
+            className="h-[2.125rem] w-auto object-contain"
+            style={{ filter: "brightness(0) saturate(100%) invert(26%) sepia(80%) saturate(900%) hue-rotate(308deg) brightness(98%)" }}
             onError={() => {}}
             priority
           />
