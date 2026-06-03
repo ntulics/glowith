@@ -105,10 +105,14 @@ export function MarketplaceApp() {
             const data = await res.json();
             const addr = data.address ?? {};
             const candidates = [
-          addr.suburb, addr.neighbourhood, addr.hamlet,
-          addr.city_district, addr.city, addr.town, addr.village
-        ].filter((v): v is string => typeof v === "string" && !/^ward\b/i.test(v) && !/^\d/.test(v));
-        area = candidates[0] ?? null;
+              addr.suburb, addr.neighbourhood, addr.hamlet,
+              addr.city_district, addr.city, addr.town, addr.village
+            ].filter((v): v is string =>
+              typeof v === "string" &&
+              !/\bward\s*\d+/i.test(v) &&   // skip "Ward 19", "Emalahleni Ward 19"
+              !/^\d/.test(v)                  // skip numeric-prefixed strings
+            );
+            area = candidates[0] ?? null;
             label = area ?? "Current location";
           }
         } catch {
@@ -330,44 +334,72 @@ type SearchBarProps = {
 function TopBar({ searchInTopBar, searchProps, providers }: { searchInTopBar: boolean; searchProps: SearchBarProps; providers: Provider[] }) {
   return (
     <header className="sticky top-0 z-40 border-b border-[var(--line)]/60 bg-white/90 backdrop-blur-md">
-      <div className="mx-auto flex h-[4.25rem] max-w-7xl items-center gap-3 px-4 sm:px-6 lg:px-8">
+      {/* Use relative + absolute centering so nav is truly centred independent of logo/action widths */}
+      <div className="relative mx-auto flex h-[4.25rem] max-w-7xl items-center px-4 sm:px-6 lg:px-8">
 
-        {/* Logo */}
+        {/* Logo — always left */}
         <div className="flex shrink-0 items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl">
-            <Image src="/images/glowith-icon.png" alt="Glowith" width={36} height={36} className="object-cover" onError={() => {}} />
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl">
+            <Image
+              src="/images/glowith-icon.png"
+              alt="Glowith"
+              width={36}
+              height={36}
+              className="object-contain mix-blend-multiply"
+              onError={() => {}}
+            />
           </div>
-          <span className={cn("text-base font-black tracking-tight transition-all duration-300", searchInTopBar ? "hidden sm:hidden" : "")}>
-            Glowith
-          </span>
+          {/* Full wordmark — hide when search is in topbar */}
+          {!searchInTopBar && (
+            <div className="hidden h-7 sm:block">
+              <Image
+                src="/images/glowith-logo.png"
+                alt="Glowith"
+                width={100}
+                height={28}
+                className="h-7 w-auto object-contain mix-blend-multiply"
+                onError={() => {}}
+              />
+            </div>
+          )}
         </div>
 
-        {/* Sticky search bar (slides in on scroll) */}
+        {/* Nav — absolutely centred, hidden when search is active */}
+        <AnimatePresence>
+          {!searchInTopBar && (
+            <motion.nav
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-0.5 md:flex"
+              aria-label="Primary"
+            >
+              {["Discover", "Portfolio", "Bookings", "Inbox"].map((item) => (
+                <a key={item} href={`#${item.toLowerCase()}`}
+                  className="rounded-lg px-3 py-2 text-sm font-semibold text-[var(--muted)] transition hover:text-[var(--ink)]">
+                  {item}
+                </a>
+              ))}
+            </motion.nav>
+          )}
+        </AnimatePresence>
+
+        {/* Compact search bar — centred with constrained max-width */}
         <AnimatePresence>
           {searchInTopBar && (
             <motion.div
-              initial={{ opacity: 0, scaleX: 0.9 }}
+              initial={{ opacity: 0, scaleX: 0.95 }}
               animate={{ opacity: 1, scaleX: 1 }}
-              exit={{ opacity: 0, scaleX: 0.9 }}
-              className="flex min-w-0 flex-1 origin-center"
+              exit={{ opacity: 0, scaleX: 0.95 }}
+              className="absolute left-1/2 w-full max-w-sm -translate-x-1/2 px-2 sm:max-w-md lg:max-w-lg"
             >
               <CompactSearchBar {...searchProps} providers={providers} />
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Nav (hidden when search is showing) */}
-        {!searchInTopBar && (
-          <nav className="hidden flex-1 items-center gap-0.5 md:flex" aria-label="Primary">
-            {["Discover", "Portfolio", "Bookings", "Inbox"].map((item) => (
-              <a key={item} href={`#${item.toLowerCase()}`}
-                className="rounded-lg px-3 py-2 text-sm font-semibold text-[var(--muted)] transition hover:text-[var(--ink)]">
-                {item}
-              </a>
-            ))}
-          </nav>
-        )}
-
+        {/* Actions — always right */}
         <div className="ml-auto flex shrink-0 items-center gap-2">
           <button className="focus-ring flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--line)] transition hover:bg-[var(--background)]" aria-label="Notifications">
             <Bell className="h-4 w-4 text-[var(--muted)]" />
