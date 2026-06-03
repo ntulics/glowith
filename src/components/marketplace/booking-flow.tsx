@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { signIn } from "next-auth/react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, ArrowRight, Check, Clock3, Loader2, X } from "lucide-react";
@@ -24,7 +24,7 @@ function nextDays(n: number) {
   return out;
 }
 
-type Step = "service" | "date" | "time" | "auth" | "review" | "done";
+type Step = "service" | "date" | "time" | "auth" | "review" | "pay" | "done";
 
 export function BookingFlow({
   open, onClose, providerProfileId, providerName, services, preselectedServiceId
@@ -51,6 +51,10 @@ export function BookingFlow({
   const [couponLabel, setCouponLabel] = useState("");
   const [couponError, setCouponError] = useState("");
   const [applyingCoupon, setApplyingCoupon] = useState(false);
+  // Inline payment (Paystack popup)
+  const [payInfo, setPayInfo] = useState<{ reference: string; publicKey: string; email: string; amountCents: number } | null>(null);
+  const [payError, setPayError] = useState("");
+  const payMountedRef = useRef(false);
 
   const service = useMemo(() => services.find((s) => s.id === serviceId) ?? null, [services, serviceId]);
 
@@ -129,16 +133,19 @@ export function BookingFlow({
       if (!res.ok) throw new Error(d.error ?? "Could not create booking");
 
       if (d.booking.depositCents > 0) {
-        // Start the deposit payment. Paystack returns a checkout URL to redirect to;
-        // if the gateway isn't configured the booking is auto-confirmed (simulated).
-        const pay = await fetch("/api/payments/paystack/init", {
+        // Prepare an inline (popup) payment. Returns key + reference, or
+        // { simulated } when the gateway isn't configured yet.
+        const prep = await fetch("/api/payments/paystack/prepare", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ bookingId: d.booking.id })
         });
-        const pd = await pay.json();
-        if (!pay.ok) throw new Error(pd.error ?? "Payment could not be started");
-        if (pd.authorizationUrl) { window.location.href = pd.authorizationUrl; return; }
-        // simulated → fall through to success
+        const pd = await prep.json();
+        if (!prep.ok) throw new Error(pd.error ?? "Payment could not be started");
+        if (pd.simulated) { setStep("done"); return; }
+        payMountedRef.current = false;
+        setPayInfo({ reference: pd.reference, publicKey: pd.publicKey, email: pd.email, amountCents: pd.amountCents });
+        setStep("pay");
+        return;
       }
       setStep("done");
     } catch (e) {
@@ -147,6 +154,52 @@ export function BookingFlow({
       setSubmitting(false);
     }
   }
+
+  async function confirmPayment(reference: string) {
+    await fetch("/api/payments/paystack/confirm", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reference })
+    });
+  }
+
+  // Load the Paystack inline script and mount the Apple Pay + checkout buttons
+  useEffect(() => {
+    if (step !== "pay" || !payInfo || payMountedRef.current) return;
+    payMountedRef.current = true;
+
+    function mount() {
+      try {
+        const Pop = (window as any).PaystackPop;
+        if (!Pop) { setPayError("Could not load the payment widget"); return; }
+        const popup = new Pop();
+        popup.paymentRequest({
+          key: payInfo!.publicKey,
+          email: payInfo!.email,
+          amount: payInfo!.amountCents, // already in ZAR cents (lowest unit)
+          currency: "ZAR",
+          ref: payInfo!.reference,
+          container: "paystack-apple-pay",
+          loadPaystackCheckoutButton: "paystack-other-channels",
+          style: { theme: "light", applePay: { width: "100%", borderRadius: "10px", type: "pay", locale: "en" } },
+          onSuccess: async () => { await confirmPayment(payInfo!.reference); setStep("done"); },
+          onError: () => setPayError("Payment failed — please try again"),
+          onCancel: () => {}
+        });
+      } catch {
+        setPayError("Could not start the payment");
+      }
+    }
+
+    if ((window as any).PaystackPop) { mount(); return; }
+    const existing = document.getElementById("paystack-inline-js");
+    if (existing) { existing.addEventListener("load", mount); return; }
+    const s = document.createElement("script");
+    s.id = "paystack-inline-js";
+    s.src = "https://js.paystack.co/v2/inline.js";
+    s.onload = mount;
+    s.onerror = () => setPayError("Could not load Paystack");
+    document.body.appendChild(s);
+  }, [step, payInfo]);
 
   async function applyCoupon() {
     if (!service || !couponInput.trim()) return;
@@ -169,8 +222,8 @@ export function BookingFlow({
   }
 
   const stepsOrder: Step[] = preselectedServiceId
-    ? ["date", "time", ...(authed === false ? ["auth" as Step] : []), "review", "done"]
-    : ["service", "date", "time", ...(authed === false ? ["auth" as Step] : []), "review", "done"];
+    ? ["date", "time", ...(authed === false ? ["auth" as Step] : []), "review", "pay", "done"]
+    : ["service", "date", "time", ...(authed === false ? ["auth" as Step] : []), "review", "pay", "done"];
   const progress = (stepsOrder.indexOf(step) + 1) / stepsOrder.length;
 
   return (
@@ -308,8 +361,24 @@ export function BookingFlow({
                   <button onClick={confirm} disabled={submitting}
                     className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] py-3.5 text-sm font-black text-white hover:bg-[var(--brand-dark)] disabled:opacity-50">
                     {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                    {service.depositCents > 0 ? `Pay ${ZAR(service.depositCents)} deposit & confirm` : "Confirm booking"}
+                    {service.depositCents > 0 ? "Continue to payment" : "Confirm booking"}
                   </button>
+                </Section>
+              )}
+
+              {step === "pay" && (
+                <Section title="Pay your deposit" onBack={() => setStep("review")}>
+                  <p className="mb-4 text-sm text-[var(--muted)]">
+                    Pay the {service ? ZAR(service.depositCents) : ""} deposit to confirm your appointment. Apple Pay
+                    appears automatically on supported devices.
+                  </p>
+                  {/* Paystack injects the Apple Pay button here */}
+                  <div id="paystack-apple-pay" className="min-h-[48px]" />
+                  <button id="paystack-other-channels"
+                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] py-3.5 text-sm font-black text-white hover:bg-[var(--brand-dark)]">
+                    More payment options
+                  </button>
+                  {payError && <p className="mt-3 text-center text-sm font-semibold text-red-500">{payError}</p>}
                 </Section>
               )}
 
