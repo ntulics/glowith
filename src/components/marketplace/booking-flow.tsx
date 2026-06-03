@@ -127,9 +127,18 @@ export function BookingFlow({
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error ?? "Could not create booking");
+
       if (d.booking.depositCents > 0) {
-        const pay = await fetch(`/api/bookings/${d.booking.id}/pay`, { method: "POST" });
-        if (!pay.ok) throw new Error("Payment could not be processed");
+        // Start the deposit payment. Paystack returns a checkout URL to redirect to;
+        // if the gateway isn't configured the booking is auto-confirmed (simulated).
+        const pay = await fetch("/api/payments/paystack/init", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bookingId: d.booking.id })
+        });
+        const pd = await pay.json();
+        if (!pay.ok) throw new Error(pd.error ?? "Payment could not be started");
+        if (pd.authorizationUrl) { window.location.href = pd.authorizationUrl; return; }
+        // simulated → fall through to success
       }
       setStep("done");
     } catch (e) {

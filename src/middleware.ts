@@ -54,7 +54,7 @@ export function middleware(request: NextRequest) {
   }
 
   // lumegroup.glowith.co.za/team/naledi → public agent profile within this business
-  if (url.pathname.startsWith("/team/")) {
+  if (url.pathname.startsWith("/team/") || url.pathname.startsWith("/booking")) {
     const res = NextResponse.next();
     res.headers.set("x-tenant-slug", slug);
     return res;
