@@ -390,6 +390,42 @@ type SearchBarProps = {
   onRadiusChange: (v: number) => void;
 };
 
+/* Animated hamburger: 4 uneven lines that morph smoothly into an X (close). */
+function MenuToggleIcon({ open }: { open: boolean }) {
+  const t = { duration: 0.32, ease: [0.4, 0, 0.2, 1] as const };
+  return (
+    <svg width="26" height="26" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" fill="none">
+      {/* Top line → one diagonal of the X */}
+      <motion.line
+        initial={false}
+        x1={2} y1={5} x2={22} y2={5}
+        animate={open ? { x1: 4, y1: 4, x2: 20, y2: 20 } : { x1: 2, y1: 5, x2: 22, y2: 5 }}
+        transition={t}
+      />
+      {/* Two uneven middle lines → fade out */}
+      <motion.line
+        initial={false}
+        x1={2} y1={10} x2={17} y2={10}
+        animate={open ? { opacity: 0, x2: 12 } : { opacity: 1, x2: 17 }}
+        transition={t}
+      />
+      <motion.line
+        initial={false}
+        x1={2} y1={14} x2={12} y2={14}
+        animate={open ? { opacity: 0, x2: 8 } : { opacity: 1, x2: 12 }}
+        transition={t}
+      />
+      {/* Bottom line → other diagonal of the X */}
+      <motion.line
+        initial={false}
+        x1={2} y1={19} x2={22} y2={19}
+        animate={open ? { x1: 4, y1: 20, x2: 20, y2: 4 } : { x1: 2, y1: 19, x2: 22, y2: 19 }}
+        transition={t}
+      />
+    </svg>
+  );
+}
+
 function TopBar({ searchInTopBar, searchProps, providers, areaName }: { searchInTopBar: boolean; searchProps: SearchBarProps; providers: Provider[]; areaName: string | null }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -452,15 +488,14 @@ function TopBar({ searchInTopBar, searchProps, providers, areaName }: { searchIn
               <UserRoundPlus className="h-4 w-4" />
               Log in
             </a>
-            {/* Hamburger — mobile only, larger touch target */}
+            {/* Hamburger — mobile only, no container, morphs to X when open */}
             <button
-              onClick={() => setMobileMenuOpen(true)}
-              className="focus-ring flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--ink)] text-white transition hover:bg-[var(--ink)]/90 sm:hidden"
-              aria-label="Open menu"
+              onClick={() => setMobileMenuOpen((v) => !v)}
+              className="focus-ring flex h-10 w-10 items-center justify-center text-[var(--ink)] sm:hidden"
+              aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+              aria-expanded={mobileMenuOpen}
             >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
-              </svg>
+              <MenuToggleIcon open={mobileMenuOpen} />
             </button>
           </div>
         </div>
@@ -478,11 +513,11 @@ function TopBar({ searchInTopBar, searchProps, providers, areaName }: { searchIn
               className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm sm:hidden"
             />
             <motion.div
-              initial={{ x: "100%" }}
+              initial={{ x: "-100%" }}
               animate={{ x: 0 }}
-              exit={{ x: "100%" }}
+              exit={{ x: "-100%" }}
               transition={{ type: "spring", damping: 28, stiffness: 300 }}
-              className="fixed inset-y-0 right-0 z-50 flex w-72 flex-col bg-white shadow-2xl sm:hidden"
+              className="fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-white shadow-2xl sm:hidden"
             >
               {/* Menu header */}
               <div className="flex items-center justify-between border-b border-[var(--line)] px-5 py-4">
@@ -563,7 +598,7 @@ function CompactSearchBar({ query, locationQuery, timeFilter, radiusKm, onQueryC
         {/* Search */}
         <button
           onClick={() => setActivePanel(null)}
-          className="flex items-center gap-1.5 rounded-r-[14px] bg-[var(--ink)] px-4 py-2 text-xs font-bold text-white hover:bg-[var(--ink)]/90"
+          className="flex items-center gap-1.5 rounded-r-[14px] bg-[var(--brand)] px-4 py-2 text-xs font-bold text-white hover:bg-[var(--brand-dark)]"
         >
           <Search className="h-3.5 w-3.5" />
           <span className="hidden sm:inline">Search</span>
@@ -690,7 +725,7 @@ function HeroSection({
           <div className="p-2">
             <button
               onClick={() => setActivePanel(null)}
-              className="focus-ring flex h-full w-full items-center justify-center gap-2 rounded-[1.25rem] bg-[var(--ink)] px-8 py-3 text-sm font-bold text-white transition hover:bg-[var(--ink)]/90 sm:w-auto"
+              className="focus-ring flex h-full w-full items-center justify-center gap-2 rounded-[1.25rem] bg-[var(--brand)] px-8 py-3 text-sm font-bold text-white transition hover:bg-[var(--brand-dark)] sm:w-auto"
             >
               <Search className="h-4 w-4" />
               <span>Search</span>
