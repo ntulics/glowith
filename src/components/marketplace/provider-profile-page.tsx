@@ -6,6 +6,7 @@ import Link from "next/link";
 import { format } from "date-fns";
 import { BadgeCheck, Briefcase, CalendarDays, Clock3, Heart, MapPin, Share2, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 type Service = { id: string; name: string; category: string; durationMinutes: number; priceCents: number; depositCents: number };
 type Post = { id: string; caption: string; imageUrl: string; tags: string[]; likes: number; saves: number };
@@ -41,6 +42,7 @@ export function ProviderProfilePage({ profile }: { profile: Profile }) {
         <div className="mx-auto flex h-[4.25rem] max-w-6xl items-center justify-between px-4 sm:px-6">
           <Link href="/" className="text-sm font-bold text-[var(--muted)] hover:text-[var(--ink)]">← Back</Link>
           <div className="flex items-center gap-2">
+            <ThemeToggle />
             <button className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--line)] hover:bg-[var(--background)]" aria-label="Share">
               <Share2 className="h-4 w-4 text-[var(--muted)]" />
             </button>

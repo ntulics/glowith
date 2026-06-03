@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const categories: Array<ServiceCategory | "All"> = ["All", "Hair", "Nails", "Makeup", "Lashes", "Brows", "Barber", "Spa"];
 const fallbackLocation = { label: "Rosebank, Johannesburg", areaName: "Rosebank", lat: -26.1458, lng: 28.042 };
@@ -405,8 +406,7 @@ function TopBar({ searchInTopBar, searchProps, providers, areaName }: { searchIn
               alt="Glowith"
               width={121}
               height={34}
-              className="h-[2.125rem] w-auto object-contain"
-              style={{ filter: "brightness(0) saturate(100%) invert(27%) sepia(72%) saturate(820%) hue-rotate(308deg) brightness(123%)" }}
+              className="logo-adaptive h-[2.125rem] w-auto object-contain"
               onError={() => {}}
               priority
             />
@@ -449,6 +449,7 @@ function TopBar({ searchInTopBar, searchProps, providers, areaName }: { searchIn
 
           {/* Actions */}
           <div className="ml-auto flex shrink-0 items-center gap-2">
+            <ThemeToggle />
             {!searchInTopBar && (
               <button className="focus-ring hidden h-9 items-center gap-1.5 rounded-xl border border-[var(--line)] px-3 text-sm font-semibold transition hover:bg-[var(--background)] sm:inline-flex">
                 List your business
@@ -500,8 +501,7 @@ function TopBar({ searchInTopBar, searchProps, providers, areaName }: { searchIn
                   alt="Glowith"
                   width={100}
                   height={28}
-                  className="h-7 w-auto object-contain"
-                  style={{ filter: "brightness(0) saturate(100%) invert(27%) sepia(72%) saturate(820%) hue-rotate(308deg) brightness(123%)" }}
+                  className="logo-adaptive h-7 w-auto object-contain"
                 />
                 <button onClick={() => setMobileMenuOpen(false)} className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--line)]">
                   <X className="h-4 w-4" />
@@ -1260,8 +1260,7 @@ function Footer() {
               alt="Glowith"
               width={110}
               height={31}
-              className="h-8 w-auto object-contain"
-              style={{ filter: "brightness(0) saturate(100%) invert(27%) sepia(72%) saturate(820%) hue-rotate(308deg) brightness(123%)" }}
+              className="logo-adaptive h-8 w-auto object-contain"
             />
             <p className="mt-4 text-sm leading-6 text-[var(--muted)]">
               Glowith is South Africa's social beauty marketplace — connecting clients with top-rated hair, nail, makeup, and wellness professionals in their area.

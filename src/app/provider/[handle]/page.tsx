@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { ProviderProfilePage } from "@/components/marketplace/provider-profile-page";
@@ -29,6 +30,12 @@ export default async function Page({ params }: { params: Promise<{ handle: strin
   });
 
   if (!profile) notFound();
+
+  // On the freelancer subdomain (freelancer.glowith.co.za/handle), an agent who
+  // belongs to a business does not get a freelancer profile — they live only at
+  // their business's /team/{handle} route while employed.
+  const tenantSlug = (await headers()).get("x-tenant-slug");
+  if (tenantSlug === "freelancer" && profile.parentBusinessId) notFound();
 
   return (
     <ProviderProfilePage
