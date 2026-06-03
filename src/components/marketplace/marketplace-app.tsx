@@ -1270,10 +1270,6 @@ function Footer() {
             <p className="mt-4 text-sm leading-6 text-[var(--muted)]">
               Glowith is South Africa's social beauty marketplace — connecting clients with top-rated hair, nail, makeup, and wellness professionals in their area.
             </p>
-            <p className="mt-6 text-xs text-[var(--muted)]">
-              © {year} Glowith. All rights reserved.<br />
-              All other trademarks are the property of their respective owners.
-            </p>
           </div>
 
           {/* About Glowith */}
