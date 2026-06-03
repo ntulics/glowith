@@ -292,7 +292,7 @@ export function MarketplaceApp() {
             {filteredProviders.map((provider, index) => (
               <div
                 key={provider.id}
-                className="sticky"
+                className="sticky pb-[2px]"
                 style={{ top: `calc(4.25rem + ${index * 6}px)`, zIndex: index + 1 }}
               >
                 <ProviderCard
