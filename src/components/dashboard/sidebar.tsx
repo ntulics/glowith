@@ -35,10 +35,11 @@ interface Props {
   handle: string;
   role?: string;
   providerType?: string;
+  parentBusinessName?: string | null;
   onClose?: () => void;
 }
 
-export function Sidebar({ businessName, handle, role, providerType, onClose }: Props) {
+export function Sidebar({ businessName, handle, role, providerType, parentBusinessName, onClose }: Props) {
   const pathname = usePathname();
 
   return (
@@ -77,6 +78,10 @@ export function Sidebar({ businessName, handle, role, providerType, onClose }: P
         <div className="mt-1.5 flex items-center gap-1">
           {providerType === "BUSINESS" ? (
             <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[9px] font-bold text-indigo-600">Business</span>
+          ) : parentBusinessName ? (
+            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-bold text-emerald-600">
+              Agent · {parentBusinessName}
+            </span>
           ) : providerType === "FREELANCER" ? (
             <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold text-amber-600">Freelancer</span>
           ) : null}

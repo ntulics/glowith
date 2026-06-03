@@ -7,6 +7,7 @@ export default async function AdminProvidersPage() {
       orderBy: { createdAt: "desc" },
       include: {
         user: true,
+        parentBusiness: { select: { businessName: true, handle: true } },
         _count: { select: { bookings: true, services: true, posts: true } }
       }
     }),
@@ -26,6 +27,8 @@ export default async function AdminProvidersPage() {
         isDemo: p.isDemo,
         providerType: p.providerType,
         parentBusinessId: p.parentBusinessId,
+        parentBusinessName: p.parentBusiness?.businessName ?? null,
+        parentBusinessHandle: p.parentBusiness?.handle ?? null,
         email: p.user.email,
         bookings: p._count.bookings,
         services: p._count.services,

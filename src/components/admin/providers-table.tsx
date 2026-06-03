@@ -12,7 +12,8 @@ const PROTECTED_BUSINESS_NAMES = new Set(["Glowith Admin", "Freelancers"]);
 type Provider = {
   id: string; businessName: string; handle: string; category: string;
   city: string; verified: boolean; isDemo: boolean; providerType: string;
-  parentBusinessId: string | null; email: string;
+  parentBusinessId: string | null; parentBusinessName: string | null; parentBusinessHandle: string | null;
+  email: string;
   bookings: number; services: number; posts: number; createdAt: string;
 };
 
@@ -319,9 +320,16 @@ export function ProvidersTable({ providers: initial, freelancerCount }: { provid
                           <Building2 className="h-3 w-3" /> Business
                         </span>
                       ) : p.parentBusinessId ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600">
-                          Agent
-                        </span>
+                        <div className="flex flex-col items-start gap-0.5">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600">
+                            Agent
+                          </span>
+                          {p.parentBusinessName && (
+                            <span className="text-[10px] text-gray-400">
+                              @ {p.parentBusinessName}
+                            </span>
+                          )}
+                        </div>
                       ) : (
                         <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-600">
                           <Scissors className="h-3 w-3" /> Freelancer

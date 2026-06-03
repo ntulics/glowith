@@ -9,10 +9,11 @@ interface Props {
   handle: string;
   role?: string;
   providerType?: string;
+  parentBusinessName?: string | null;
   children: React.ReactNode;
 }
 
-export function DashboardShell({ businessName, handle, role, providerType, children }: Props) {
+export function DashboardShell({ businessName, handle, role, providerType, parentBusinessName, children }: Props) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
@@ -38,6 +39,7 @@ export function DashboardShell({ businessName, handle, role, providerType, child
           handle={handle}
           role={role}
           providerType={providerType}
+          parentBusinessName={parentBusinessName}
           onClose={() => setMobileOpen(false)}
         />
       </div>

@@ -57,6 +57,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       businessName={displayName}
       handle={profile.handle}
       providerType={profile.providerType}
+      parentBusinessName={profile.parentBusiness?.businessName ?? null}
       role={user.role}
     >
       {children}
