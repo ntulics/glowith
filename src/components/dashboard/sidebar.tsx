@@ -13,6 +13,7 @@ import {
   MessageCircle,
   Settings,
   Sparkles,
+  UserCog,
   Users,
   X
 } from "lucide-react";
@@ -22,6 +23,7 @@ const nav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/dashboard/calendar", label: "Calendar", icon: Calendar },
   { href: "/dashboard/catalog", label: "Catalog", icon: BookOpen },
+  { href: "/dashboard/agents", label: "Agents", icon: UserCog },
   { href: "/dashboard/clients", label: "Clients", icon: Users },
   { href: "/dashboard/inbox", label: "Inbox", icon: MessageCircle },
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
