@@ -33,7 +33,8 @@ export function middleware(request: NextRequest) {
     const segments = url.pathname.split("/").filter(Boolean);
     if (segments.length === 1) {
       // freelancer.glowith.co.za/naledi → public provider profile
-      url.pathname = `/provider/@${segments[0]}`;
+      // (the /provider/[handle] page prepends the "@", so pass the bare slug)
+      url.pathname = `/provider/${segments[0]}`;
       const res = NextResponse.rewrite(url);
       res.headers.set("x-tenant-slug", "freelancer");
       return res;
@@ -59,8 +60,9 @@ export function middleware(request: NextRequest) {
     return res;
   }
 
-  // Subdomain root → tenant dashboard
-  url.pathname = "/dashboard";
+  // Subdomain root → public business storefront (profile + bookable services).
+  // The owner/agents reach their workspace at /dashboard (handled above).
+  url.pathname = `/provider/${slug}`;
   const res = NextResponse.rewrite(url);
   res.headers.set("x-tenant-slug", slug);
   return res;
