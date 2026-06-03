@@ -3,9 +3,10 @@
 const { PrismaClient } = require("@prisma/client");
 const bcrypt = require("bcryptjs");
 
-const DEMO_EMAIL = "demo.salon@glowith.co.za";
+const LEGACY_DEMO_EMAIL = "demo.salon@glowith.co.za";
+const DEMO_EMAIL = "bookings@demo.glowith.co.za";
 const DEMO_PASSWORD = process.env.DEMO_SALON_PASSWORD || "GlowithDemo!2026";
-const DEMO_HANDLE = "@glowithdemo";
+const DEMO_HANDLE = "@demo";
 
 const services = [
   { name: "Demo silk press", category: "Hair", durationMinutes: 90, priceCents: 85000, depositCents: 25000 },
@@ -48,12 +49,15 @@ async function main() {
 
   try {
     const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 12);
-    const existingUser = await prisma.user.findUnique({ where: { email: DEMO_EMAIL } });
+    const existingUser =
+      (await prisma.user.findUnique({ where: { email: DEMO_EMAIL } })) ||
+      (await prisma.user.findUnique({ where: { email: LEGACY_DEMO_EMAIL } }));
 
     const user = existingUser
       ? await prisma.user.update({
           where: { id: existingUser.id },
           data: {
+            email: DEMO_EMAIL,
             name: "Glowith Demo Stylist",
             role: "PROVIDER",
             passwordHash

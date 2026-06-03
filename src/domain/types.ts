@@ -36,6 +36,7 @@ export type PortfolioPost = {
 export type Provider = {
   id: string;
   handle: string;
+  bookingEmail?: string;
   name: string;
   businessName: string;
   category: ServiceCategory;
@@ -51,6 +52,7 @@ export type Provider = {
   mobile: boolean;
   studio: boolean;
   nextAvailable: string;
+  availableSlots?: string[];
   bio: string;
   services: Service[];
   portfolio: PortfolioPost[];

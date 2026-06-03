@@ -1,21 +1,61 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useState, type FormEvent } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Eye, EyeOff, Loader2, Sparkles } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, Loader2, Mail, Sparkles } from "lucide-react";
+
+type LookupResult = {
+  exists: boolean;
+  firstName: string;
+  role: "CLIENT" | "PROVIDER" | "ADMIN";
+  handle: string | null;
+  businessName: string | null;
+};
+
+function tenantHost(handle: string) {
+  const host = window.location.hostname;
+  if (host === "localhost" || host === "127.0.0.1") return "";
+
+  const root = host.endsWith(".glowith.co.za") ? "glowith.co.za" : host;
+  return `https://${handle}.${root}`;
+}
 
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
+  const [step, setStep] = useState<"email" | "password">("email");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [lookup, setLookup] = useState<LookupResult | null>(null);
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleEmailSubmit(e: FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+
+    try {
+      const response = await fetch(`/api/auth/lookup?email=${encodeURIComponent(email)}`);
+      const data = await response.json();
+      if (!response.ok) {
+        setError("Enter a valid email address");
+        return;
+      }
+
+      setLookup(data);
+      setStep("password");
+    } catch {
+      setError("Could not check that email. Try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handlePasswordSubmit(e: FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError("");
@@ -33,106 +73,168 @@ function LoginForm() {
       return;
     }
 
-    // Fetch the session to get role + handle for redirect
-    const sessionRes = await fetch("/api/auth/session");
-    const session = await sessionRes.json();
-    const user = session?.user;
-
-    // Explicit callbackUrl always wins (e.g. from middleware redirect)
     const callbackUrl = params.get("callbackUrl");
     if (callbackUrl) {
       router.push(callbackUrl);
       return;
     }
 
+    const sessionRes = await fetch("/api/auth/session");
+    const session = await sessionRes.json();
+    const user = session?.user;
+
     if (user?.role === "ADMIN") {
       router.push("/admin");
-    } else if (user?.role === "PROVIDER" && user?.handle) {
-      const isLocalhost = window.location.hostname === "localhost";
-      if (isLocalhost) {
-        router.push("/dashboard");
-      } else {
-        // Use the full current hostname as base — works correctly for
-        // multi-part TLDs like .co.za (.slice(-2) would give "co.za" not "glowith.co.za")
-        window.location.href = `https://${user.handle}.${window.location.hostname}/dashboard`;
-      }
-    } else {
-      router.push("/dashboard");
+      return;
     }
+
+    if (user?.role === "PROVIDER" && user?.handle) {
+      const host = tenantHost(user.handle);
+      if (host) {
+        window.location.href = `${host}/dashboard`;
+      } else {
+        router.push("/dashboard");
+      }
+      return;
+    }
+
+    router.push("/");
   }
 
+  const firstName = lookup?.firstName ?? "there";
+  const isPrivileged = lookup?.role === "ADMIN" || lookup?.role === "PROVIDER";
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#F9F5F3] px-4">
-      <div className="w-full max-w-sm">
-        {/* Logo */}
-        <div className="mb-8 flex flex-col items-center gap-2">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#D94472] text-white shadow-lg">
-            <Sparkles className="h-6 w-6" />
-          </div>
-          <p className="text-xl font-black tracking-tight">Glowith</p>
-          <p className="text-sm text-[#7A6C6E]">Sign in to your studio</p>
-        </div>
+    <main className="min-h-screen bg-[#F9F5F3] px-4 py-6">
+      <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-5xl flex-col">
+        <header className="flex items-center justify-between">
+          <Link href="/" className="inline-flex items-center gap-2 text-sm font-black">
+            <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-[#D94472] text-white">
+              <Sparkles className="h-5 w-5" />
+            </span>
+            Glowith
+          </Link>
+          <Link href="/signup" className="rounded-full border border-[#E8E0DC] bg-white px-4 py-2 text-sm font-bold">
+            List your business
+          </Link>
+        </header>
 
-        <form onSubmit={handleSubmit} className="space-y-4 rounded-2xl border border-[#E8E0DC] bg-white p-6 shadow-sm">
-          {params.get("registered") && (
-            <div className="rounded-xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
-              Studio created! Sign in below.
-            </div>
-          )}
-          {error && (
-            <div className="rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
-              {error}
-            </div>
-          )}
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold uppercase tracking-wider text-[#7A6C6E]">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              placeholder="you@example.com"
-              className="w-full rounded-xl border border-[#E8E0DC] bg-[#F9F5F3] px-4 py-3 text-sm font-medium outline-none transition focus:border-[#D94472] focus:bg-white"
-            />
+        <section className="grid flex-1 items-center gap-10 py-10 md:grid-cols-[1fr_420px]">
+          <div className="text-left">
+            <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#D94472]">
+              {step === "email" ? "Login" : isPrivileged ? "Studio access" : "Welcome back"}
+            </p>
+            <h1 className="mt-4 max-w-2xl text-5xl font-black leading-[1.05] text-[#1F1B1C] sm:text-6xl">
+              {step === "email" ? "First, what is your email?" : `Welcome ${firstName}`}
+            </h1>
+            <p className="mt-5 max-w-xl text-lg font-medium leading-8 text-[#7A6C6E]">
+              {step === "email"
+                ? "We will check your account and send you to the right Glowith experience."
+                : isPrivileged
+                  ? "Enter your password to continue to your tenant workspace."
+                  : "Enter your password to continue booking and managing appointments."}
+            </p>
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold uppercase tracking-wider text-[#7A6C6E]">Password</label>
-            <div className="relative">
-              <input
-                type={showPw ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                placeholder="••••••••"
-                className="w-full rounded-xl border border-[#E8E0DC] bg-[#F9F5F3] px-4 py-3 pr-11 text-sm font-medium outline-none transition focus:border-[#D94472] focus:bg-white"
-              />
-              <button type="button" onClick={() => setShowPw(!showPw)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#7A6C6E]">
-                {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
+          <div className="rounded-[2rem] border border-[#E8E0DC] bg-white p-6 shadow-xl shadow-black/5">
+            <div className="mb-6 flex gap-2">
+              {["email", "password"].map((item, index) => (
+                <div
+                  key={item}
+                  className={`h-1 flex-1 rounded-full ${index === 0 || step === "password" ? "bg-[#D94472]" : "bg-[#E8E0DC]"}`}
+                />
+              ))}
             </div>
+
+            {params.get("registered") && (
+              <div className="mb-4 rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+                Studio created. Sign in below.
+              </div>
+            )}
+            {error && (
+              <div className="mb-4 rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
+                {error}
+              </div>
+            )}
+
+            {step === "email" ? (
+              <form onSubmit={handleEmailSubmit} className="space-y-5">
+                <label className="block">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#7A6C6E]">Email address</span>
+                  <span className="mt-2 flex items-center gap-3 rounded-2xl border border-[#E8E0DC] bg-[#F9F5F3] px-4 py-4">
+                    <Mail className="h-5 w-5 text-[#7A6C6E]" />
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      autoFocus
+                      placeholder="bookings@demo.glowith.co.za"
+                      className="min-w-0 flex-1 bg-transparent text-base font-bold outline-none placeholder:font-medium placeholder:text-[#B2A6A8]"
+                    />
+                  </span>
+                </label>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#1a1a1a] py-4 text-sm font-black text-white transition hover:bg-[#1a1a1a]/90 disabled:opacity-60"
+                >
+                  {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Continue
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handlePasswordSubmit} className="space-y-5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStep("email");
+                    setPassword("");
+                    setError("");
+                  }}
+                  className="inline-flex items-center gap-2 text-sm font-bold text-[#7A6C6E]"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Change email
+                </button>
+
+                <div className="rounded-2xl bg-[#FFF5F8] px-4 py-3 text-sm font-semibold text-[#7A6C6E]">
+                  {email}
+                  {lookup?.businessName && <span className="block text-[#1F1B1C]">{lookup.businessName}</span>}
+                </div>
+
+                <label className="block">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#7A6C6E]">Password</span>
+                  <span className="mt-2 flex items-center gap-3 rounded-2xl border border-[#E8E0DC] bg-[#F9F5F3] px-4 py-4">
+                    <input
+                      type={showPw ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      autoFocus
+                      placeholder="Enter your password"
+                      className="min-w-0 flex-1 bg-transparent text-base font-bold outline-none placeholder:font-medium placeholder:text-[#B2A6A8]"
+                    />
+                    <button type="button" onClick={() => setShowPw(!showPw)} className="text-[#7A6C6E]" aria-label="Toggle password visibility">
+                      {showPw ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    </button>
+                  </span>
+                </label>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#1a1a1a] py-4 text-sm font-black text-white transition hover:bg-[#1a1a1a]/90 disabled:opacity-60"
+                >
+                  {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Log in
+                </button>
+              </form>
+            )}
           </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#1a1a1a] py-3 text-sm font-bold text-white transition hover:bg-[#1a1a1a]/90 disabled:opacity-60"
-          >
-            {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-            Sign in
-          </button>
-
-          <p className="text-center text-xs text-[#7A6C6E]">
-            New to Glowith?{" "}
-            <Link href="/signup" className="font-bold text-[#D94472] hover:underline">
-              Create your studio
-            </Link>
-          </p>
-        </form>
+        </section>
       </div>
-    </div>
+    </main>
   );
 }
 

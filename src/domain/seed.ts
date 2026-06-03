@@ -22,6 +22,7 @@ export const providers: Provider[] = [
     mobile: false,
     studio: true,
     nextAvailable: "Today 15:30",
+    availableSlots: ["09:00", "12:30", "15:30"],
     bio: "Color, silk press, protective styling, and event hair with a calm studio experience.",
     services: [
       { id: "svc_silk", name: "Silk press", category: "Hair", durationMinutes: 90, priceCents: 85000, depositCents: 25000 },
@@ -46,6 +47,7 @@ export const providers: Provider[] = [
     mobile: true,
     studio: true,
     nextAvailable: "Tomorrow 09:00",
+    availableSlots: ["09:00", "11:30", "14:00"],
     bio: "Soft glam, editorial looks, and bridal parties with mobile call-out options.",
     services: [
       { id: "svc_soft_glam", name: "Soft glam", category: "Makeup", durationMinutes: 60, priceCents: 70000, depositCents: 20000 },
@@ -70,6 +72,7 @@ export const providers: Provider[] = [
     mobile: false,
     studio: true,
     nextAvailable: "Fri 12:00",
+    availableSlots: ["10:00", "12:00", "16:30"],
     bio: "Structured gel, fine-line nail art, overlays, and quick repairs.",
     services: [
       { id: "svc_gel", name: "Structured gel set", category: "Nails", durationMinutes: 75, priceCents: 52000, depositCents: 15000 },
@@ -82,7 +85,8 @@ export const providers: Provider[] = [
   },
   {
     id: "pro_glowith_demo",
-    handle: "@glowithdemo",
+    handle: "@demo",
+    bookingEmail: "bookings@demo.glowith.co.za",
     name: "Glowith Demo Stylist",
     businessName: "Glowith Demo Salon",
     category: "Hair",
@@ -94,6 +98,7 @@ export const providers: Provider[] = [
     mobile: true,
     studio: true,
     nextAvailable: "Today 14:00",
+    availableSlots: ["09:00", "12:30", "15:30", "17:00"],
     bio: "Seeded salon for product demos, booking flows, dashboard testing, and marketplace walkthroughs.",
     services: [
       { id: "svc_demo_silk", name: "Demo silk press", category: "Hair", durationMinutes: 90, priceCents: 85000, depositCents: 25000 },

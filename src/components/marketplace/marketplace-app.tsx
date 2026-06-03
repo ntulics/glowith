@@ -18,7 +18,7 @@ import {
   X
 } from "lucide-react";
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { providers } from "@/domain/seed";
 import type { Provider, ServiceCategory } from "@/domain/types";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 const categories: Array<ServiceCategory | "All"> = ["All", "Hair", "Nails", "Makeup", "Lashes", "Brows", "Barber", "Spa"];
+const fallbackLocation = { label: "Rosebank, Johannesburg", lat: -26.1458, lng: 28.042 };
 
 const formatCurrency = (cents: number) =>
   new Intl.NumberFormat("en-ZA", { style: "currency", currency: "ZAR", maximumFractionDigits: 0 }).format(cents / 100);
@@ -34,20 +35,91 @@ const formatCurrency = (cents: number) =>
 export function MarketplaceApp() {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<ServiceCategory | "All">("All");
+  const [locationQuery, setLocationQuery] = useState("Current location");
+  const [userLocation, setUserLocation] = useState(fallbackLocation);
+  const [timeFilter, setTimeFilter] = useState("Any time");
+  const [distanceByProvider, setDistanceByProvider] = useState<Record<string, number>>({});
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
   const [selectedServiceId, setSelectedServiceId] = useState<string>("");
 
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      setLocationQuery(fallbackLocation.label);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const nextLocation = {
+          label: "Current location",
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        };
+        setUserLocation(nextLocation);
+        setLocationQuery(nextLocation.label);
+      },
+      () => setLocationQuery(fallbackLocation.label),
+      { enableHighAccuracy: true, timeout: 6000, maximumAge: 300000 }
+    );
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadDistances() {
+      try {
+        const response = await fetch(`/api/maps/distance?lat=${userLocation.lat}&lng=${userLocation.lng}`);
+        if (!response.ok) return;
+        const data = await response.json();
+        if (cancelled) return;
+        setDistanceByProvider(
+          Object.fromEntries(
+            (data.distances ?? []).map((item: { id: string; distanceKm: number }) => [item.id, item.distanceKm])
+          )
+        );
+      } catch {
+        setDistanceByProvider({});
+      }
+    }
+
+    loadDistances();
+    return () => {
+      cancelled = true;
+    };
+  }, [userLocation.lat, userLocation.lng]);
+
+  const displayProviders = useMemo(
+    () => providers.map((provider) => ({
+      ...provider,
+      distanceKm: distanceByProvider[provider.id] ?? provider.distanceKm
+    })),
+    [distanceByProvider]
+  );
+
   const filteredProviders = useMemo(() => {
     const value = query.trim().toLowerCase();
-    return providers.filter((provider) => {
+    const locationValue = locationQuery.trim().toLowerCase();
+    return displayProviders.filter((provider) => {
       const categoryMatch = category === "All" || provider.category === category;
       const searchMatch =
         !value ||
-        [provider.name, provider.businessName, provider.handle, provider.category, provider.location.label, provider.bio]
+        [
+          provider.name,
+          provider.businessName,
+          provider.handle,
+          provider.category,
+          provider.location.label,
+          provider.bio,
+          ...provider.services.map((service) => service.name)
+        ]
           .join(" ").toLowerCase().includes(value);
-      return categoryMatch && searchMatch;
+      const locationMatch =
+        !locationValue ||
+        locationValue === "current location" ||
+        provider.location.label.toLowerCase().includes(locationValue);
+      return categoryMatch && searchMatch && locationMatch;
     });
-  }, [category, query]);
+  }, [category, displayProviders, locationQuery, query]);
 
   function openProvider(provider: Provider) {
     setSelectedProvider(provider);
@@ -67,7 +139,15 @@ export function MarketplaceApp() {
       <TopBar />
 
       {/* Hero */}
-      <HeroSection query={query} onQueryChange={setQuery} />
+      <HeroSection
+        query={query}
+        locationQuery={locationQuery}
+        timeFilter={timeFilter}
+        providers={displayProviders}
+        onQueryChange={setQuery}
+        onLocationChange={setLocationQuery}
+        onTimeChange={setTimeFilter}
+      />
 
       {/* Main discovery */}
       <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pb-28 lg:pb-16">
@@ -170,10 +250,13 @@ function TopBar() {
           <button className="focus-ring hidden h-9 items-center gap-1.5 rounded-xl border border-[var(--line)] px-3 text-sm font-semibold transition hover:bg-[var(--background)] sm:inline-flex">
             List your business
           </button>
-          <Button className="hidden rounded-xl sm:inline-flex">
+          <a
+            href="/login"
+            className="focus-ring hidden h-9 items-center gap-2 rounded-xl bg-[var(--brand)] px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--brand-dark)] sm:inline-flex"
+          >
             <UserRoundPlus className="h-4 w-4" />
             Log in
-          </Button>
+          </a>
         </div>
       </div>
     </header>
@@ -182,7 +265,34 @@ function TopBar() {
 
 /* ─── Hero ────────────────────────────────────────────────── */
 
-function HeroSection({ query, onQueryChange }: { query: string; onQueryChange: (v: string) => void }) {
+function HeroSection({
+  query,
+  locationQuery,
+  timeFilter,
+  providers,
+  onQueryChange,
+  onLocationChange,
+  onTimeChange
+}: {
+  query: string;
+  locationQuery: string;
+  timeFilter: string;
+  providers: Provider[];
+  onQueryChange: (v: string) => void;
+  onLocationChange: (v: string) => void;
+  onTimeChange: (v: string) => void;
+}) {
+  const [activePanel, setActivePanel] = useState<"treatments" | "location" | "time" | null>(null);
+  const treatmentOptions = useMemo(
+    () => Array.from(new Set(providers.flatMap((provider) => provider.services.map((service) => service.name)))),
+    [providers]
+  );
+  const locationOptions = useMemo(
+    () => Array.from(new Set(providers.map((provider) => provider.location.label))),
+    [providers]
+  );
+  const calendarDays = Array.from({ length: 30 }, (_, index) => index + 1);
+
   return (
     <section
       className="flex min-h-[480px] flex-col items-center justify-center px-4 py-20 text-center sm:min-h-[520px] sm:px-6 lg:px-8"
@@ -200,13 +310,14 @@ function HeroSection({ query, onQueryChange }: { query: string; onQueryChange: (
       </p>
 
       {/* 3-part search bar */}
-      <div className="mt-10 w-full max-w-3xl overflow-hidden rounded-2xl border border-[var(--line)] bg-white shadow-xl shadow-black/5">
+      <div className="relative mt-10 w-full max-w-6xl rounded-[1.75rem] border border-[var(--line)] bg-white shadow-xl shadow-black/5">
         <div className="flex flex-col sm:flex-row sm:items-stretch">
           {/* Treatment */}
           <div className="flex flex-1 items-center gap-3 border-b border-[var(--line)] px-5 py-4 sm:border-b-0 sm:border-r">
             <Search className="h-4 w-4 shrink-0 text-[var(--muted)]" />
             <input
               value={query}
+              onFocus={() => setActivePanel("treatments")}
               onChange={(e) => onQueryChange(e.target.value)}
               placeholder="All treatments"
               className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-[var(--ink)] placeholder:font-normal placeholder:text-[var(--muted)] outline-none"
@@ -216,32 +327,205 @@ function HeroSection({ query, onQueryChange }: { query: string; onQueryChange: (
           <div className="flex flex-1 items-center gap-3 border-b border-[var(--line)] px-5 py-4 sm:border-b-0 sm:border-r">
             <MapPin className="h-4 w-4 shrink-0 text-[var(--muted)]" />
             <input
+              value={locationQuery}
+              onFocus={() => setActivePanel("location")}
+              onChange={(e) => onLocationChange(e.target.value)}
               placeholder="Current location"
               className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-[var(--ink)] placeholder:font-normal placeholder:text-[var(--muted)] outline-none"
             />
           </div>
           {/* Date */}
-          <div className="flex flex-1 items-center gap-3 border-b border-[var(--line)] px-5 py-4 sm:border-b-0">
+          <button
+            type="button"
+            onClick={() => setActivePanel(activePanel === "time" ? null : "time")}
+            className="flex flex-1 items-center gap-3 border-b border-[var(--line)] px-5 py-4 text-left sm:border-b-0"
+          >
             <CalendarDays className="h-4 w-4 shrink-0 text-[var(--muted)]" />
-            <input
-              placeholder="Any time"
-              className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-[var(--ink)] placeholder:font-normal placeholder:text-[var(--muted)] outline-none"
-            />
-          </div>
+            <span className="min-w-0 flex-1 text-sm font-semibold text-[var(--ink)]">{timeFilter}</span>
+          </button>
           {/* Search button */}
           <div className="p-2">
-            <button className="focus-ring flex h-full w-full items-center justify-center gap-2 rounded-xl bg-[var(--ink)] px-6 py-3 text-sm font-bold text-white transition hover:bg-[var(--ink)]/90 sm:w-auto">
+            <button
+              onClick={() => setActivePanel(null)}
+              className="focus-ring flex h-full w-full items-center justify-center gap-2 rounded-[1.25rem] bg-[var(--ink)] px-8 py-3 text-sm font-bold text-white transition hover:bg-[var(--ink)]/90 sm:w-auto"
+            >
               <Search className="h-4 w-4" />
               <span>Search</span>
             </button>
           </div>
         </div>
+
+        <AnimatePresence>
+          {activePanel === "treatments" && (
+            <SearchPanel onClose={() => setActivePanel(null)} align="left">
+              <div className="flex flex-wrap gap-2">
+                {["All", ...categories.filter((item) => item !== "All")].map((item) => (
+                  <button
+                    key={item}
+                    onClick={() => {
+                      onQueryChange(item === "All" ? "" : item);
+                      setActivePanel(null);
+                    }}
+                    className="rounded-full border border-[var(--line)] px-4 py-2 text-sm font-semibold hover:border-[var(--ink)]"
+                  >
+                    {item === "All" ? "All treatments" : item}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-5 space-y-2 text-left">
+                <p className="text-xs font-bold uppercase tracking-widest text-[var(--muted)]">
+                  Available near {locationQuery || "your location"}
+                </p>
+                {treatmentOptions.map((item) => (
+                  <button
+                    key={item}
+                    onClick={() => {
+                      onQueryChange(item);
+                      setActivePanel(null);
+                    }}
+                    className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm font-semibold hover:bg-[#F9F5F3]"
+                  >
+                    <span>{item}</span>
+                    <ChevronRight className="h-4 w-4 text-[var(--muted)]" />
+                  </button>
+                ))}
+              </div>
+            </SearchPanel>
+          )}
+
+          {activePanel === "location" && (
+            <SearchPanel onClose={() => setActivePanel(null)} align="center">
+              <div className="space-y-2 text-left">
+                <button
+                  onClick={() => {
+                    onLocationChange("Current location");
+                    setActivePanel(null);
+                  }}
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#F9F5F3]"
+                >
+                  <MapPin className="h-4 w-4 text-[var(--brand)]" />
+                  Use current location
+                </button>
+                {locationOptions.map((item) => (
+                  <button
+                    key={item}
+                    onClick={() => {
+                      onLocationChange(item);
+                      setActivePanel(null);
+                    }}
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold hover:bg-[#F9F5F3]"
+                  >
+                    <MapPin className="h-4 w-4 text-[var(--muted)]" />
+                    {item}
+                  </button>
+                ))}
+              </div>
+            </SearchPanel>
+          )}
+
+          {activePanel === "time" && (
+            <SearchPanel onClose={() => setActivePanel(null)} align="right" wide>
+              <div className="grid gap-6 text-left md:grid-cols-[160px_1fr]">
+                <div className="space-y-3">
+                  {["Today", "Tomorrow", "Any time"].map((item) => (
+                    <button
+                      key={item}
+                      onClick={() => {
+                        onTimeChange(item);
+                        if (item === "Any time") setActivePanel(null);
+                      }}
+                      className={cn(
+                        "w-full rounded-2xl border px-4 py-4 text-sm font-bold",
+                        timeFilter === item ? "border-[var(--brand)] text-[var(--brand)]" : "border-[var(--line)]"
+                      )}
+                    >
+                      {item}
+                    </button>
+                  ))}
+                </div>
+                <div>
+                  <div className="mb-4 flex items-center justify-between">
+                    <button className="rounded-full p-2 hover:bg-[#F9F5F3]" aria-label="Previous month">‹</button>
+                    <p className="font-black">Jun 2026</p>
+                    <button className="rounded-full p-2 hover:bg-[#F9F5F3]" aria-label="Next month">›</button>
+                  </div>
+                  <div className="grid grid-cols-7 gap-2 text-center text-xs font-semibold text-[var(--muted)]">
+                    {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => <span key={day}>{day}</span>)}
+                  </div>
+                  <div className="mt-3 grid grid-cols-7 gap-2 text-center text-sm font-semibold">
+                    {calendarDays.map((day) => (
+                      <button
+                        key={day}
+                        onClick={() => {
+                          onTimeChange(`Jun ${day}`);
+                          setActivePanel(null);
+                        }}
+                        className={cn(
+                          "h-9 rounded-full hover:bg-[#F9F5F3]",
+                          day === 3 && "border border-[var(--brand)] text-[var(--brand)]"
+                        )}
+                      >
+                        {day}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-6 flex flex-wrap gap-2 border-t border-[var(--line)] pt-4">
+                    {["Any time", "Morning", "Afternoon", "Evening"].map((item) => (
+                      <button
+                        key={item}
+                        onClick={() => {
+                          onTimeChange(item);
+                          setActivePanel(null);
+                        }}
+                        className="rounded-2xl border border-[var(--line)] px-4 py-3 text-sm font-semibold hover:border-[var(--brand)] hover:text-[var(--brand)]"
+                      >
+                        {item}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </SearchPanel>
+          )}
+        </AnimatePresence>
       </div>
 
       <p className="mt-5 text-sm font-semibold text-[var(--muted)]">
         <span className="font-black text-[var(--ink)]">12,400+</span> appointments booked today
       </p>
     </section>
+  );
+}
+
+function SearchPanel({
+  children,
+  align,
+  wide = false,
+  onClose
+}: {
+  children: ReactNode;
+  align: "left" | "center" | "right";
+  wide?: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <>
+      <button className="fixed inset-0 z-10 cursor-default" aria-label="Close search panel" onClick={onClose} />
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 8 }}
+        className={cn(
+          "absolute top-[calc(100%+0.5rem)] z-20 max-h-[70vh] overflow-y-auto rounded-3xl border border-[var(--line)] bg-white p-6 text-left shadow-2xl shadow-black/10",
+          wide ? "w-[min(720px,calc(100vw-2rem))]" : "w-[min(600px,calc(100vw-2rem))]",
+          align === "left" && "left-0",
+          align === "center" && "left-1/2 -translate-x-1/2",
+          align === "right" && "right-0"
+        )}
+      >
+        {children}
+      </motion.div>
+    </>
   );
 }
 
@@ -364,7 +648,7 @@ function ProviderDrawer({
         animate={{ y: 0 }}
         exit={{ y: "100%" }}
         transition={{ type: "spring", damping: 28, stiffness: 300 }}
-        className="fixed inset-x-0 bottom-0 z-50 max-h-[90vh] overflow-y-auto rounded-t-3xl bg-white shadow-2xl"
+        className="fixed inset-x-3 bottom-3 z-50 mx-auto max-h-[88vh] max-w-7xl overflow-y-auto rounded-3xl bg-white shadow-2xl sm:inset-x-6 lg:inset-x-8"
       >
         {/* Drag handle */}
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--line)] bg-white px-5 py-4">
@@ -402,7 +686,13 @@ function ProviderDrawer({
                     <span className="inline-flex items-center gap-1">
                       <MapPin className="h-3 w-3" />{provider.location.label}
                     </span>
+                    <span className="inline-flex items-center gap-1">
+                      <MapPin className="h-3 w-3" />{provider.distanceKm} km away
+                    </span>
                   </div>
+                  {provider.bookingEmail && (
+                    <p className="mt-2 text-xs font-semibold text-[var(--muted)]">{provider.bookingEmail}</p>
+                  )}
                   <p className="mt-2 text-sm leading-6 text-[var(--muted)]">{provider.bio}</p>
                 </div>
               </div>
@@ -489,7 +779,7 @@ function ProviderDrawer({
 
                   {/* Time slots */}
                   <div className="grid grid-cols-4 gap-1.5">
-                    {["09:00", "12:30", "15:30", "17:00"].map((time) => (
+                    {(provider.availableSlots ?? ["09:00", "12:30", "15:30", "17:00"]).map((time) => (
                       <button key={time} className="focus-ring rounded-xl border border-[var(--line)] py-2.5 text-xs font-bold transition hover:border-[var(--brand)] hover:text-[var(--brand)]">
                         {time}
                       </button>
