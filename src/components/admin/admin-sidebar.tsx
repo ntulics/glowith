@@ -5,11 +5,13 @@ import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import {
   BarChart3,
+  FlaskConical,
   BookOpen,
   CalendarDays,
   LayoutDashboard,
   LogOut,
   Settings,
+  ShieldAlert,
   Sparkles,
   Store,
   Users
@@ -22,6 +24,7 @@ const nav = [
   { href: "/admin/bookings", label: "Bookings", icon: CalendarDays },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/admin/restricted-names", label: "Restricted Names", icon: ShieldAlert },
   { href: "/admin/settings", label: "Settings", icon: Settings }
 ];
 

@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Building2, ChevronRight, Loader2, Scissors, Sparkles, Users } from "lucide-react";
+import { Building2, CheckCircle2, ChevronRight, Loader2, Scissors, Sparkles, Users, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type ProviderType = "FREELANCER" | "BUSINESS";
@@ -53,8 +53,24 @@ export default function SignupPage() {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [handleStatus, setHandleStatus] = useState<"idle" | "checking" | "available" | "taken" | "restricted" | "invalid">("idle");
+  const checkTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isFreelancer = providerType === "FREELANCER";
+
+  const checkHandle = useCallback((handle: string) => {
+    if (checkTimer.current) clearTimeout(checkTimer.current);
+    const clean = handle.replace("@", "");
+    if (!clean) { setHandleStatus("idle"); return; }
+    setHandleStatus("checking");
+    checkTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/auth/check-handle?handle=${encodeURIComponent(clean)}`);
+        const data = await res.json();
+        setHandleStatus(data.available ? "available" : (data.reason ?? "taken"));
+      } catch { setHandleStatus("idle"); }
+    }, 500);
+  }, []);
 
   function set(key: string, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -211,17 +227,32 @@ export default function SignupPage() {
             {/* Handle */}
             <div>
               <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-[#7A6C6E]">Your subdomain</label>
-              <div className="flex overflow-hidden rounded-xl border border-[#E8E0DC] bg-[#F9F5F3]">
+              <div className={cn(
+                "flex overflow-hidden rounded-xl border bg-[#F9F5F3] transition",
+                handleStatus === "available" ? "border-emerald-400" :
+                handleStatus === "taken" || handleStatus === "restricted" || handleStatus === "invalid" ? "border-red-400" :
+                "border-[#E8E0DC]"
+              )}>
                 <input
                   value={form.handle.replace("@", "")}
-                  onChange={(e) => setForm((f) => ({ ...f, handle: "@" + e.target.value.toLowerCase().replace(/[^a-z0-9]/g, "") }))}
+                  onChange={(e) => {
+                    const val = "@" + e.target.value.toLowerCase().replace(/[^a-z0-9]/g, "");
+                    setForm((f) => ({ ...f, handle: val }));
+                    checkHandle(val);
+                  }}
                   placeholder="yourstudio"
                   className="flex-1 bg-transparent px-4 py-3 text-sm font-medium outline-none"
                 />
+                {handleStatus === "checking" && <span className="flex items-center px-3 text-xs text-gray-400">Checking…</span>}
+                {handleStatus === "available" && <CheckCircle2 className="mr-3 mt-3.5 h-4 w-4 shrink-0 text-emerald-500" />}
+                {(handleStatus === "taken" || handleStatus === "restricted" || handleStatus === "invalid") && <XCircle className="mr-3 mt-3.5 h-4 w-4 shrink-0 text-red-500" />}
                 <span className="flex items-center border-l border-[#E8E0DC] bg-white px-3 text-sm font-semibold text-[#7A6C6E]">
                   .glowith.co.za
                 </span>
               </div>
+              {handleStatus === "taken" && <p className="mt-1 text-xs font-semibold text-red-500">That name is already taken</p>}
+              {handleStatus === "restricted" && <p className="mt-1 text-xs font-semibold text-red-500">That name is reserved</p>}
+              {handleStatus === "available" && <p className="mt-1 text-xs font-semibold text-emerald-600">✓ Available!</p>}
             </div>
 
             {/* Category */}
