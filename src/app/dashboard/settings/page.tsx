@@ -7,19 +7,27 @@ export default async function SettingsPage() {
   const session = await auth();
   const user = session?.user as any;
 
-  const profile = await prisma.providerProfile.findUnique({ where: { userId: user.id } });
+  const profile = await prisma.providerProfile.findUnique({
+    where: { userId: user.id },
+    include: { parentBusiness: { select: { businessName: true, handle: true } } }
+  });
   if (!profile) redirect("/signup");
 
   return (
-    <SettingsView profile={{
-      id: profile.id,
-      businessName: profile.businessName,
-      handle: profile.handle,
-      bio: profile.bio,
-      city: profile.city,
-      category: profile.category,
-      mobile: profile.mobile,
-      studio: profile.studio
-    }} />
+    <SettingsView
+      providerType={profile.providerType}
+      parentBusinessName={profile.parentBusiness?.businessName ?? null}
+      parentBusinessHandle={profile.parentBusiness?.handle ?? null}
+      profile={{
+        id: profile.id,
+        businessName: profile.businessName,
+        handle: profile.handle,
+        bio: profile.bio,
+        city: profile.city,
+        category: profile.category,
+        mobile: profile.mobile,
+        studio: profile.studio
+      }}
+    />
   );
 }

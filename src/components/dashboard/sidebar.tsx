@@ -41,6 +41,11 @@ interface Props {
 
 export function Sidebar({ businessName, handle, role, providerType, parentBusinessName, onClose }: Props) {
   const pathname = usePathname();
+  const isAgent = !!parentBusinessName;
+  // Agents work under a business — team & client management live at company level
+  const visibleNav = isAgent
+    ? nav.filter((item) => item.href !== "/dashboard/agents" && item.href !== "/dashboard/clients")
+    : nav;
 
   return (
     <aside className="flex h-screen w-56 flex-col border-r border-gray-100 bg-white">
@@ -103,7 +108,7 @@ export function Sidebar({ businessName, handle, role, providerType, parentBusine
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-3 py-3">
         <ul className="space-y-0.5">
-          {nav.map(({ href, label, icon: Icon }) => {
+          {visibleNav.map(({ href, label, icon: Icon }) => {
             const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
             return (
               <li key={href}>

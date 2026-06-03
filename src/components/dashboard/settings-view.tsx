@@ -204,7 +204,20 @@ const sections = [
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 /* ══════════════════════════════════════════════════════════════════ */
-export function SettingsView({ profile: initial }: { profile: Profile }) {
+export function SettingsView({
+  profile: initial,
+  providerType,
+  parentBusinessName,
+  parentBusinessHandle
+}: {
+  profile: Profile;
+  providerType?: string;
+  parentBusinessName?: string | null;
+  parentBusinessHandle?: string | null;
+}) {
+  // An agent belongs to a business — company-level settings are managed there.
+  const isAgent = !!parentBusinessName;
+  const parentSlug = (parentBusinessHandle ?? "").replace("@", "");
   const [activeSection, setActiveSection] = useState("profile");
   const [form, setForm] = useState(initial);
   const [loading, setLoading] = useState(false);
@@ -272,8 +285,10 @@ export function SettingsView({ profile: initial }: { profile: Profile }) {
       i.description.toLowerCase().includes(intSearchQuery.toLowerCase())
   );
 
-  const navSections = sections.filter((s) => !s.parent);
-  const subSections = sections.filter((s) => s.parent === "company");
+  // Agents only manage their own Profile; everything else is company-level.
+  const availableSections = isAgent ? sections.filter((s) => s.id === "profile") : sections;
+  const navSections = availableSections.filter((s) => !s.parent);
+  const subSections = availableSections.filter((s) => s.parent === "company");
 
   function handleNavClick(id: string) {
     setActiveSection(id);
@@ -284,10 +299,29 @@ export function SettingsView({ profile: initial }: { profile: Profile }) {
   function renderProfile() {
     return (
       <form onSubmit={handleSubmit} className="space-y-6 max-w-xl">
+        {isAgent && (
+          <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+            <Info className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+            <div>
+              <p className="font-bold text-emerald-800">You're an agent of {parentBusinessName}</p>
+              <p className="mt-1 text-sm text-emerald-700">
+                You manage your own profile here. Company-level settings — working hours, payments,
+                bookings, notifications and integrations — are managed by the business owner.
+              </p>
+            </div>
+          </div>
+        )}
         <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm space-y-4">
-          <h2 className="font-black text-base">Studio profile</h2>
+          <h2 className="font-black text-base">{isAgent ? "Your profile" : "Studio profile"}</h2>
+          {isAgent && (
+            <div>
+              <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-gray-500">Business</label>
+              <input value={parentBusinessName ?? ""} readOnly
+                className="w-full rounded-xl border border-gray-200 bg-gray-100 px-4 py-3 text-sm font-medium text-gray-500 outline-none cursor-not-allowed" />
+            </div>
+          )}
           {[
-            { key: "businessName", label: "Business name" },
+            { key: "businessName", label: isAgent ? "Display name" : "Business name" },
             { key: "city", label: "City" },
             { key: "category", label: "Category" },
             { key: "bio", label: "Bio", multiline: true }
@@ -304,11 +338,23 @@ export function SettingsView({ profile: initial }: { profile: Profile }) {
             </div>
           ))}
           <div>
-            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-gray-500">Subdomain</label>
-            <div className="flex overflow-hidden rounded-xl border border-gray-200 bg-gray-50">
-              <input value={slug} readOnly className="flex-1 bg-transparent px-4 py-3 text-sm font-medium outline-none text-gray-400 min-w-0" />
-              <span className="flex items-center border-l border-gray-200 bg-white px-3 text-sm font-semibold text-gray-400 whitespace-nowrap">.glowith.co.za</span>
-            </div>
+            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-gray-500">
+              {isAgent ? "Your public page" : providerType === "FREELANCER" ? "Your public page" : "Subdomain"}
+            </label>
+            {isAgent ? (
+              <div className="rounded-xl border border-gray-200 bg-gray-100 px-4 py-3 text-sm font-medium text-gray-500">
+                {parentSlug}.glowith.co.za/team/{slug}
+              </div>
+            ) : providerType === "FREELANCER" ? (
+              <div className="rounded-xl border border-gray-200 bg-gray-100 px-4 py-3 text-sm font-medium text-gray-500">
+                freelancer.glowith.co.za/{slug}
+              </div>
+            ) : (
+              <div className="flex overflow-hidden rounded-xl border border-gray-200 bg-gray-50">
+                <input value={slug} readOnly className="flex-1 bg-transparent px-4 py-3 text-sm font-medium outline-none text-gray-400 min-w-0" />
+                <span className="flex items-center border-l border-gray-200 bg-white px-3 text-sm font-semibold text-gray-400 whitespace-nowrap">.glowith.co.za</span>
+              </div>
+            )}
           </div>
           <div>
             <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">Service type</label>
@@ -760,7 +806,8 @@ export function SettingsView({ profile: initial }: { profile: Profile }) {
     integrations: renderIntegrations
   };
 
-  const activeSection_ = contentMap[activeSection] ? activeSection : "profile";
+  const sectionAllowed = availableSections.some((s) => s.id === activeSection);
+  const activeSection_ = contentMap[activeSection] && sectionAllowed ? activeSection : "profile";
   const activeLabel = sections.find((s) => s.id === activeSection_)?.label ?? "Settings";
 
   return (
