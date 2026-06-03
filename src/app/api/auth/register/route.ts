@@ -9,7 +9,8 @@ const schema = z.object({
   password: z.string().min(8),
   businessName: z.string().min(2),
   handle: z.string().regex(/^@[a-z0-9]+$/, "Handle must be @lowercaseletters"),
-  category: z.string()
+  category: z.string(),
+  providerType: z.enum(["FREELANCER", "BUSINESS"]).default("FREELANCER")
 });
 
 export async function POST(request: Request) {
@@ -20,7 +21,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
   }
 
-  const { name, email, password, businessName, handle, category } = parsed.data;
+  const { name, email, password, businessName, handle, category, providerType } = parsed.data;
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
@@ -45,6 +46,7 @@ export async function POST(request: Request) {
           handle,
           businessName,
           category,
+          providerType,
           bio: "",
           city: "",
           latitude: 0,
