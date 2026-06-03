@@ -84,13 +84,51 @@ jobs:
           #   1. prisma CLI (JS only, ~5 MB) — for "prisma migrate deploy" in start.sh
           #   2. schema-engine binary — used by migrate deploy (NOT the query engine)
           #   3. .prisma/client override — ensure CI-generated client is used
-          # Prisma CLI + client JS (no large binaries)
-          cp -r node_modules/prisma                         /tmp/deploy/node_modules/prisma
-          cp -r node_modules/@prisma/client                 /tmp/deploy/node_modules/@prisma/client
+          # Prisma CLI + its JS dependency tree for migrate deploy.
+          # Keep this explicit because standalone tracing does not include the CLI path.
+          node - <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+
+          const srcRoot = path.resolve('node_modules');
+          const destRoot = '/tmp/deploy/node_modules';
+          const seen = new Set();
+
+          function packageDir(name) {
+            return path.join(srcRoot, ...name.split('/'));
+          }
+
+          function copyPackage(name) {
+            if (seen.has(name)) return;
+            seen.add(name);
+
+            const src = packageDir(name);
+            if (!fs.existsSync(src)) {
+              throw new Error(`Missing package required for deploy: ${name}`);
+            }
+
+            const dest = path.join(destRoot, ...name.split('/'));
+            fs.mkdirSync(path.dirname(dest), { recursive: true });
+            fs.cpSync(src, dest, { recursive: true, force: true });
+
+            const pkg = JSON.parse(fs.readFileSync(path.join(src, 'package.json'), 'utf8'));
+            for (const dep of Object.keys(pkg.dependencies || {})) {
+              copyPackage(dep);
+            }
+            for (const dep of Object.keys(pkg.optionalDependencies || {})) {
+              if (fs.existsSync(packageDir(dep))) copyPackage(dep);
+            }
+          }
+
+          for (const name of ['prisma', '@prisma/client']) {
+            copyPackage(name);
+          }
+          NODE
 
           # @prisma/engines: JS dist files (needed by Prisma CLI to resolve engine paths)
           # + only the schema-engine binary (for migrate deploy) — query engine is already
           # in the standalone traced node_modules
+          rm -rf /tmp/deploy/node_modules/@prisma/engines
           mkdir -p /tmp/deploy/node_modules/@prisma/engines
           cp    node_modules/@prisma/engines/package.json   /tmp/deploy/node_modules/@prisma/engines/
           cp -r node_modules/@prisma/engines/dist           /tmp/deploy/node_modules/@prisma/engines/dist
@@ -178,8 +216,8 @@ jobs:
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_24724B3B0963430FA21F2D0F013F63AC }}
 
       - name: Deploy to Azure Web App
-        # --async true returns as soon as the zip is accepted by Kudu (~upload time only).
-        # App restart + migrations happen on Azure in the background — CI doesn't wait.
+        # --track-status false keeps CI from waiting on Azure's startup probe.
+        # App restart + migrations happen on Azure after the zip is accepted.
         run: |
           az webapp deploy \
             --resource-group glowith_rg \
@@ -187,7 +225,8 @@ jobs:
             --src-path /tmp/node-app.zip \
             --type zip \
             --clean true \
-            --async true
+            --async true \
+            --track-status false
 
       - name: Clean up old workflow runs
         if: success()
