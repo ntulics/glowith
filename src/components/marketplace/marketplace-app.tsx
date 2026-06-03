@@ -400,15 +400,7 @@ function TopBar({ searchInTopBar, searchProps, providers, areaName }: { searchIn
 
           {/* Logo */}
           <div className="flex shrink-0 items-center">
-            <Image
-              src="/images/glowith-logo.png"
-              alt="Glowith"
-              width={121}
-              height={34}
-              className="logo-adaptive h-[2.125rem] w-auto object-contain"
-              onError={() => {}}
-              priority
-            />
+            <span role="img" aria-label="Glowith" className="logo-adaptive h-[2.125rem]" />
           </div>
 
           {/* Desktop nav — absolutely centred, hidden when search active */}
@@ -494,13 +486,7 @@ function TopBar({ searchInTopBar, searchProps, providers, areaName }: { searchIn
             >
               {/* Menu header */}
               <div className="flex items-center justify-between border-b border-[var(--line)] px-5 py-4">
-                <Image
-                  src="/images/glowith-logo.png"
-                  alt="Glowith"
-                  width={100}
-                  height={28}
-                  className="logo-adaptive h-7 w-auto object-contain"
-                />
+                <span role="img" aria-label="Glowith" className="logo-adaptive h-7" />
                 <button onClick={() => setMobileMenuOpen(false)} className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--line)]">
                   <X className="h-4 w-4" />
                 </button>
@@ -1250,13 +1236,7 @@ function Footer() {
 
           {/* Brand */}
           <div className="lg:col-span-1">
-            <Image
-              src="/images/glowith-logo.png"
-              alt="Glowith"
-              width={110}
-              height={31}
-              className="logo-adaptive h-8 w-auto object-contain"
-            />
+            <span role="img" aria-label="Glowith" className="logo-adaptive h-8" />
             <p className="mt-4 text-sm leading-6 text-[var(--muted)]">
               Glowith is South Africa's social beauty marketplace — connecting clients with top-rated hair, nail, makeup, and wellness professionals in their area.
             </p>

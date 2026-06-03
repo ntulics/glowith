@@ -16,8 +16,15 @@
   --card: #FFFFFF;
 }
 
-/* Logo — dark grey in light mode (light grey in dark mode handled below) */
-.logo-adaptive { filter: brightness(0) saturate(100%) invert(22%); }
+/* Logo — masked PNG so we get an exact brand colour. #e74230 in light mode,
+   original logo pink in dark mode (handled below). */
+.logo-adaptive {
+  display: inline-block;
+  aspect-ratio: 121 / 34;
+  background-color: #e74230;
+  -webkit-mask: url(/images/glowith-logo.png) center / contain no-repeat;
+  mask: url(/images/glowith-logo.png) center / contain no-repeat;
+}
 
 /* Hero gradient — soft blush in light mode (dark variant handled below) */
 .hero-gradient {
@@ -40,7 +47,7 @@
     --card: #1E1A1C;
   }
 
-  .logo-adaptive { filter: brightness(0) saturate(100%) invert(88%); }
+  .logo-adaptive { background-color: #D94472; }
 
   .hero-gradient {
     background: linear-gradient(160deg, #17131500 0%, #221a20 45%, #241a1e 80%, #231c18 100%);
