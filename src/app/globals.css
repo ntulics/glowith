@@ -16,51 +16,54 @@
   --card: #FFFFFF;
 }
 
-html.dark {
-  color-scheme: dark;
-  --background: #131012;
-  --foreground: #ECE7E8;
-  --muted: #A89DA0;
-  --line: #322C2F;
-  --brand: #E8688F;
-  --brand-dark: #D94472;
-  --ink: #ECE7E8;
-  --card: #1E1A1C;
-}
-
-/* ── Dark-mode override layer ───────────────────────────────────────────────
-   Retrofits site-wide dark mode by remapping the common hardcoded utility
-   classes onto semantic tokens. Centralised here so components stay untouched. */
-html.dark .bg-white { background-color: var(--card) !important; }
-html.dark .bg-\[\#F9F5F3\],
-html.dark .bg-\[\#F7F8FA\],
-html.dark .bg-\[\#fdfaf9\] { background-color: var(--background) !important; }
-html.dark .bg-gray-50 { background-color: #242022 !important; }
-html.dark .bg-gray-100 { background-color: #2A2528 !important; }
-html.dark .bg-gray-200 { background-color: #322C2F !important; }
-
-html.dark .text-\[\#1a1a1a\],
-html.dark .text-\[\#1F1B1C\],
-html.dark .text-\[\#231f20\],
-html.dark .text-gray-900,
-html.dark .text-gray-800,
-html.dark .text-black { color: var(--foreground) !important; }
-html.dark .text-gray-700,
-html.dark .text-gray-600 { color: #C9C0C3 !important; }
-html.dark .text-gray-500,
-html.dark .text-gray-400 { color: var(--muted) !important; }
-
-html.dark .border-gray-100,
-html.dark .border-gray-200,
-html.dark .border-\[\#E8E0DC\] { border-color: var(--line) !important; }
-
-/* Near-black primary CTAs become brand pink on dark backgrounds */
-html.dark .bg-\[\#1a1a1a\] { background-color: var(--brand) !important; }
-html.dark .hover\:bg-\[\#1a1a1a\]\/90:hover { background-color: var(--brand-dark) !important; }
-
-/* Logo — dark grey in light mode, light grey in dark mode */
+/* Logo — dark grey in light mode (light grey in dark mode handled below) */
 .logo-adaptive { filter: brightness(0) saturate(100%) invert(22%); }
-html.dark .logo-adaptive { filter: brightness(0) saturate(100%) invert(88%); }
+
+/* ── Dark mode — driven entirely by the OS / browser system setting ─────────
+   Retrofits site-wide dark mode by remapping semantic tokens and the common
+   hardcoded utility classes. Centralised here so components stay untouched. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --background: #131012;
+    --foreground: #ECE7E8;
+    --muted: #A89DA0;
+    --line: #322C2F;
+    --brand: #E8688F;
+    --brand-dark: #D94472;
+    --ink: #ECE7E8;
+    --card: #1E1A1C;
+  }
+
+  .logo-adaptive { filter: brightness(0) saturate(100%) invert(88%); }
+
+  .bg-white { background-color: var(--card) !important; }
+  .bg-\[\#F9F5F3\],
+  .bg-\[\#F7F8FA\],
+  .bg-\[\#fdfaf9\] { background-color: var(--background) !important; }
+  .bg-gray-50 { background-color: #242022 !important; }
+  .bg-gray-100 { background-color: #2A2528 !important; }
+  .bg-gray-200 { background-color: #322C2F !important; }
+
+  .text-\[\#1a1a1a\],
+  .text-\[\#1F1B1C\],
+  .text-\[\#231f20\],
+  .text-gray-900,
+  .text-gray-800,
+  .text-black { color: var(--foreground) !important; }
+  .text-gray-700,
+  .text-gray-600 { color: #C9C0C3 !important; }
+  .text-gray-500,
+  .text-gray-400 { color: var(--muted) !important; }
+
+  .border-gray-100,
+  .border-gray-200,
+  .border-\[\#E8E0DC\] { border-color: var(--line) !important; }
+
+  /* Near-black primary CTAs become brand pink on dark backgrounds */
+  .bg-\[\#1a1a1a\] { background-color: var(--brand) !important; }
+  .hover\:bg-\[\#1a1a1a\]\/90:hover { background-color: var(--brand-dark) !important; }
+}
 
 * {
   box-sizing: border-box;
