@@ -14,6 +14,7 @@ type Profile = {
   id: string; handle: string; businessName: string; name: string;
   category: string; bio: string; city: string; avatarUrl: string | null;
   verified: boolean; mobile: boolean; studio: boolean; providerType: string;
+  parentBusinessName?: string | null; parentBusinessCity?: string | null;
   memberSince: string; appointmentsCompleted: number;
   services: Service[]; posts: Post[];
 };
@@ -107,8 +108,8 @@ export function ProviderProfilePage({ profile }: { profile: Profile }) {
               <div className="flex items-start gap-2">
                 <Briefcase className="mt-0.5 h-4 w-4 shrink-0 text-[var(--brand)]" />
                 <div>
-                  <p className="text-sm font-bold">{profile.businessName}</p>
-                  <p className="text-xs text-[var(--muted)]">{profile.city}</p>
+                  <p className="text-sm font-bold">{profile.parentBusinessName ?? profile.businessName}</p>
+                  <p className="text-xs text-[var(--muted)]">{profile.parentBusinessCity ?? profile.city}</p>
                 </div>
               </div>
             </div>
@@ -121,9 +122,11 @@ export function ProviderProfilePage({ profile }: { profile: Profile }) {
               {profile.studio && (
                 <span className="rounded-full bg-[#F0FFF4] px-2.5 py-1 text-xs font-semibold text-emerald-600">Studio</span>
               )}
-              {profile.providerType === "FREELANCER" && (
+              {profile.parentBusinessName ? (
+                <span className="rounded-full bg-[#F0FFF4] px-2.5 py-1 text-xs font-semibold text-emerald-600">Agent</span>
+              ) : profile.providerType === "FREELANCER" ? (
                 <span className="rounded-full bg-[#FFF8E7] px-2.5 py-1 text-xs font-semibold text-amber-600">Freelancer</span>
-              )}
+              ) : null}
             </div>
 
             {/* Member since */}

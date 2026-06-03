@@ -14,7 +14,7 @@ async function resolveAgent(handleParam: string) {
 
   const business = await prisma.providerProfile.findUnique({
     where: { handle: `@${tenantSlug}` },
-    select: { id: true, businessName: true }
+    select: { id: true, businessName: true, city: true }
   });
   if (!business) return null;
 
@@ -47,12 +47,14 @@ export default async function Page({ params }: { params: Promise<{ handle: strin
   const { handle } = await params;
   const resolved = await resolveAgent(handle);
   if (!resolved) notFound();
-  const { agent } = resolved;
+  const { agent, business } = resolved;
 
   return (
     <ProviderProfilePage
       profile={{
         id: agent.id,
+        parentBusinessName: business.businessName,
+        parentBusinessCity: business.city,
         handle: agent.handle,
         businessName: agent.businessName,
         name: agent.user.name,
