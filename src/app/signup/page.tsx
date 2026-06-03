@@ -237,7 +237,7 @@ export default function SignupPage() {
               )}>
                 {isFreelancer && (
                   <span className="flex items-center border-r border-[#E8E0DC] bg-white px-3 text-sm font-semibold text-[#7A6C6E] whitespace-nowrap">
-                    freelancers.glowith.co.za/
+                    freelancer.glowith.co.za/
                   </span>
                 )}
                 <input
@@ -265,7 +265,7 @@ export default function SignupPage() {
                 <p className="mt-1 text-xs font-semibold text-emerald-600">
                   ✓ Available — your {isFreelancer ? "profile" : "studio"} will be at{" "}
                   {isFreelancer
-                    ? `freelancers.glowith.co.za/${form.handle.replace("@", "")}`
+                    ? `freelancer.glowith.co.za/${form.handle.replace("@", "")}`
                     : `${form.handle.replace("@", "")}.glowith.co.za`}
                 </p>
               )}

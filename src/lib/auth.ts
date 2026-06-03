@@ -83,10 +83,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                 where: { id: profile.parentBusinessId },
                 select: { handle: true }
               });
-              tenantSlug = biz?.handle.replace("@", "") ?? "freelancers";
+              tenantSlug = biz?.handle.replace("@", "") ?? "freelancer";
             } else {
               // Standalone freelancer
-              tenantSlug = "freelancers";
+              tenantSlug = "freelancer";
             }
           }
 

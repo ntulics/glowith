@@ -6,7 +6,7 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
 // Tenants that can never be deleted
-const PROTECTED_HANDLES = new Set(["@demo", "@glowith_demo", "@duvha_demo", "@glowith", "@admin", "@freelancers"]);
+const PROTECTED_HANDLES = new Set(["@demo", "@glowith_demo", "@duvha_demo", "@glowith", "@admin", "@freelancer", "@freelancers"]);
 const PROTECTED_BUSINESS_NAMES = new Set(["Glowith Admin", "Freelancers"]);
 
 type Provider = {

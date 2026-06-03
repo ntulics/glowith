@@ -11,8 +11,8 @@ function getClient() {
 
 /**
  * Blob path convention:
- *  Freelancer:       freelancers/{profileId}/profile/{filename}
- *                    freelancers/{profileId}/portfolio/{filename}
+ *  Freelancer:       freelancer/{profileId}/profile/{filename}
+ *                    freelancer/{profileId}/portfolio/{filename}
  *  Business:         {businessId}/profile/{filename}
  *                    {businessId}/portfolio/{filename}
  *  Business agent:   {businessId}/agents/{agentId}/profile/{filename}
@@ -34,8 +34,8 @@ export function getBlobPath(opts: {
     // Agent within a business
     return `${parentBusinessId}/agents/${profileId}/${folder}/${filename}`;
   }
-  // Standalone freelancer — shared freelancers tenant
-  return `freelancers/${profileId}/${folder}/${filename}`;
+  // Standalone freelancer — shared freelancer tenant
+  return `freelancer/${profileId}/${folder}/${filename}`;
 }
 
 export async function uploadBlob(blobPath: string, data: Buffer, contentType: string): Promise<string> {

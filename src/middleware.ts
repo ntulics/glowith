@@ -14,11 +14,11 @@ export function middleware(request: NextRequest) {
   const slug = parts[0];
   const url = request.nextUrl.clone();
 
-  // ── freelancers.glowith.co.za ──────────────────────────────────────────────
+  // ── freelancer.glowith.co.za ───────────────────────────────────────────────
   // /dashboard, /login, /api → pass through with slug header
   // /[handle]               → rewrite to public provider profile page
   // /                       → rewrite to apex marketplace (discovery page)
-  if (slug === "freelancers") {
+  if (slug === "freelancer") {
     if (
       url.pathname.startsWith("/dashboard") ||
       url.pathname.startsWith("/login") ||
@@ -26,16 +26,16 @@ export function middleware(request: NextRequest) {
       url.pathname.startsWith("/api")
     ) {
       const res = NextResponse.next();
-      res.headers.set("x-tenant-slug", "freelancers");
+      res.headers.set("x-tenant-slug", "freelancer");
       return res;
     }
 
     const segments = url.pathname.split("/").filter(Boolean);
     if (segments.length === 1) {
-      // freelancers.glowith.co.za/naledi → public provider profile
+      // freelancer.glowith.co.za/naledi → public provider profile
       url.pathname = `/provider/@${segments[0]}`;
       const res = NextResponse.rewrite(url);
-      res.headers.set("x-tenant-slug", "freelancers");
+      res.headers.set("x-tenant-slug", "freelancer");
       return res;
     }
 

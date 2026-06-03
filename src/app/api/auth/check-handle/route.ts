@@ -10,6 +10,12 @@ export async function GET(request: Request) {
     return NextResponse.json({ available: false, reason: "invalid" });
   }
 
+  // Always-reserved slugs — blocked from public registration regardless of DB seed
+  const ALWAYS_RESERVED = new Set(["freelancer", "freelancers", "admin", "glowith", "support", "api", "www", "app", "dashboard"]);
+  if (ALWAYS_RESERVED.has(handle.replace("@", "").toLowerCase())) {
+    return NextResponse.json({ available: false, reason: "restricted" });
+  }
+
   const [taken, restricted] = await Promise.all([
     prisma.providerProfile.findUnique({ where: { handle }, select: { id: true } }),
     prisma.restrictedName.findFirst({

@@ -10,9 +10,9 @@ async function computeTenantSlug(profile: { handle: string; providerType: string
   if (profile.providerType === "BUSINESS") return profile.handle.replace("@", "");
   if (profile.parentBusinessId) {
     const biz = await prisma.providerProfile.findUnique({ where: { id: profile.parentBusinessId }, select: { handle: true } });
-    return biz?.handle.replace("@", "") ?? "freelancers";
+    return biz?.handle.replace("@", "") ?? "freelancer";
   }
-  return "freelancers";
+  return "freelancer";
 }
 
 export async function GET(request: NextRequest) {

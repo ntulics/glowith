@@ -25,8 +25,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   // ── Tenant guard ───────────────────────────────────────────────────────────
   if (tenantSlug && user.role !== "ADMIN") {
-    if (tenantSlug === "freelancers") {
-      // Only standalone freelancers may access freelancers.*
+    if (tenantSlug === "freelancer") {
+      // Only standalone freelancers may access freelancer.*
       if (profile.providerType !== "FREELANCER" || profile.parentBusinessId) {
         redirect("/login?error=not_a_freelancer");
       }

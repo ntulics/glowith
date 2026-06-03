@@ -304,7 +304,7 @@ export async function POST() {
   }
 
   // ── Seed restricted names (platform-reserved slugs) ──────────────────────
-  for (const reserved of ["freelancers", "admin", "glowith", "support", "api", "www", "app", "dashboard"]) {
+  for (const reserved of ["freelancer", "freelancers", "admin", "glowith", "support", "api", "www", "app", "dashboard"]) {
     await prisma.restrictedName.upsert({
       where: { name: reserved },
       update: {},
