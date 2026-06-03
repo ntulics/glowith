@@ -365,7 +365,7 @@ function TopBar({ searchInTopBar, searchProps, providers, areaName }: { searchIn
               width={121}
               height={34}
               className="h-[2.125rem] w-auto object-contain"
-              style={{ filter: "brightness(0) saturate(100%) invert(35%) sepia(65%) saturate(750%) hue-rotate(303deg) brightness(125%)" }}
+              style={{ filter: "brightness(0) saturate(100%) invert(27%) sepia(72%) saturate(820%) hue-rotate(308deg) brightness(106%)" }}
               onError={() => {}}
               priority
             />
@@ -463,7 +463,7 @@ function TopBar({ searchInTopBar, searchProps, providers, areaName }: { searchIn
                   width={100}
                   height={28}
                   className="h-7 w-auto object-contain"
-                  style={{ filter: "brightness(0) saturate(100%) invert(35%) sepia(65%) saturate(750%) hue-rotate(303deg) brightness(125%)" }}
+                  style={{ filter: "brightness(0) saturate(100%) invert(27%) sepia(72%) saturate(820%) hue-rotate(308deg) brightness(106%)" }}
                 />
                 <button onClick={() => setMobileMenuOpen(false)} className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--line)]">
                   <X className="h-4 w-4" />
@@ -1223,7 +1223,7 @@ function Footer() {
               width={110}
               height={31}
               className="h-8 w-auto object-contain"
-              style={{ filter: "brightness(0) saturate(100%) invert(35%) sepia(65%) saturate(750%) hue-rotate(303deg) brightness(125%)" }}
+              style={{ filter: "brightness(0) saturate(100%) invert(27%) sepia(72%) saturate(820%) hue-rotate(308deg) brightness(106%)" }}
             />
             <p className="mt-4 text-sm leading-6 text-[var(--muted)]">
               Glowith is South Africa's social beauty marketplace — connecting clients with top-rated hair, nail, makeup, and wellness professionals in their area.
