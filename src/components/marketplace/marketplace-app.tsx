@@ -208,7 +208,7 @@ export function MarketplaceApp() {
           .join(" ").toLowerCase().includes(value);
       const withinRadius = (distanceByProvider[provider.id] ?? 0) <= radiusKm;
       return categoryMatch && searchMatch && withinRadius;
-    });
+    }).sort((a, b) => (distanceByProvider[a.id] ?? a.distanceKm) - (distanceByProvider[b.id] ?? b.distanceKm));
   }, [category, displayProviders, distanceByProvider, radiusKm, query]);
 
   function openProvider(provider: Provider) {
@@ -233,7 +233,7 @@ export function MarketplaceApp() {
 
   return (
     <div className="min-h-screen bg-white">
-      <TopBar searchInTopBar={searchInTopBar} searchProps={searchProps} providers={displayProviders} />
+      <TopBar searchInTopBar={searchInTopBar} searchProps={searchProps} providers={displayProviders} areaName={areaName} />
 
       {/* Hero */}
       <HeroSection
@@ -244,7 +244,7 @@ export function MarketplaceApp() {
       />
 
       {/* Main discovery */}
-      <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pb-28 lg:pb-16">
+      <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pb-8 lg:pb-16">
 
         {/* Category pills */}
         <div className="flex gap-2 overflow-x-auto scroll-x py-7">
@@ -273,7 +273,8 @@ export function MarketplaceApp() {
             </span>
           </h2>
 
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {/* Desktop grid */}
+          <div className="hidden gap-5 sm:grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             <AnimatePresence initial={false}>
               {filteredProviders.map((provider) => (
                 <ProviderCard
@@ -284,6 +285,23 @@ export function MarketplaceApp() {
                 />
               ))}
             </AnimatePresence>
+          </div>
+
+          {/* Mobile card stack — cards stick and layer as you scroll */}
+          <div className="relative sm:hidden">
+            {filteredProviders.map((provider, index) => (
+              <div
+                key={provider.id}
+                className="sticky"
+                style={{ top: `calc(4.25rem + ${index * 6}px)`, zIndex: index + 1 }}
+              >
+                <ProviderCard
+                  provider={provider}
+                  isSelected={selectedProvider?.id === provider.id}
+                  onSelect={() => openProvider(provider)}
+                />
+              </div>
+            ))}
           </div>
 
           {filteredProviders.length === 0 && (
@@ -313,7 +331,7 @@ export function MarketplaceApp() {
         )}
       </AnimatePresence>
 
-      <MobileNav />
+      <Footer />
     </div>
   );
 }
@@ -331,81 +349,161 @@ type SearchBarProps = {
   onRadiusChange: (v: number) => void;
 };
 
-function TopBar({ searchInTopBar, searchProps, providers }: { searchInTopBar: boolean; searchProps: SearchBarProps; providers: Provider[] }) {
+function TopBar({ searchInTopBar, searchProps, providers, areaName }: { searchInTopBar: boolean; searchProps: SearchBarProps; providers: Provider[]; areaName: string | null }) {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   return (
-    <header className="sticky top-0 z-40 border-b border-[var(--line)]/60 bg-white/90 backdrop-blur-md">
-      {/* Use relative + absolute centering so nav is truly centred independent of logo/action widths */}
-      <div className="relative mx-auto flex h-[4.25rem] max-w-7xl items-center px-4 sm:px-6 lg:px-8">
+    <>
+      <header className="sticky top-0 z-40 border-b border-[var(--line)]/60 bg-white/90 backdrop-blur-md">
+        <div className="relative mx-auto flex h-[4.25rem] max-w-7xl items-center px-4 sm:px-6 lg:px-8">
 
-        {/* Logo — always left; full logo contains the icon, no separate icon needed */}
-        <div className="flex shrink-0 items-center">
-          <Image
-            src="/images/glowith-logo.png"
-            alt="Glowith"
-            width={121}
-            height={34}
-            className="h-[2.125rem] w-auto object-contain"
-            style={{ filter: "brightness(0) saturate(100%) invert(35%) sepia(65%) saturate(750%) hue-rotate(303deg) brightness(125%)" }}
-            onError={() => {}}
-            priority
-          />
+          {/* Logo */}
+          <div className="flex shrink-0 items-center">
+            <Image
+              src="/images/glowith-logo.png"
+              alt="Glowith"
+              width={121}
+              height={34}
+              className="h-[2.125rem] w-auto object-contain"
+              style={{ filter: "brightness(0) saturate(100%) invert(35%) sepia(65%) saturate(750%) hue-rotate(303deg) brightness(125%)" }}
+              onError={() => {}}
+              priority
+            />
+          </div>
+
+          {/* Desktop nav — absolutely centred, hidden when search active */}
+          <AnimatePresence>
+            {!searchInTopBar && (
+              <motion.nav
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-0.5 md:flex"
+                aria-label="Primary"
+              >
+                {["Discover", "Portfolio", "Bookings", "Inbox"].map((item) => (
+                  <a key={item} href={`#${item.toLowerCase()}`}
+                    className="rounded-lg px-3 py-2 text-sm font-semibold text-[var(--muted)] transition hover:text-[var(--ink)]">
+                    {item}
+                  </a>
+                ))}
+              </motion.nav>
+            )}
+          </AnimatePresence>
+
+          {/* Compact search — desktop only (md+), absolutely centred */}
+          <AnimatePresence>
+            {searchInTopBar && (
+              <motion.div
+                initial={{ opacity: 0, scaleX: 0.95 }}
+                animate={{ opacity: 1, scaleX: 1 }}
+                exit={{ opacity: 0, scaleX: 0.95 }}
+                className="absolute left-1/2 hidden w-full max-w-xl -translate-x-1/2 px-2 md:block lg:max-w-2xl"
+              >
+                <CompactSearchBar {...searchProps} providers={providers} />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Actions */}
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            <button className="focus-ring flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--line)] transition hover:bg-[var(--background)]" aria-label="Notifications">
+              <Bell className="h-4 w-4 text-[var(--muted)]" />
+            </button>
+            {!searchInTopBar && (
+              <button className="focus-ring hidden h-9 items-center gap-1.5 rounded-xl border border-[var(--line)] px-3 text-sm font-semibold transition hover:bg-[var(--background)] sm:inline-flex">
+                List your business
+              </button>
+            )}
+            <a
+              href="/login"
+              className="focus-ring hidden h-9 items-center gap-2 rounded-xl bg-[var(--brand)] px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--brand-dark)] sm:inline-flex"
+            >
+              <UserRoundPlus className="h-4 w-4" />
+              Log in
+            </a>
+            {/* Hamburger — mobile only */}
+            <button
+              onClick={() => setMobileMenuOpen(true)}
+              className="focus-ring flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--line)] transition hover:bg-[var(--background)] sm:hidden"
+              aria-label="Open menu"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+              </svg>
+            </button>
+          </div>
         </div>
+      </header>
 
-        {/* Nav — absolutely centred, hidden when search is active */}
-        <AnimatePresence>
-          {!searchInTopBar && (
-            <motion.nav
+      {/* Mobile menu overlay */}
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <>
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.15 }}
-              className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-0.5 md:flex"
-              aria-label="Primary"
-            >
-              {["Discover", "Portfolio", "Bookings", "Inbox"].map((item) => (
-                <a key={item} href={`#${item.toLowerCase()}`}
-                  className="rounded-lg px-3 py-2 text-sm font-semibold text-[var(--muted)] transition hover:text-[var(--ink)]">
-                  {item}
-                </a>
-              ))}
-            </motion.nav>
-          )}
-        </AnimatePresence>
-
-        {/* Compact search bar — centred with constrained max-width */}
-        <AnimatePresence>
-          {searchInTopBar && (
+              onClick={() => setMobileMenuOpen(false)}
+              className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm sm:hidden"
+            />
             <motion.div
-              initial={{ opacity: 0, scaleX: 0.95 }}
-              animate={{ opacity: 1, scaleX: 1 }}
-              exit={{ opacity: 0, scaleX: 0.95 }}
-              className="absolute left-1/2 w-full max-w-md -translate-x-1/2 px-2 sm:max-w-xl lg:max-w-2xl"
+              initial={{ x: "100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "100%" }}
+              transition={{ type: "spring", damping: 28, stiffness: 300 }}
+              className="fixed inset-y-0 right-0 z-50 flex w-72 flex-col bg-white shadow-2xl sm:hidden"
             >
-              <CompactSearchBar {...searchProps} providers={providers} />
-            </motion.div>
-          )}
-        </AnimatePresence>
+              {/* Menu header */}
+              <div className="flex items-center justify-between border-b border-[var(--line)] px-5 py-4">
+                <Image
+                  src="/images/glowith-logo.png"
+                  alt="Glowith"
+                  width={100}
+                  height={28}
+                  className="h-7 w-auto object-contain"
+                  style={{ filter: "brightness(0) saturate(100%) invert(35%) sepia(65%) saturate(750%) hue-rotate(303deg) brightness(125%)" }}
+                />
+                <button onClick={() => setMobileMenuOpen(false)} className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--line)]">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
 
-        {/* Actions — always right */}
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          <button className="focus-ring flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--line)] transition hover:bg-[var(--background)]" aria-label="Notifications">
-            <Bell className="h-4 w-4 text-[var(--muted)]" />
-          </button>
-          {!searchInTopBar && (
-            <button className="focus-ring hidden h-9 items-center gap-1.5 rounded-xl border border-[var(--line)] px-3 text-sm font-semibold transition hover:bg-[var(--background)] sm:inline-flex">
-              List your business
-            </button>
-          )}
-          <a
-            href="/login"
-            className="focus-ring hidden h-9 items-center gap-2 rounded-xl bg-[var(--brand)] px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--brand-dark)] sm:inline-flex"
-          >
-            <UserRoundPlus className="h-4 w-4" />
-            Log in
-          </a>
-        </div>
-      </div>
-    </header>
+              {/* Location badge */}
+              {areaName && (
+                <div className="flex items-center gap-2 border-b border-[var(--line)] px-5 py-3">
+                  <MapPin className="h-3.5 w-3.5 text-[var(--brand)]" />
+                  <span className="text-xs font-semibold text-[var(--muted)]">{areaName}</span>
+                </div>
+              )}
+
+              {/* Nav links */}
+              <nav className="flex flex-col gap-1 p-4">
+                {["Discover", "Portfolio", "Bookings", "Inbox"].map((item) => (
+                  <a key={item} href={`#${item.toLowerCase()}`}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-[var(--ink)] transition hover:bg-[var(--background)]">
+                    {item}
+                  </a>
+                ))}
+              </nav>
+
+              {/* Bottom actions */}
+              <div className="mt-auto space-y-3 border-t border-[var(--line)] p-5">
+                <button className="w-full rounded-xl border border-[var(--line)] py-2.5 text-sm font-semibold hover:bg-[var(--background)]">
+                  List your business
+                </button>
+                <a href="/login" className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] py-2.5 text-sm font-semibold text-white hover:bg-[var(--brand-dark)]">
+                  <UserRoundPlus className="h-4 w-4" />
+                  Log in
+                </a>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 
@@ -1108,24 +1206,99 @@ function ProviderDrawer({
   );
 }
 
-/* ─── Mobile nav ───────────────────────────────────────────── */
+/* ─── Footer ───────────────────────────────────────────────── */
 
-function MobileNav() {
+function Footer() {
+  const year = new Date().getFullYear();
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--line)] bg-white/95 px-4 py-2 backdrop-blur-md lg:hidden">
-      <div className="mx-auto grid max-w-md grid-cols-4 gap-1">
-        {[
-          [Search, "Discover"],
-          [Heart, "Saved"],
-          [CalendarDays, "Book"],
-          [MessageCircle, "Inbox"]
-        ].map(([Icon, label]) => (
-          <button key={label as string} className="focus-ring flex h-12 flex-col items-center justify-center gap-1 rounded-xl text-[10px] font-bold text-[var(--muted)] transition hover:text-[var(--ink)]">
-            <Icon className="h-5 w-5" />
-            {label as string}
-          </button>
-        ))}
+    <footer className="border-t border-[var(--line)] bg-[#fdfaf9] px-4 pt-14 pb-10 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl">
+        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
+
+          {/* Brand */}
+          <div className="lg:col-span-1">
+            <Image
+              src="/images/glowith-logo.png"
+              alt="Glowith"
+              width={110}
+              height={31}
+              className="h-8 w-auto object-contain"
+              style={{ filter: "brightness(0) saturate(100%) invert(35%) sepia(65%) saturate(750%) hue-rotate(303deg) brightness(125%)" }}
+            />
+            <p className="mt-4 text-sm leading-6 text-[var(--muted)]">
+              Glowith is South Africa's social beauty marketplace — connecting clients with top-rated hair, nail, makeup, and wellness professionals in their area.
+            </p>
+            <p className="mt-6 text-xs text-[var(--muted)]">
+              © {year} Glowith. All rights reserved.<br />
+              All other trademarks are the property of their respective owners.
+            </p>
+          </div>
+
+          {/* About Glowith */}
+          <div>
+            <h3 className="text-xs font-black uppercase tracking-widest text-[var(--ink)]">About Glowith</h3>
+            <ul className="mt-4 space-y-3">
+              {[
+                ["About us", "#about"],
+                ["Contact us", "#contact"],
+                ["Help & Support", "#support"],
+                ["Blog", "#blog"],
+                ["Careers", "#careers"],
+                ["List your business", "#list"]
+              ].map(([label, href]) => (
+                <li key={label}>
+                  <a href={href} className="text-sm text-[var(--muted)] transition hover:text-[var(--brand)]">{label}</a>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Legal */}
+          <div>
+            <h3 className="text-xs font-black uppercase tracking-widest text-[var(--ink)]">Legal</h3>
+            <ul className="mt-4 space-y-3">
+              {[
+                ["Privacy Policy", "#privacy"],
+                ["Terms of Service", "#terms"],
+                ["Terms of Use", "#terms-use"],
+                ["Cookie Policy", "#cookies"],
+                ["Accessibility", "#accessibility"]
+              ].map(([label, href]) => (
+                <li key={label}>
+                  <a href={href} className="text-sm text-[var(--muted)] transition hover:text-[var(--brand)]">{label}</a>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Connect */}
+          <div>
+            <h3 className="text-xs font-black uppercase tracking-widest text-[var(--ink)]">Connect</h3>
+            <ul className="mt-4 space-y-3">
+              {[
+                ["Instagram", "https://instagram.com"],
+                ["TikTok", "https://tiktok.com"],
+                ["Facebook", "https://facebook.com"],
+                ["WhatsApp", "https://wa.me"]
+              ].map(([label, href]) => (
+                <li key={label}>
+                  <a href={href} target="_blank" rel="noopener noreferrer" className="text-sm text-[var(--muted)] transition hover:text-[var(--brand)]">{label}</a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+
+        {/* Bottom bar */}
+        <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-[var(--line)] pt-6 sm:flex-row">
+          <p className="text-xs text-[var(--muted)]">
+            Made with love in South Africa 🇿🇦
+          </p>
+          <p className="text-center text-xs text-[var(--muted)]">
+            © {year} Glowith (Pty) Ltd. All rights reserved. All other trademarks are the property of their respective owners.
+          </p>
+        </div>
       </div>
-    </nav>
+    </footer>
   );
 }
