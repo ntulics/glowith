@@ -52,6 +52,13 @@ export function middleware(request: NextRequest) {
     return res;
   }
 
+  // lumegroup.glowith.co.za/team/naledi → public agent profile within this business
+  if (url.pathname.startsWith("/team/")) {
+    const res = NextResponse.next();
+    res.headers.set("x-tenant-slug", slug);
+    return res;
+  }
+
   // Subdomain root → tenant dashboard
   url.pathname = "/dashboard";
   const res = NextResponse.rewrite(url);

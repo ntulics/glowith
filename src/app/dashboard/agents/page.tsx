@@ -26,6 +26,7 @@ export default async function AgentsPage() {
   return (
     <AgentsView
       businessName={profile.businessName}
+      businessHandle={profile.handle}
       providerType={profile.providerType}
       businessId={profile.id}
       agents={profile.agents.map((a) => ({

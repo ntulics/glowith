@@ -11,6 +11,9 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ agen
   const { agentId } = await params;
   const agent = await prisma.providerProfile.findUnique({ where: { id: agentId } });
   if (!agent || agent.parentBusinessId !== profile.id) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  // Detach from the business. The agent keeps their own ProviderProfile —
+  // services, portfolio, bio, handle and bookings all stay with them — and
+  // becomes an independent freelancer at freelancer.glowith.co.za/{handle}.
   await prisma.providerProfile.update({ where: { id: agentId }, data: { parentBusinessId: null } });
   return NextResponse.json({ ok: true });
 }

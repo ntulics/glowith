@@ -23,9 +23,10 @@ function CopyBtn({ text, label }: { text: string; label?: string }) {
   );
 }
 
-export function AgentsView({ businessName, providerType, businessId, agents: initial }: {
-  businessName: string; providerType: string; businessId: string; agents: Agent[];
+export function AgentsView({ businessName, businessHandle, providerType, businessId, agents: initial }: {
+  businessName: string; businessHandle: string; providerType: string; businessId: string; agents: Agent[];
 }) {
+  const businessSlug = businessHandle.replace("@", "");
   const [agents, setAgents] = useState(initial);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviting, setInviting] = useState(false);
@@ -184,14 +185,19 @@ export function AgentsView({ businessName, providerType, businessId, agents: ini
                     {/* Remove */}
                     {isBusiness && (
                       removeConfirm === agent.id ? (
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => removeAgent(agent.id)} disabled={removing === agent.id}
-                            className="rounded-lg bg-red-50 px-2 py-1 text-xs font-bold text-red-600 hover:bg-red-100 disabled:opacity-50">
-                            {removing === agent.id ? "…" : "Remove"}
-                          </button>
-                          <button onClick={() => setRemoveConfirm(null)} className="rounded-lg p-1 text-[var(--muted)] hover:bg-[var(--background)]">
-                            <X className="h-3 w-3" />
-                          </button>
+                        <div className="flex flex-col items-end gap-1">
+                          <p className="max-w-[160px] text-right text-[10px] leading-tight text-[var(--muted)]">
+                            They keep their profile, services &amp; portfolio and become an independent freelancer.
+                          </p>
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => removeAgent(agent.id)} disabled={removing === agent.id}
+                              className="rounded-lg bg-red-50 px-2 py-1 text-xs font-bold text-red-600 hover:bg-red-100 disabled:opacity-50">
+                              {removing === agent.id ? "…" : "Remove"}
+                            </button>
+                            <button onClick={() => setRemoveConfirm(null)} className="rounded-lg p-1 text-[var(--muted)] hover:bg-[var(--background)]">
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
                         </div>
                       ) : (
                         <button onClick={() => setRemoveConfirm(agent.id)}
@@ -215,6 +221,15 @@ export function AgentsView({ businessName, providerType, businessId, agents: ini
                   <div className="mt-3 flex items-center justify-between border-t border-[var(--line)] pt-3 text-xs text-[var(--muted)]">
                     <span className="font-mono">{agent.handle}</span>
                     <span>Joined {format(new Date(agent.joinedAt), "d MMM yyyy")}</span>
+                  </div>
+
+                  {/* Public team page URL */}
+                  <div className="mt-2 flex items-center gap-2 rounded-lg bg-[var(--background)] px-2 py-1.5">
+                    <Link2 className="h-3 w-3 shrink-0 text-[var(--muted)]" />
+                    <code className="flex-1 truncate text-[11px] text-[var(--ink)]">
+                      {businessSlug}.glowith.co.za/team/{agent.handle.replace("@", "")}
+                    </code>
+                    <CopyBtn text={`https://${businessSlug}.glowith.co.za/team/${agent.handle.replace("@", "")}`} />
                   </div>
                 </div>
               </div>
