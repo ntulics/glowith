@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { format } from "date-fns";
-import { CalendarDays, Clock3, Heart, MapPin, Menu, Share2, Star, UserCheck, UserPlus, X } from "lucide-react";
+import { ArrowLeft, CalendarDays, Clock3, Heart, MapPin, Menu, Share2, Star, UserCheck, UserPlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VerifiedBadge } from "@/components/verified-badge";
 import { BookingFlow } from "@/components/marketplace/booking-flow";
@@ -98,6 +98,12 @@ export function ProviderProfilePage({ profile }: { profile: Profile }) {
   function scrollTo(id: string) {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
   }
+  // "Back to Glowith" → the apex marketplace (a business subdomain root would loop here)
+  function backToGlowith() {
+    const host = window.location.host;
+    if (host.endsWith(".glowith.co.za")) window.location.href = "https://glowith.co.za/";
+    else window.location.href = "/";
+  }
   function requireSignIn(): boolean {
     window.location.href = `/login?callbackUrl=${encodeURIComponent(window.location.pathname)}`;
     return true;
@@ -123,10 +129,11 @@ export function ProviderProfilePage({ profile }: { profile: Profile }) {
     <div className="min-h-screen bg-[var(--background)]">
       {/* ── Sticky top bar ── */}
       <header className="sticky top-0 z-40 border-b border-[var(--line)]/60 bg-white/90 backdrop-blur-md">
-        <div className="mx-auto flex h-[4.25rem] max-w-6xl items-center gap-4 px-4 sm:px-6">
-          <Link href="/" aria-label="Glowith" className="shrink-0">
+        <div className="mx-auto flex h-[4.25rem] max-w-[90rem] items-center gap-3 px-4 sm:px-6">
+          <button onClick={backToGlowith} aria-label="Back to Glowith" className="flex shrink-0 items-center gap-2 text-[var(--muted)] hover:text-[var(--ink)]">
+            <ArrowLeft className="h-4 w-4" />
             <span role="img" aria-label="Glowith" className="logo-adaptive h-6" />
-          </Link>
+          </button>
 
           {/* Docked business section nav */}
           {docked && (

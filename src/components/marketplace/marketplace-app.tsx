@@ -19,7 +19,8 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { providers } from "@/domain/seed";
+import { useRouter } from "next/navigation";
+import { providers as seedProviders } from "@/domain/seed";
 import type { Provider, ServiceCategory } from "@/domain/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -67,6 +68,15 @@ function getHeroHeadline(areaName: string | null): { headline: ReactNode; subtex
 }
 
 export function MarketplaceApp() {
+  const router = useRouter();
+  // Real DB providers (falls back to seed data until/if the API responds empty)
+  const [providers, setProviders] = useState<Provider[]>(seedProviders);
+  useEffect(() => {
+    fetch("/api/providers/list")
+      .then((r) => r.json())
+      .then((d) => { if (Array.isArray(d.providers) && d.providers.length) setProviders(d.providers); })
+      .catch(() => {});
+  }, []);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<ServiceCategory | "All">("All");
   const [locationQuery, setLocationQuery] = useState("Detecting location…");
@@ -166,7 +176,7 @@ export function MarketplaceApp() {
       distances[p.id] = haversineKm(userLocation.lat, userLocation.lng, p.location.lat, p.location.lng);
     }
     setDistanceByProvider(distances);
-  }, [userLocation.lat, userLocation.lng]);
+  }, [userLocation.lat, userLocation.lng, providers]);
 
   // Track scroll progress for back-to-top button
   useEffect(() => {
@@ -198,7 +208,7 @@ export function MarketplaceApp() {
         ? Math.round(distanceByProvider[provider.id] * 10) / 10
         : provider.distanceKm
     })),
-    [distanceByProvider]
+    [distanceByProvider, providers]
   );
 
   const filteredProviders = useMemo(() => {
@@ -223,8 +233,8 @@ export function MarketplaceApp() {
   }, [category, displayProviders, distanceByProvider, radiusKm, query]);
 
   function openProvider(provider: Provider) {
-    setSelectedProvider(provider);
-    setSelectedServiceId(provider.services[0].id);
+    // Navigate to the full business/freelancer profile page
+    router.push(`/provider/${provider.handle.replace("@", "")}`);
   }
 
   function closeProvider() {
