@@ -8,10 +8,12 @@ import {
   CheckCheck, BookOpen, Inbox
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { LocationPicker } from "@/components/dashboard/location-picker";
 
 type Profile = {
   id: string; businessName: string; handle: string;
   bio: string; city: string; category: string; mobile: boolean; studio: boolean;
+  latitude?: number; longitude?: number;
 };
 
 /* ── How-to guide content ────────────────────────────────────────── */
@@ -367,6 +369,16 @@ export function SettingsView({
               ))}
             </div>
           </div>
+          {!isAgent && (
+            <div>
+              <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">Pin your exact location</label>
+              <LocationPicker
+                lat={(form as any).latitude ?? 0}
+                lng={(form as any).longitude ?? 0}
+                onChange={(la, lo) => { setForm((f) => ({ ...f, latitude: la, longitude: lo })); setSaved(false); }}
+              />
+            </div>
+          )}
         </div>
         <SaveBar loading={loading} saved={saved} />
       </form>

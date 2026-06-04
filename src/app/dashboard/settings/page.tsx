@@ -26,7 +26,9 @@ export default async function SettingsPage() {
         city: profile.city,
         category: profile.category,
         mobile: profile.mobile,
-        studio: profile.studio
+        studio: profile.studio,
+        latitude: profile.latitude,
+        longitude: profile.longitude
       }}
     />
   );

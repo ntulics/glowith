@@ -23,9 +23,12 @@ export async function PUT(request: Request) {
     studio: body.studio
   };
 
-  // When the location text changes, geocode it to real coordinates so the
-  // provider shows on the map at the right spot (persisted, so it's stable).
-  if (body.city && body.city !== existing?.city) {
+  // Exact pin from the map picker takes precedence.
+  if (typeof body.latitude === "number" && typeof body.longitude === "number" && (body.latitude !== 0 || body.longitude !== 0)) {
+    data.latitude = body.latitude;
+    data.longitude = body.longitude;
+  } else if (body.city && body.city !== existing?.city) {
+    // Otherwise geocode the location text when it changes.
     const geo = await geocodeQuery(body.city);
     if (geo) {
       data.latitude = geo.lat;
