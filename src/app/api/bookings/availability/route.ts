@@ -17,7 +17,7 @@ export async function GET(request: Request) {
   const bookings = await prisma.booking.findMany({
     where: {
       providerProfileId,
-      status: { not: "CANCELLED" },
+      status: "CONFIRMED", // only confirmed (paid/claimed) bookings reserve a slot
       startsAt: { gte: dayStart, lte: dayEnd }
     },
     select: { startsAt: true, service: { select: { durationMinutes: true } } }

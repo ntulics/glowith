@@ -5,8 +5,8 @@ export const metadata: Metadata = {
   title: "Glowith | Social Beauty Marketplace",
   description: "Discover beauty providers, browse portfolios, chat, book, and manage deposits in one mobile-first marketplace.",
   icons: {
-    icon: "/images/glowith-icon.png",
-    apple: "/images/glowith-icon.png"
+    icon: "/api/brand/icon",
+    apple: "/api/brand/icon"
   }
 };
 

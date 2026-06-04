@@ -28,7 +28,7 @@ export async function POST(request: Request) {
   const dayStart = new Date(start); dayStart.setHours(0, 0, 0, 0);
   const dayEnd = new Date(start); dayEnd.setHours(23, 59, 59, 999);
   const sameDay = await prisma.booking.findMany({
-    where: { providerProfileId, status: { not: "CANCELLED" }, startsAt: { gte: dayStart, lte: dayEnd } },
+    where: { providerProfileId, status: "CONFIRMED", startsAt: { gte: dayStart, lte: dayEnd } },
     select: { startsAt: true, service: { select: { durationMinutes: true } } }
   });
   const clash = sameDay.some((b) => {

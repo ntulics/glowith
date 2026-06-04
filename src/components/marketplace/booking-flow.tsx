@@ -52,7 +52,7 @@ export function BookingFlow({
   const [couponError, setCouponError] = useState("");
   const [applyingCoupon, setApplyingCoupon] = useState(false);
   // Inline payment (Paystack popup)
-  const [payInfo, setPayInfo] = useState<{ reference: string; publicKey: string; email: string; amountCents: number } | null>(null);
+  const [payInfo, setPayInfo] = useState<{ bookingId: string; reference: string; publicKey: string; email: string; amountCents: number } | null>(null);
   const [payError, setPayError] = useState("");
   const payMountedRef = useRef(false);
 
@@ -108,7 +108,14 @@ export function BookingFlow({
             setStep("done");
           },
           onError: () => setPayError("Payment failed — please try again"),
-          onCancel: () => {}
+          onCancel: async () => {
+            // Release the held slot: a booking is only kept once payment is claimed.
+            await fetch(`/api/bookings/${payInfo!.bookingId}`, { method: "DELETE" });
+            payMountedRef.current = false;
+            setPayInfo(null);
+            setPayError("");
+            setStep("review");
+          }
         });
       } catch {
         setPayError("Could not start the payment");
@@ -189,7 +196,7 @@ export function BookingFlow({
         if (!prep.ok) throw new Error(pd.error ?? "Payment could not be started");
         if (pd.simulated) { setStep("done"); return; }
         payMountedRef.current = false;
-        setPayInfo({ reference: pd.reference, publicKey: pd.publicKey, email: pd.email, amountCents: pd.amountCents });
+        setPayInfo({ bookingId: d.booking.id, reference: pd.reference, publicKey: pd.publicKey, email: pd.email, amountCents: pd.amountCents });
         setStep("pay");
         return;
       }
@@ -199,6 +206,16 @@ export function BookingFlow({
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function releaseAndBack() {
+    if (payInfo?.bookingId) {
+      await fetch(`/api/bookings/${payInfo.bookingId}`, { method: "DELETE" });
+    }
+    payMountedRef.current = false;
+    setPayInfo(null);
+    setPayError("");
+    setStep("review");
   }
 
   async function applyCoupon() {
@@ -366,11 +383,17 @@ export function BookingFlow({
                 </Section>
               )}
 
-              {step === "pay" && (
-                <Section title="Pay your deposit" onBack={() => setStep("review")}>
-                  <p className="mb-4 text-sm text-[var(--muted)]">
-                    Pay the {service ? ZAR(service.depositCents) : ""} deposit to confirm your appointment. Apple Pay
-                    appears automatically on supported devices.
+              {step === "pay" && service && date && slot && (
+                <Section title="Pay your deposit" onBack={releaseAndBack}>
+                  {/* Booking summary, shown again right before payment */}
+                  <div className="mb-4 space-y-2 rounded-2xl border border-[var(--line)] bg-white p-4">
+                    <Row label="Service" value={service.name} />
+                    <Row label="When" value={`${date.toLocaleDateString("en-ZA", { weekday: "long", day: "numeric", month: "long" })} at ${slot}`} />
+                    {appliedCode && <Row label={`Coupon ${appliedCode}`} value={`– ${ZAR(discountCents)}`} highlight />}
+                    <Row label="Deposit due now" value={ZAR(service.depositCents)} highlight />
+                  </div>
+                  <p className="mb-3 text-xs text-[var(--muted)]">
+                    Your slot is confirmed only once the deposit is paid. Apple Pay appears automatically on supported devices.
                   </p>
                   {/* Paystack injects the Apple Pay button here */}
                   <div id="paystack-apple-pay" className="min-h-[48px]" />
