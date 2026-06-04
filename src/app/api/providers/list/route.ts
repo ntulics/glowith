@@ -33,9 +33,14 @@ export async function GET() {
     if ((lat === 0 && lng === 0) && p.city) {
       const g = await geocodeQuery(p.city);
       if (g) {
-        const jitter = () => (Math.random() - 0.5) * 0.012; // ~±0.6km
-        lat = g.lat + jitter();
-        lng = g.lng + jitter();
+        // Deterministic offset from the id so same-city providers don't overlap
+        // but never shift between loads.
+        let h = 0;
+        for (let k = 0; k < p.id.length; k++) h = (h * 31 + p.id.charCodeAt(k)) | 0;
+        const offLat = ((h % 1000) / 1000 - 0.5) * 0.01;     // ~±0.55km
+        const offLng = (((h >> 10) % 1000) / 1000 - 0.5) * 0.01;
+        lat = g.lat + offLat;
+        lng = g.lng + offLng;
       }
     }
 
