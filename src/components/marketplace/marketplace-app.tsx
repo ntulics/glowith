@@ -107,20 +107,10 @@ export function MarketplaceApp() {
         let area: string | null = null;
 
         try {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=18&addressdetails=1`,
-            { headers: { "Accept-Language": "en" } }
-          );
+          const res = await fetch(`/api/maps/reverse?lat=${lat}&lng=${lng}`);
           if (res.ok) {
             const data = await res.json();
-            const addr = data.address ?? {};
-            const bad = (v: unknown): boolean =>
-              typeof v !== "string" || /\bward\s*\d+/i.test(v) || /^\d/.test(v); // skip "Ward 19", numeric
-            const pick = (...vals: unknown[]) => vals.find((v) => !bad(v)) as string | undefined;
-            // Suburb-level first, then the broader city/town
-            const suburb = pick(addr.suburb, addr.neighbourhood, addr.quarter, addr.hamlet, addr.city_district, addr.residential);
-            const city = pick(addr.city, addr.town, addr.village, addr.municipality, addr.county);
-            area = suburb && city && suburb !== city ? `${suburb}, ${city}` : (suburb ?? city ?? null);
+            area = data.area ?? null;
             label = area ?? "Current location";
           }
         } catch {
@@ -146,19 +136,11 @@ export function MarketplaceApp() {
     geocodeTimer.current = setTimeout(async () => {
       if (!value || value === "Current location" || value === "Detecting location…") return;
       try {
-        const res = await fetch(
-          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(value)}&format=json&limit=1&countrycodes=za`,
-          { headers: { "Accept-Language": "en" } }
-        );
+        const res = await fetch(`/api/maps/forward?q=${encodeURIComponent(value)}`);
         if (res.ok) {
           const data = await res.json();
-          if (data[0]) {
-            setUserLocation({
-              label: value,
-              areaName: value,
-              lat: parseFloat(data[0].lat),
-              lng: parseFloat(data[0].lon)
-            });
+          if (data.lat != null && data.lng != null) {
+            setUserLocation({ label: value, areaName: value, lat: data.lat, lng: data.lng });
           }
         }
       } catch {
