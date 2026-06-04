@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { MapSection } from "@/components/marketplace/map-section";
 
 const categories: Array<ServiceCategory | "All"> = ["All", "Hair", "Nails", "Makeup", "Lashes", "Brows", "Barber", "Spa"];
 const fallbackLocation = { label: "Rosebank, Johannesburg", areaName: "Rosebank", lat: -26.1458, lng: 28.042 };
@@ -322,6 +323,12 @@ export function MarketplaceApp() {
           )}
         </section>
       </main>
+
+      {/* Map of nearby studios (edge-to-edge) */}
+      <MapSection
+        providers={filteredProviders}
+        user={{ lat: userLocation.lat, lng: userLocation.lng, label: areaName ?? userLocation.label }}
+      />
 
       {/* Provider detail drawer */}
       <AnimatePresence>
