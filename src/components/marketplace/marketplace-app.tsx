@@ -255,7 +255,7 @@ export function MarketplaceApp() {
       />
 
       {/* Main discovery */}
-      <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pb-8 lg:pb-16">
+      <main className="mx-auto max-w-[90rem] px-4 sm:px-6 lg:px-8 pb-8 lg:pb-16">
 
         {/* Category pills */}
         <div className="flex gap-2 overflow-x-auto scroll-x py-7">
@@ -432,7 +432,7 @@ function TopBar({ searchInTopBar, searchProps, providers, areaName }: { searchIn
   return (
     <>
       <header className="sticky top-0 z-40 border-b border-[var(--line)]/60 bg-white/90 backdrop-blur-md">
-        <div className="relative mx-auto flex h-[4.25rem] max-w-7xl items-center px-4 sm:px-6 lg:px-8">
+        <div className="relative mx-auto flex h-[4.25rem] max-w-[90rem] items-center px-4 sm:px-6 lg:px-8">
 
           {/* Logo */}
           <div className="flex shrink-0 items-center">
@@ -681,7 +681,7 @@ function HeroSection({
       </p>
 
       {/* 3-part search bar */}
-      <div ref={heroSearchRef} className="relative mt-10 w-full max-w-6xl rounded-[1.75rem] border border-[var(--line)] bg-white shadow-xl shadow-black/5">
+      <div ref={heroSearchRef} className="relative mt-10 w-full max-w-[80rem] rounded-[1.75rem] border border-[var(--line)] bg-white shadow-xl shadow-black/5">
         <div className="flex flex-col sm:flex-row sm:items-stretch">
           {/* Treatment */}
           <div className="flex flex-1 items-center gap-3 border-b border-[var(--line)] px-5 py-4 sm:border-b-0 sm:border-r">
@@ -1094,7 +1094,7 @@ function ProviderDrawer({
         animate={{ y: 0 }}
         exit={{ y: "100%" }}
         transition={{ type: "spring", damping: 28, stiffness: 300 }}
-        className="fixed inset-x-3 bottom-3 z-50 mx-auto max-h-[88vh] max-w-7xl overflow-y-auto rounded-3xl bg-white shadow-2xl sm:inset-x-6 lg:inset-x-8"
+        className="fixed inset-x-3 bottom-3 z-50 mx-auto max-h-[88vh] max-w-[90rem] overflow-y-auto rounded-3xl bg-white shadow-2xl sm:inset-x-6 lg:inset-x-8"
       >
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--line)] bg-white px-5 py-4">
           <div className="mx-auto h-1 w-10 rounded-full bg-[var(--line)] sm:hidden" />
@@ -1266,7 +1266,7 @@ function Footer() {
   const year = new Date().getFullYear();
   return (
     <footer className="border-t border-[var(--line)] bg-[#fdfaf9] px-4 pt-14 pb-10 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
+      <div className="mx-auto max-w-[90rem]">
         <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
 
           {/* Brand */}

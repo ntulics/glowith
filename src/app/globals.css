@@ -28,7 +28,8 @@
 
 /* Hero gradient — soft blush in light mode (dark variant handled below) */
 .hero-gradient {
-  background: linear-gradient(160deg, #ffffff 0%, #fdf0fa 45%, #fce8f0 75%, #fde8dc 100%);
+  /* Soft lavender→blush→peach that fades seamlessly into the page background */
+  background: linear-gradient(168deg, #f1ecff 0%, #fbeef7 28%, #fce6ef 50%, #fbeae1 72%, var(--background) 100%);
 }
 
 /* ── Dark mode — driven entirely by the OS / browser system setting ─────────
@@ -50,8 +51,7 @@
   .logo-adaptive { background-color: #D94472; }
 
   .hero-gradient {
-    background: linear-gradient(160deg, #17131500 0%, #221a20 45%, #241a1e 80%, #231c18 100%);
-    background-color: var(--background);
+    background: linear-gradient(168deg, #241a2b 0%, #221a20 40%, #1d1719 70%, var(--background) 100%);
   }
 
   .bg-white { background-color: var(--card) !important; }
