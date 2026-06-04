@@ -138,6 +138,7 @@ const DEMO_TENANTS = [
     businessName: "Glowith Demo Salon",
     category: "Hair",
     city: "Rosebank, Johannesburg",
+    lat: -26.1467, lng: 28.0426,
     bio: "Demo salon for testing the full Glowith booking experience.",
     owner: { name: "Demo Owner", email: "demo@glowith.co.za" },
     agents: [
@@ -151,6 +152,7 @@ const DEMO_TENANTS = [
     businessName: "Duvha Park Demo Studio",
     category: "Nails",
     city: "Duvha Park, eMalahleni",
+    lat: -25.8833, lng: 29.2333,
     bio: "Demo studio for testing in the eMalahleni area.",
     owner: { name: "Demo Duvha Owner", email: "demo.duvha@glowith.co.za" },
     agents: [
@@ -186,7 +188,7 @@ export async function POST() {
               category: tenant.category,
               bio: tenant.bio,
               city: tenant.city,
-              latitude: 0, longitude: 0,
+              latitude: tenant.lat, longitude: tenant.lng,
               providerType: "BUSINESS",
               isDemo: true, verified: true
             }
@@ -223,7 +225,7 @@ export async function POST() {
                 category: agent.category,
                 bio: agent.bio,
                 city: tenant.city,
-                latitude: 0, longitude: 0,
+                latitude: tenant.lat, longitude: tenant.lng,
                 providerType: "FREELANCER",
                 parentBusinessId: businessProfile!.id,
                 isDemo: true, verified: true

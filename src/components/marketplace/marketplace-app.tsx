@@ -173,7 +173,11 @@ export function MarketplaceApp() {
   useEffect(() => {
     const distances: Record<string, number> = {};
     for (const p of providers) {
-      distances[p.id] = haversineKm(userLocation.lat, userLocation.lng, p.location.lat, p.location.lng);
+      // Treat unknown/unset coordinates (0,0) as "nearby" so they aren't filtered out by radius
+      const hasCoords = p.location.lat !== 0 || p.location.lng !== 0;
+      distances[p.id] = hasCoords
+        ? haversineKm(userLocation.lat, userLocation.lng, p.location.lat, p.location.lng)
+        : 0;
     }
     setDistanceByProvider(distances);
   }, [userLocation.lat, userLocation.lng, providers]);
