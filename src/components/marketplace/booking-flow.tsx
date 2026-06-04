@@ -396,7 +396,7 @@ export function BookingFlow({
                     Your slot is confirmed only once the deposit is paid. Apple Pay appears automatically on supported devices.
                   </p>
                   {/* Paystack injects the Apple Pay button here */}
-                  <div id="paystack-apple-pay" className="min-h-[48px]" />
+                  <div id="paystack-apple-pay" className="min-h-[48px] w-full [&>*]:!w-full" />
                   <button id="paystack-other-channels"
                     className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] py-3.5 text-sm font-black text-white hover:bg-[var(--brand-dark)]">
                     More payment options

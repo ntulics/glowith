@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Sidebar } from "./sidebar";
-import { Menu, X, Sparkles } from "lucide-react";
+import { Menu, X } from "lucide-react";
 
 interface Props {
   businessName: string;
@@ -55,12 +55,7 @@ export function DashboardShell({ businessName, handle, role, providerType, paren
           >
             <Menu className="h-5 w-5" />
           </button>
-          <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#D94472]">
-              <Sparkles className="h-3.5 w-3.5 text-white" />
-            </div>
-            <span className="text-sm font-black">Glowith</span>
-          </div>
+          <span role="img" aria-label="Glowith" className="logo-adaptive h-5" />
           <div className="ml-auto text-xs font-semibold text-gray-500 truncate max-w-[140px]">
             {businessName}
           </div>

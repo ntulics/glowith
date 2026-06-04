@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Building2, CheckCircle2, ChevronRight, Loader2, Scissors, Sparkles, Users, XCircle } from "lucide-react";
+import { Building2, CheckCircle2, ChevronRight, Loader2, Scissors, Users, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type ProviderType = "FREELANCER" | "BUSINESS";
@@ -109,10 +109,8 @@ export default function SignupPage() {
       <div className="w-full max-w-lg">
 
         {/* Logo */}
-        <div className="mb-8 flex flex-col items-center gap-2">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#D94472] text-white shadow-lg">
-            <Sparkles className="h-6 w-6" />
-          </div>
+        <div className="mb-8 flex flex-col items-center gap-3">
+          <span role="img" aria-label="Glowith" className="logo-adaptive h-9" />
           <p className="text-xl font-black tracking-tight">Create your Glowith studio</p>
           <p className="text-sm text-[#7A6C6E]">
             {step === "type" ? "How will you be using Glowith?" : `Setting up as a ${isFreelancer ? "freelancer" : "business"}`}

@@ -14,7 +14,6 @@ import {
   LogOut,
   MessageCircle,
   Settings,
-  Sparkles,
   UserCog,
   Users,
   X
@@ -55,13 +54,8 @@ export function Sidebar({ businessName, handle, role, providerType, parentBusine
     <aside className="flex h-screen w-56 flex-col border-r border-gray-100 bg-white">
       {/* Logo */}
       <div className="flex h-14 items-center gap-2 border-b border-gray-100 px-4">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#D94472]">
-          <Sparkles className="h-4 w-4 text-white" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-black">Glowith</p>
-          <p className="truncate text-[10px] text-gray-400">Studio</p>
-        </div>
+        <span role="img" aria-label="Glowith" className="logo-adaptive h-6" />
+        <div className="min-w-0 flex-1" />
         {/* Mobile close button */}
         {onClose && (
           <button

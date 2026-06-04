@@ -12,7 +12,6 @@ import {
   LogOut,
   Settings,
   ShieldAlert,
-  Sparkles,
   Store,
   Users
 } from "lucide-react";
@@ -35,13 +34,8 @@ export function AdminSidebar() {
     <aside className="flex h-screen w-56 flex-col border-r border-gray-100 bg-[#1a1a1a]">
       {/* Logo */}
       <div className="flex h-14 items-center gap-2 border-b border-white/10 px-4">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#D94472]">
-          <Sparkles className="h-4 w-4 text-white" />
-        </div>
-        <div className="min-w-0">
-          <p className="truncate text-sm font-black text-white">Glowith</p>
-          <p className="truncate text-[10px] text-white/40">Super Admin</p>
-        </div>
+        <span role="img" aria-label="Glowith" className="logo-adaptive h-6" />
+        <span className="truncate rounded-full bg-[#D94472]/20 px-2 py-0.5 text-[9px] font-bold text-[#D94472]">Super Admin</span>
       </div>
 
       {/* Admin badge */}

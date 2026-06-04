@@ -4,7 +4,7 @@ import { Suspense, useState, type FormEvent } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Eye, EyeOff, Loader2, Mail, Sparkles } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, Loader2, Mail } from "lucide-react";
 
 type LookupResult = {
   exists: boolean;
@@ -132,11 +132,8 @@ function LoginForm() {
     <main className="min-h-screen bg-[#F9F5F3] px-4 py-6">
       <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-5xl flex-col">
         <header className="flex items-center justify-between">
-          <Link href="/" className="inline-flex items-center gap-2 text-sm font-black">
-            <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-[#D94472] text-white">
-              <Sparkles className="h-5 w-5" />
-            </span>
-            Glowith
+          <Link href="/" className="inline-flex items-center" aria-label="Glowith">
+            <span role="img" aria-label="Glowith" className="logo-adaptive h-7" />
           </Link>
           <Link href="/signup" className="rounded-full border border-[#E8E0DC] bg-white px-4 py-2 text-sm font-bold">
             List your business
