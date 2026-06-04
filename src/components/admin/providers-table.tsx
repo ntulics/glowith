@@ -101,7 +101,9 @@ function CopyBtn({ text }: { text: string }) {
   );
 }
 
-export function ProvidersTable({ providers: initial, freelancerCount }: { providers: Provider[]; freelancerCount: number }) {
+type DemoAccount = { label: string; businessName: string; email: string; password: string };
+
+export function ProvidersTable({ providers: initial, freelancerCount, demoAccounts = [] }: { providers: Provider[]; freelancerCount: number; demoAccounts?: DemoAccount[] }) {
   const [providers, setProviders] = useState(initial);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "pending" | "verified" | "demo" | "freelancers" | "business">("all");
@@ -212,7 +214,33 @@ export function ProvidersTable({ providers: initial, freelancerCount }: { provid
           </div>
         </div>
 
-        {/* Demo credentials panel */}
+        {/* Persistent demo credentials — always available to the super admin */}
+        {demoAccounts.length > 0 && (
+          <div className="border-b border-violet-100 bg-violet-50 px-6 py-4">
+            <div className="mb-3 flex items-center gap-2">
+              <FlaskConical className="h-4 w-4 text-violet-600" />
+              <p className="text-sm font-black text-violet-700">Demo credentials (save these)</p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {demoAccounts.map((a) => (
+                <div key={a.email} className="rounded-xl border border-violet-200 bg-white p-3 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-black text-[#D94472]">{a.businessName}</span>
+                    <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[9px] font-bold text-violet-600">{a.label}</span>
+                  </div>
+                  <p className="mt-1.5 text-gray-500">
+                    <span className="font-mono font-bold text-gray-800">{a.email}</span><CopyBtn text={a.email} />
+                  </p>
+                  <p className="mt-1 text-gray-500">
+                    <span className="font-mono font-bold text-gray-800">{a.password}</span><CopyBtn text={a.password} />
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Demo credentials panel (shown right after seeding) */}
         {demoCredentials && (
           <div className="border-b border-violet-100 bg-violet-50 px-6 py-4">
             <div className="flex items-center justify-between mb-3">

@@ -2,9 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
-
-const DEMO_PASSWORD = "GlowithDemo2026!";
-const AGENT_PASSWORD = "Demo1234!";
+import { DEMO_PASSWORD, AGENT_PASSWORD } from "@/lib/demo";
 
 // Unsplash images per category
 const PORTFOLIO_IMAGES: Record<string, string[]> = {

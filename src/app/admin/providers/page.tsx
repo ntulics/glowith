@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { ProvidersTable } from "@/components/admin/providers-table";
+import { demoPasswordFor } from "@/lib/demo";
 
 export default async function AdminProvidersPage() {
   const [providers, freelancerCount] = await Promise.all([
@@ -14,9 +15,22 @@ export default async function AdminProvidersPage() {
     prisma.providerProfile.count({ where: { providerType: "FREELANCER", parentBusinessId: null } })
   ]);
 
+  // Persistent demo credentials — derived from the seeded demo accounts so they
+  // always show for the super admin (not just right after seeding).
+  const demoAccounts = providers
+    .filter((p) => p.isDemo)
+    .map((p) => ({
+      label: p.parentBusinessId ? "Agent" : p.providerType === "BUSINESS" ? "Business" : "Freelancer",
+      businessName: p.businessName,
+      email: p.user.email,
+      password: demoPasswordFor(p.parentBusinessId)
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+
   return (
     <ProvidersTable
       freelancerCount={freelancerCount}
+      demoAccounts={demoAccounts}
       providers={providers.map((p) => ({
         id: p.id,
         businessName: p.businessName,
