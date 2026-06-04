@@ -80,6 +80,52 @@ export function BookingFlow({
       .finally(() => setBusyLoading(false));
   }, [date, providerProfileId]);
 
+  // Load the Paystack inline script and mount the Apple Pay + checkout buttons.
+  // Must run unconditionally (before any early return) to satisfy Rules of Hooks.
+  useEffect(() => {
+    if (!open || step !== "pay" || !payInfo || payMountedRef.current) return;
+    payMountedRef.current = true;
+
+    function mount() {
+      try {
+        const Pop = (window as any).PaystackPop;
+        if (!Pop) { setPayError("Could not load the payment widget"); return; }
+        const popup = new Pop();
+        popup.paymentRequest({
+          key: payInfo!.publicKey,
+          email: payInfo!.email,
+          amount: payInfo!.amountCents, // already in ZAR cents (lowest unit)
+          currency: "ZAR",
+          ref: payInfo!.reference,
+          container: "paystack-apple-pay",
+          loadPaystackCheckoutButton: "paystack-other-channels",
+          style: { theme: "light", applePay: { width: "100%", borderRadius: "10px", type: "pay", locale: "en" } },
+          onSuccess: async () => {
+            await fetch("/api/payments/paystack/confirm", {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ reference: payInfo!.reference })
+            });
+            setStep("done");
+          },
+          onError: () => setPayError("Payment failed — please try again"),
+          onCancel: () => {}
+        });
+      } catch {
+        setPayError("Could not start the payment");
+      }
+    }
+
+    if ((window as any).PaystackPop) { mount(); return; }
+    const existing = document.getElementById("paystack-inline-js");
+    if (existing) { existing.addEventListener("load", mount); return; }
+    const s = document.createElement("script");
+    s.id = "paystack-inline-js";
+    s.src = "https://js.paystack.co/v2/inline.js";
+    s.onload = mount;
+    s.onerror = () => setPayError("Could not load Paystack");
+    document.body.appendChild(s);
+  }, [open, step, payInfo]);
+
   if (!open) return null;
 
   function slotDate(hhmm: string): Date {
@@ -154,52 +200,6 @@ export function BookingFlow({
       setSubmitting(false);
     }
   }
-
-  async function confirmPayment(reference: string) {
-    await fetch("/api/payments/paystack/confirm", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reference })
-    });
-  }
-
-  // Load the Paystack inline script and mount the Apple Pay + checkout buttons
-  useEffect(() => {
-    if (step !== "pay" || !payInfo || payMountedRef.current) return;
-    payMountedRef.current = true;
-
-    function mount() {
-      try {
-        const Pop = (window as any).PaystackPop;
-        if (!Pop) { setPayError("Could not load the payment widget"); return; }
-        const popup = new Pop();
-        popup.paymentRequest({
-          key: payInfo!.publicKey,
-          email: payInfo!.email,
-          amount: payInfo!.amountCents, // already in ZAR cents (lowest unit)
-          currency: "ZAR",
-          ref: payInfo!.reference,
-          container: "paystack-apple-pay",
-          loadPaystackCheckoutButton: "paystack-other-channels",
-          style: { theme: "light", applePay: { width: "100%", borderRadius: "10px", type: "pay", locale: "en" } },
-          onSuccess: async () => { await confirmPayment(payInfo!.reference); setStep("done"); },
-          onError: () => setPayError("Payment failed — please try again"),
-          onCancel: () => {}
-        });
-      } catch {
-        setPayError("Could not start the payment");
-      }
-    }
-
-    if ((window as any).PaystackPop) { mount(); return; }
-    const existing = document.getElementById("paystack-inline-js");
-    if (existing) { existing.addEventListener("load", mount); return; }
-    const s = document.createElement("script");
-    s.id = "paystack-inline-js";
-    s.src = "https://js.paystack.co/v2/inline.js";
-    s.onload = mount;
-    s.onerror = () => setPayError("Could not load Paystack");
-    document.body.appendChild(s);
-  }, [step, payInfo]);
 
   async function applyCoupon() {
     if (!service || !couponInput.trim()) return;

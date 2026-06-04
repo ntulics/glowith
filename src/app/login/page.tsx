@@ -25,13 +25,37 @@ function tenantHost(tenantSlug: string) {
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
+  const [mode, setMode] = useState<"login" | "register">("login");
   const [step, setStep] = useState<"email" | "password">("email");
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [lookup, setLookup] = useState<LookupResult | null>(null);
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  async function handleRegisterSubmit(e: FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      const r = await fetch("/api/auth/register-client", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password })
+      });
+      const d = await r.json();
+      if (!r.ok) { setError(typeof d.error === "string" ? d.error : "Could not create account"); return; }
+      const res = await signIn("credentials", { email, password, redirect: false });
+      if (res?.error) { setError("Account created — please sign in."); setMode("login"); setStep("password"); return; }
+      const callbackUrl = params.get("callbackUrl");
+      router.push(callbackUrl || "/");
+    } catch {
+      setError("Could not create your account. Try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function handleEmailSubmit(e: FormEvent) {
     e.preventDefault();
@@ -157,7 +181,34 @@ function LoginForm() {
               </div>
             )}
 
-            {step === "email" ? (
+            {mode === "register" ? (
+              <form onSubmit={handleRegisterSubmit} className="space-y-4">
+                <label className="block">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#7A6C6E]">Your name</span>
+                  <input value={name} onChange={(e) => setName(e.target.value)} required autoFocus placeholder="Thandi Mokoena"
+                    className="mt-2 w-full rounded-2xl border border-[#E8E0DC] bg-[#F9F5F3] px-4 py-3.5 text-base font-bold outline-none placeholder:font-medium placeholder:text-[#B2A6A8]" />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#7A6C6E]">Email address</span>
+                  <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="you@example.com"
+                    className="mt-2 w-full rounded-2xl border border-[#E8E0DC] bg-[#F9F5F3] px-4 py-3.5 text-base font-bold outline-none placeholder:font-medium placeholder:text-[#B2A6A8]" />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#7A6C6E]">Password</span>
+                  <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} placeholder="At least 8 characters"
+                    className="mt-2 w-full rounded-2xl border border-[#E8E0DC] bg-[#F9F5F3] px-4 py-3.5 text-base font-bold outline-none placeholder:font-medium placeholder:text-[#B2A6A8]" />
+                </label>
+                <button type="submit" disabled={loading}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#1a1a1a] py-4 text-sm font-black text-white transition hover:bg-[#1a1a1a]/90 disabled:opacity-60">
+                  {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Create account
+                </button>
+                <button type="button" onClick={() => { setMode("login"); setError(""); }}
+                  className="w-full text-center text-sm font-semibold text-[#7A6C6E] hover:text-[#1F1B1C]">
+                  Already have an account? <span className="text-[#D94472]">Sign in</span>
+                </button>
+              </form>
+            ) : step === "email" ? (
               <form onSubmit={handleEmailSubmit} className="space-y-5">
                 <label className="block">
                   <span className="text-xs font-bold uppercase tracking-wider text-[#7A6C6E]">Email address</span>
@@ -181,6 +232,10 @@ function LoginForm() {
                 >
                   {loading && <Loader2 className="h-4 w-4 animate-spin" />}
                   Continue
+                </button>
+                <button type="button" onClick={() => { setMode("register"); setError(""); }}
+                  className="w-full text-center text-sm font-semibold text-[#7A6C6E] hover:text-[#1F1B1C]">
+                  New customer? <span className="text-[#D94472]">Create an account</span>
                 </button>
               </form>
             ) : (
