@@ -55,6 +55,7 @@ export function BookingFlow({
   const [payInfo, setPayInfo] = useState<{ bookingId: string; reference: string; publicKey: string; email: string; amountCents: number } | null>(null);
   const [payError, setPayError] = useState("");
   const payMountedRef = useRef(false);
+  const popupRef = useRef<any>(null);
 
   const service = useMemo(() => services.find((s) => s.id === serviceId) ?? null, [services, serviceId]);
 
@@ -80,45 +81,67 @@ export function BookingFlow({
       .finally(() => setBusyLoading(false));
   }, [date, providerProfileId]);
 
-  // Load the Paystack inline script and mount the Apple Pay + checkout buttons.
+  async function onPaid() {
+    if (!payInfo) return;
+    await fetch("/api/payments/paystack/confirm", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reference: payInfo.reference })
+    });
+    setStep("done");
+  }
+
+  // Standard Paystack popup (card / EFT / etc.) — the reliable path on any browser.
+  function openCheckout() {
+    const popup = popupRef.current;
+    if (!popup || !payInfo) { setPayError("Payment is still loading — try again in a moment"); return; }
+    const opts = {
+      key: payInfo.publicKey,
+      email: payInfo.email,
+      amount: payInfo.amountCents,
+      currency: "ZAR",
+      reference: payInfo.reference,
+      ref: payInfo.reference,
+      onSuccess: onPaid,
+      onLoad: () => {},
+      onCancel: () => {},
+      onClose: () => {}
+    };
+    try {
+      if (typeof popup.newTransaction === "function") popup.newTransaction(opts);
+      else if (typeof popup.checkout === "function") popup.checkout(opts);
+      else if (typeof popup.resumeTransaction === "function") popup.resumeTransaction(payInfo.reference);
+      else setPayError("Could not open checkout");
+    } catch {
+      setPayError("Could not open checkout");
+    }
+  }
+
+  // Load the Paystack inline script and best-effort mount the Apple Pay button.
   // Must run unconditionally (before any early return) to satisfy Rules of Hooks.
   useEffect(() => {
     if (!open || step !== "pay" || !payInfo || payMountedRef.current) return;
     payMountedRef.current = true;
 
     function mount() {
+      const Pop = (window as any).PaystackPop;
+      if (!Pop) { setPayError("Could not load the payment widget"); return; }
+      popupRef.current = new Pop();
+      // Apple Pay button (only renders on supported Safari/iOS with a registered domain)
       try {
-        const Pop = (window as any).PaystackPop;
-        if (!Pop) { setPayError("Could not load the payment widget"); return; }
-        const popup = new Pop();
-        popup.paymentRequest({
+        popupRef.current.paymentRequest?.({
           key: payInfo!.publicKey,
           email: payInfo!.email,
-          amount: payInfo!.amountCents, // already in ZAR cents (lowest unit)
+          amount: payInfo!.amountCents,
           currency: "ZAR",
           ref: payInfo!.reference,
           container: "paystack-apple-pay",
-          loadPaystackCheckoutButton: "paystack-other-channels",
           style: { theme: "light", applePay: { width: "100%", borderRadius: "10px", type: "pay", locale: "en" } },
-          onSuccess: async () => {
-            await fetch("/api/payments/paystack/confirm", {
-              method: "POST", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ reference: payInfo!.reference })
-            });
-            setStep("done");
-          },
-          onError: () => setPayError("Payment failed — please try again"),
-          onCancel: async () => {
-            // Release the held slot: a booking is only kept once payment is claimed.
-            await fetch(`/api/bookings/${payInfo!.bookingId}`, { method: "DELETE" });
-            payMountedRef.current = false;
-            setPayInfo(null);
-            setPayError("");
-            setStep("review");
-          }
+          onSuccess: onPaid,
+          onError: () => {},
+          onCancel: () => {}
         });
       } catch {
-        setPayError("Could not start the payment");
+        /* Apple Pay unavailable — the "More payment options" button still works */
       }
     }
 
@@ -395,11 +418,11 @@ export function BookingFlow({
                   <p className="mb-3 text-xs text-[var(--muted)]">
                     Your slot is confirmed only once the deposit is paid. Apple Pay appears automatically on supported devices.
                   </p>
-                  {/* Paystack injects the Apple Pay button here */}
-                  <div id="paystack-apple-pay" className="min-h-[48px] w-full [&>*]:!w-full" />
-                  <button id="paystack-other-channels"
+                  {/* Paystack injects the Apple Pay button here (Safari/iOS only) */}
+                  <div id="paystack-apple-pay" className="w-full [&>*]:!w-full empty:hidden" />
+                  <button id="paystack-other-channels" type="button" onClick={openCheckout}
                     className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] py-3.5 text-sm font-black text-white hover:bg-[var(--brand-dark)]">
-                    More payment options
+                    Pay {service ? ZAR(service.depositCents) : "deposit"} — card, EFT &amp; more
                   </button>
                   {payError && <p className="mt-3 text-center text-sm font-semibold text-red-500">{payError}</p>}
                 </Section>
