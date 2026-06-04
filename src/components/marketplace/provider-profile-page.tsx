@@ -104,6 +104,17 @@ export function ProviderProfilePage({ profile }: { profile: Profile }) {
     if (host.endsWith(".glowith.co.za")) window.location.href = "https://glowith.co.za/";
     else window.location.href = "/";
   }
+  // An agent's page lives on the business subdomain — /team/{handle} needs the
+  // business tenant context, which the apex doesn't have.
+  function goToTeamMember(memberHandle: string) {
+    const slug = profile.handle.replace("@", "");
+    const host = window.location.host;
+    if (host.endsWith("glowith.co.za")) {
+      window.location.href = `https://${slug}.glowith.co.za/team/${memberHandle}`;
+    } else {
+      window.location.href = `/team/${memberHandle}`; // dev / already on tenant host
+    }
+  }
   function requireSignIn(): boolean {
     window.location.href = `/login?callbackUrl=${encodeURIComponent(window.location.pathname)}`;
     return true;
@@ -302,7 +313,7 @@ export function ProviderProfilePage({ profile }: { profile: Profile }) {
                 <h2 className="mb-4 text-xl font-black">Team</h2>
                 <div className="grid grid-cols-3 gap-4 sm:grid-cols-5">
                   {team.map((m) => (
-                    <Link key={m.id} href={`/team/${m.handle}`} className="group text-center">
+                    <button key={m.id} type="button" onClick={() => goToTeamMember(m.handle)} className="group text-center">
                       <div className="relative mx-auto h-20 w-20 overflow-hidden rounded-full border border-[var(--line)] bg-gradient-to-br from-[#fce8f0] to-[#fde8dc]">
                         {m.avatarUrl ? (
                           <Image src={m.avatarUrl} alt={m.name} fill sizes="80px" className="object-cover" />
@@ -312,7 +323,7 @@ export function ProviderProfilePage({ profile }: { profile: Profile }) {
                       </div>
                       <p className="mt-2 truncate text-sm font-bold group-hover:text-[var(--brand)]">{m.name}</p>
                       <p className="truncate text-xs text-[var(--muted)]">{m.role}</p>
-                    </Link>
+                    </button>
                   ))}
                 </div>
               </section>
