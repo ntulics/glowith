@@ -26,6 +26,7 @@ export default async function Page({ params }: { params: Promise<{ handle: strin
       user: { select: { name: true, createdAt: true } },
       services: { where: { active: true }, orderBy: { createdAt: "asc" } },
       posts: { orderBy: { createdAt: "desc" } },
+      agents: { select: { id: true, businessName: true, category: true, avatarUrl: true, handle: true } },
       _count: { select: { bookings: true } }
     }
   });
@@ -71,6 +72,13 @@ export default async function Page({ params }: { params: Promise<{ handle: strin
           tags: p.tags,
           likes: p.likes,
           saves: p.saves
+        })),
+        team: profile.agents.map((a) => ({
+          id: a.id,
+          name: a.businessName,
+          role: a.category,
+          avatarUrl: mediaUrl(a.avatarUrl),
+          handle: a.handle.replace("@", "")
         }))
       }}
     />
