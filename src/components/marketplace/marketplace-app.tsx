@@ -108,21 +108,19 @@ export function MarketplaceApp() {
 
         try {
           const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
+            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=18&addressdetails=1`,
             { headers: { "Accept-Language": "en" } }
           );
           if (res.ok) {
             const data = await res.json();
             const addr = data.address ?? {};
-            const candidates = [
-              addr.suburb, addr.neighbourhood, addr.hamlet,
-              addr.city_district, addr.city, addr.town, addr.village
-            ].filter((v): v is string =>
-              typeof v === "string" &&
-              !/\bward\s*\d+/i.test(v) &&   // skip "Ward 19", "Emalahleni Ward 19"
-              !/^\d/.test(v)                  // skip numeric-prefixed strings
-            );
-            area = candidates[0] ?? null;
+            const bad = (v: unknown): boolean =>
+              typeof v !== "string" || /\bward\s*\d+/i.test(v) || /^\d/.test(v); // skip "Ward 19", numeric
+            const pick = (...vals: unknown[]) => vals.find((v) => !bad(v)) as string | undefined;
+            // Suburb-level first, then the broader city/town
+            const suburb = pick(addr.suburb, addr.neighbourhood, addr.quarter, addr.hamlet, addr.city_district, addr.residential);
+            const city = pick(addr.city, addr.town, addr.village, addr.municipality, addr.county);
+            area = suburb && city && suburb !== city ? `${suburb}, ${city}` : (suburb ?? city ?? null);
             label = area ?? "Current location";
           }
         } catch {
