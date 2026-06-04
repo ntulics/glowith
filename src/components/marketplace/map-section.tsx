@@ -100,9 +100,10 @@ export function MapSection({ providers, user }: { providers: P[]; user: { lat: n
     markersRef.current.push(L.marker([user.lat, user.lng], { icon: userIcon, zIndexOffset: 1000 }).addTo(map).bindTooltip("You're here"));
 
     // Provider pins with distance label
-    const bounds = [[user.lat, user.lng]] as [number, number][];
+    let nearMaxKm = 0; // farthest *nearby* studio, used to pick the zoom
     pinned.forEach((p) => {
       const dist = haversineKm(user.lat, user.lng, p.location.lat, p.location.lng);
+      if (dist <= 25) nearMaxKm = Math.max(nearMaxKm, dist);
       const pinIcon = L.divIcon({
         className: "",
         html: `<div style="display:flex;flex-direction:column;align-items:center">
@@ -114,11 +115,22 @@ export function MapSection({ providers, user }: { providers: P[]; user: { lat: n
       const m = L.marker([p.location.lat, p.location.lng], { icon: pinIcon }).addTo(map);
       m.on("click", () => setSelected(p));
       markersRef.current.push(m);
-      bounds.push([p.location.lat, p.location.lng]);
     });
 
-    if (bounds.length > 1) {
-      try { map.fitBounds(bounds, { padding: [60, 60], maxZoom: 14 }); } catch { /* ignore */ }
+    // Focus on the user, zoomed to fit the nearby studios (ignoring far outliers).
+    if (nearMaxKm > 0) {
+      const km = Math.min(nearMaxKm * 1.4 + 0.5, 25); // a little padding, capped
+      const dLat = km / 111;
+      const dLng = km / (111 * Math.cos((user.lat * Math.PI) / 180) || 1);
+      try {
+        map.fitBounds(
+          [[user.lat - dLat, user.lng - dLng], [user.lat + dLat, user.lng + dLng]],
+          { padding: [40, 40], maxZoom: 16 }
+        );
+      } catch { map.setView([user.lat, user.lng], 14); }
+    } else {
+      // No studios nearby — just centre on the user at a sensible zoom
+      map.setView([user.lat, user.lng], 13);
     }
   }, [ready, pinned, user.lat, user.lng]);
 
