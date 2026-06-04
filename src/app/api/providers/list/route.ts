@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { mediaUrl } from "@/lib/media";
+import { geocodeQuery } from "@/lib/geocode";
 
 // Public marketplace list — real DB providers (businesses & standalone freelancers)
 // that have at least one active service and one portfolio photo, shaped for the cards.
@@ -21,10 +22,23 @@ export async function GET() {
     take: 60
   });
 
-  const providers = profiles.map((p) => {
+  const providers = await Promise.all(profiles.map(async (p) => {
     const avg = p.ratings.length
       ? Math.round((p.ratings.reduce((s, r) => s + r.stars, 0) / p.ratings.length) * 10) / 10
       : 5.0;
+
+    // Backfill coordinates from the city when a provider hasn't set them, so it
+    // can appear on the map. Cached + jittered slightly to avoid exact overlap.
+    let lat = p.latitude, lng = p.longitude;
+    if ((lat === 0 && lng === 0) && p.city) {
+      const g = await geocodeQuery(p.city);
+      if (g) {
+        const jitter = () => (Math.random() - 0.5) * 0.012; // ~±0.6km
+        lat = g.lat + jitter();
+        lng = g.lng + jitter();
+      }
+    }
+
     return {
       id: p.id,
       handle: p.handle,
@@ -34,7 +48,7 @@ export async function GET() {
       rating: avg,
       reviewCount: p.ratings.length,
       distanceKm: 0,
-      location: { label: p.city || "South Africa", lat: p.latitude, lng: p.longitude },
+      location: { label: p.city || "South Africa", lat, lng },
       verified: p.verified,
       mobile: p.mobile,
       studio: p.studio,
@@ -49,7 +63,7 @@ export async function GET() {
         tags: post.tags, likes: post.likes, saves: post.saves
       }))
     };
-  });
+  }));
 
   return NextResponse.json({ providers });
 }
