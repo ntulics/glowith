@@ -198,6 +198,16 @@ export function BookingFlow({
         const pd = await prep.json();
         if (!prep.ok) throw new Error(pd.error ?? "Payment could not be started");
         if (pd.simulated) { setStep("done"); return; }
+
+        // Run the deposit payment on the apex domain so Apple Pay is always
+        // available (it only renders on the Paystack-registered glowith.co.za).
+        const host = typeof window !== "undefined" ? window.location.host : "";
+        if (host.endsWith("glowith.co.za")) {
+          const ret = encodeURIComponent(window.location.href);
+          window.location.href = `https://glowith.co.za/pay?ref=${encodeURIComponent(pd.reference)}&return=${ret}`;
+          return;
+        }
+        // Localhost / dev — fall back to the inline pay step
         payMountedRef.current = false;
         setPayInfo({ bookingId: d.booking.id, reference: pd.reference, publicKey: pd.publicKey, email: pd.email, amountCents: pd.amountCents });
         setStep("pay");
