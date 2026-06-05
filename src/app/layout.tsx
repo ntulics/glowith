@@ -17,6 +17,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <link rel="preconnect" href="https://js.paystack.co" />
+        <link rel="preconnect" href="https://api.paystack.co" />
+      </head>
       <body>{children}</body>
     </html>
   );

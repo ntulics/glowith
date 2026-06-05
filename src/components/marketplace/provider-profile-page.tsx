@@ -150,13 +150,8 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
           <button onClick={backToGlowith} aria-label="Back" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[var(--muted)] hover:bg-[var(--background)] hover:text-[var(--ink)]">
             <ArrowLeft className="h-4 w-4" />
           </button>
-          {/* Provider name with a small "by Glowith" mark */}
-          <div className="min-w-0 shrink">
-            <p className="truncate text-sm font-black sm:text-base">{profile.businessName}</p>
-            <button onClick={backToGlowith} className="flex items-center gap-1 text-[10px] font-semibold text-[var(--muted)] hover:text-[var(--ink)]">
-              by <span role="img" aria-label="Glowith" className="logo-adaptive h-2.5" />
-            </button>
-          </div>
+          {/* Provider name */}
+          <p className="min-w-0 shrink truncate text-base font-black">{profile.businessName}</p>
 
           {/* Docked business section nav (desktop) */}
           {docked && (
@@ -219,7 +214,7 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
             className="flex snap-x snap-mandatory overflow-x-auto scroll-x"
           >
             {heroPhotos.map((src, i) => (
-              <div key={i} className="relative aspect-[4/5] w-full shrink-0 snap-center bg-[#f3e8e4]">
+              <div key={i} className="relative aspect-[4/3] w-full shrink-0 snap-center bg-[#f3e8e4]">
                 <Image src={src} alt={`${profile.businessName} ${i + 1}`} fill sizes="100vw" className="object-cover" priority={i === 0} />
               </div>
             ))}

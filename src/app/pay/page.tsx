@@ -16,6 +16,20 @@ function PayInner() {
   const [error, setError] = useState("");
   const popupRef = useRef<any>(null);
   const mountedRef = useRef(false);
+  const [scriptReady, setScriptReady] = useState(false);
+  const [applePayMounting, setApplePayMounting] = useState(true);
+
+  // Preload the Paystack inline script immediately (in parallel with the info fetch)
+  useEffect(() => {
+    if ((window as any).PaystackPop) { setScriptReady(true); return; }
+    const existing = document.getElementById("paystack-inline-js") as HTMLScriptElement | null;
+    if (existing) { existing.addEventListener("load", () => setScriptReady(true)); return; }
+    const s = document.createElement("script");
+    s.id = "paystack-inline-js"; s.src = "https://js.paystack.co/v2/inline.js";
+    s.onload = () => setScriptReady(true);
+    s.onerror = () => setError("Could not load Paystack.");
+    document.body.appendChild(s);
+  }, []);
 
   useEffect(() => {
     if (!ref) { setState("error"); setError("Missing payment reference."); return; }
@@ -36,29 +50,26 @@ function PayInner() {
     setState("done");
   }
 
-  // Mount Paystack (Apple Pay + checkout) once info is ready
+  // Mount Paystack (Apple Pay + checkout) once both the script and info are ready
   useEffect(() => {
-    if (state !== "ready" || !info || mountedRef.current) return;
+    if (state !== "ready" || !info || !scriptReady || mountedRef.current) return;
     mountedRef.current = true;
-    function mount() {
-      const Pop = (window as any).PaystackPop;
-      if (!Pop) { setError("Could not load the payment widget."); return; }
-      popupRef.current = new Pop();
-      try {
-        popupRef.current.paymentRequest?.({
-          key: info!.publicKey, email: info!.email, amount: info!.amountCents,
-          currency: "ZAR", ref: ref!, container: "paystack-apple-pay",
-          style: { theme: "light", applePay: { width: "100%", borderRadius: "10px", type: "pay", locale: "en" } },
-          onSuccess: onPaid, onError: () => {}, onCancel: () => {}
-        });
-      } catch { /* Apple Pay unavailable */ }
-    }
-    if ((window as any).PaystackPop) { mount(); return; }
-    const s = document.createElement("script");
-    s.id = "paystack-inline-js"; s.src = "https://js.paystack.co/v2/inline.js";
-    s.onload = mount; s.onerror = () => setError("Could not load Paystack.");
-    document.body.appendChild(s);
-  }, [state, info, ref]);
+    const Pop = (window as any).PaystackPop;
+    if (!Pop) { setError("Could not load the payment widget."); return; }
+    popupRef.current = new Pop();
+    try {
+      popupRef.current.paymentRequest?.({
+        key: info.publicKey, email: info.email, amount: info.amountCents,
+        currency: "ZAR", ref: ref!, container: "paystack-apple-pay",
+        style: { theme: "light", applePay: { width: "100%", borderRadius: "10px", type: "pay", locale: "en" } },
+        onSuccess: onPaid,
+        onElementsMount: () => setApplePayMounting(false),
+        onError: () => setApplePayMounting(false), onCancel: () => {}
+      });
+    } catch { setApplePayMounting(false); }
+    // Safety: stop showing the placeholder after a moment even if Apple Pay isn't available
+    setTimeout(() => setApplePayMounting(false), 2500);
+  }, [state, info, scriptReady, ref]);
 
   function openCheckout() {
     const popup = popupRef.current;
@@ -91,7 +102,14 @@ function PayInner() {
               <span className="font-black text-[var(--brand)]">{ZAR(info.amountCents)}</span>
             </div>
             <p className="mt-4 mb-2 text-xs text-[var(--muted)]">Apple Pay appears automatically on supported devices.</p>
-            <div id="paystack-apple-pay" className="w-full [&>*]:!w-full empty:hidden" />
+            <div className="relative">
+              <div id="paystack-apple-pay" className="w-full [&>*]:!w-full empty:hidden" />
+              {applePayMounting && (
+                <div className="flex items-center justify-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--background)] py-3 text-xs font-semibold text-[var(--muted)]">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Loading Apple Pay…
+                </div>
+              )}
+            </div>
             <button onClick={openCheckout} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] py-3.5 text-sm font-black text-white hover:bg-[var(--brand-dark)]">
               Pay {ZAR(info.amountCents)} — card, EFT &amp; more
             </button>
