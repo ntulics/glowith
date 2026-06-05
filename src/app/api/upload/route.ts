@@ -46,13 +46,17 @@ export async function POST(request: Request) {
   // storage container is private (no anonymous blob access required).
   const url = `/api/media/${blobPath.split("/").map(encodeURIComponent).join("/")}`;
 
-  // If uploading a profile avatar, save it to the provider profile
+  const sizeBytes = file.size;
+
+  // If uploading a profile avatar, save it and count its storage immediately.
+  // (Portfolio storage is counted when the post is created, so it can be
+  // decremented again on delete.)
   if (folder === "profile") {
     await prisma.providerProfile.update({
       where: { id: profile.id },
-      data: { avatarUrl: url }
+      data: { avatarUrl: url, storageBytes: { increment: sizeBytes } }
     });
   }
 
-  return NextResponse.json({ url, blobPath });
+  return NextResponse.json({ url, blobPath, sizeBytes });
 }

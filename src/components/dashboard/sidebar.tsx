@@ -8,6 +8,7 @@ import {
   BookOpen,
   Calendar,
   ChevronDown,
+  HardDrive,
   Images,
   Ticket,
   LayoutDashboard,
@@ -28,6 +29,7 @@ const nav = [
   { href: "/dashboard/coupons", label: "Coupons", icon: Ticket },
   { href: "/dashboard/agents", label: "Agents", icon: UserCog },
   { href: "/dashboard/clients", label: "Clients", icon: Users },
+  { href: "/dashboard/storage", label: "Storage", icon: HardDrive },
   { href: "/dashboard/inbox", label: "Inbox", icon: MessageCircle },
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/dashboard/settings", label: "Settings", icon: Settings }

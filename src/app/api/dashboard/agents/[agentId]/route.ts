@@ -29,6 +29,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ag
   if (typeof body.canPostToCompany === "boolean") {
     data.canPostToCompany = body.canPostToCompany;
   }
+  if (typeof body.storageQuotaBytes === "number" && body.storageQuotaBytes >= 0) {
+    data.storageQuotaBytes = BigInt(Math.round(body.storageQuotaBytes));
+  }
 
   const updated = await prisma.providerProfile.update({ where: { id: agentId }, data });
   return NextResponse.json({ agent: updated });

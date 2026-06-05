@@ -30,8 +30,9 @@ export async function POST(request: Request) {
   });
   if (!profile) return NextResponse.json({ error: "No provider profile" }, { status: 404 });
 
-  const { imageUrl, caption, tags, target } = await request.json();
+  const { imageUrl, caption, tags, target, sizeBytes } = await request.json();
   if (!imageUrl) return NextResponse.json({ error: "imageUrl is required" }, { status: 400 });
+  const bytes = Number.isFinite(sizeBytes) ? Math.max(0, Math.round(sizeBytes)) : 0;
 
   // Resolve which portfolio this post lands in.
   let providerProfileId = profile.id;
@@ -56,9 +57,12 @@ export async function POST(request: Request) {
       imageUrl,
       caption: (caption ?? "").toString().slice(0, 280),
       tags: Array.isArray(tags) ? tags.slice(0, 10).map((t: string) => t.toString().slice(0, 30)) : [],
+      sizeBytes: bytes,
       authorProfileId,
       authorName
     }
   });
+  // Count storage against the portfolio that holds the post.
+  if (bytes > 0) await prisma.providerProfile.update({ where: { id: providerProfileId }, data: { storageBytes: { increment: bytes } } });
   return NextResponse.json({ post });
 }

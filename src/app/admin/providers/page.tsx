@@ -41,6 +41,8 @@ export default async function AdminProvidersPage() {
         isDemo: p.isDemo,
         providerType: p.providerType,
         plan: p.plan,
+        storageBytes: Number(p.storageBytes),
+        storageQuotaBytes: Number(p.storageQuotaBytes),
         parentBusinessId: p.parentBusinessId,
         parentBusinessName: p.parentBusiness?.businessName ?? null,
         parentBusinessHandle: p.parentBusiness?.handle ?? null,

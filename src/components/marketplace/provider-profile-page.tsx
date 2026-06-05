@@ -84,14 +84,17 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
     return showAllServices ? filtered : filtered.slice(0, 4);
   }, [profile.services, serviceCat, showAllServices]);
 
-  const galleryImages = profile.posts.map((p) => p.imageUrl);
-  // Mobile hero slider: featured photos, or the 5 most recent if none featured
+  // Hero/slider: featured photos (up to 10), or the 10 most recent if none featured
   const featuredPhotos = profile.posts.filter((p) => p.featured);
-  const heroPhotos = (featuredPhotos.length ? featuredPhotos : profile.posts).slice(0, 5).map((p) => p.imageUrl);
+  const heroPosts = (featuredPhotos.length ? featuredPhotos : profile.posts).slice(0, 10);
+  const heroPhotos = heroPosts.map((p) => p.imageUrl);
+  const galleryImages = heroPhotos;
+  // Photos section excludes featured (shown in the slider) to avoid duplicates
+  const gridPhotos = featuredPhotos.length ? profile.posts.filter((p) => !p.featured) : profile.posts;
   const [heroIndex, setHeroIndex] = useState(0);
 
   const sections = [
-    profile.posts.length > 0 ? { id: "photos", label: "Photos" } : null,
+    gridPhotos.length > 0 ? { id: "photos", label: "Photos" } : null,
     { id: "services", label: "Services" },
     team.length > 0 ? { id: "team", label: "Team" } : null,
     { id: "reviews", label: "Reviews" },
@@ -247,7 +250,7 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
               {galleryImages[i] ? (
                 <Image src={galleryImages[i]} alt={`${profile.businessName} ${i}`} fill sizes="33vw" className="object-cover" />
               ) : <GalleryPlaceholder name={profile.businessName} />}
-              {i === 2 && profile.posts.length > 0 && (
+              {i === 2 && gridPhotos.length > 0 && (
                 <button onClick={() => scrollTo("photos")}
                   className="absolute bottom-3 right-3 rounded-full bg-white/95 px-4 py-2 text-xs font-bold shadow hover:bg-white">
                   See all photos
@@ -294,11 +297,11 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
           <main className="min-w-0 flex-1 space-y-10">
 
             {/* Photos */}
-            {profile.posts.length > 0 && (
+            {gridPhotos.length > 0 && (
               <section id="photos" className="scroll-mt-28">
                 <h2 className="mb-4 text-xl font-black">Photos</h2>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  {profile.posts.map((post) => (
+                  {gridPhotos.map((post) => (
                     <div key={post.id} className="overflow-hidden rounded-2xl border border-[var(--line)] bg-white shadow-sm">
                       <div className="relative aspect-square bg-[#f3e8e4]">
                         <Image src={post.imageUrl} alt={post.caption} fill sizes="300px" className="object-cover" />

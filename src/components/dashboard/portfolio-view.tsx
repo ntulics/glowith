@@ -29,6 +29,7 @@ export function PortfolioView({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [pendingUrl, setPendingUrl] = useState<string | null>(null);
+  const [pendingSize, setPendingSize] = useState(0);
   const [caption, setCaption] = useState("");
   const [tagsInput, setTagsInput] = useState("");
   const [saving, setSaving] = useState(false);
@@ -38,19 +39,19 @@ export function PortfolioView({
   const fileRef = useRef<HTMLInputElement>(null);
   const showTargetToggle = canPostToCompany && !isBusiness;
 
-  async function uploadOne(file: File): Promise<string> {
+  async function uploadOne(file: File): Promise<{ url: string; sizeBytes: number }> {
     const fd = new FormData();
     fd.append("file", file);
     fd.append("folder", "portfolio");
     const res = await fetch("/api/upload", { method: "POST", body: fd });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? "Upload failed");
-    return data.url;
+    return { url: data.url, sizeBytes: data.sizeBytes ?? 0 };
   }
-  async function createPost(imageUrl: string, cap: string, tags: string[]): Promise<Post> {
+  async function createPost(imageUrl: string, cap: string, tags: string[], sizeBytes: number): Promise<Post> {
     const res = await fetch("/api/dashboard/portfolio", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ imageUrl, caption: cap, tags, target: isBusiness ? "company" : target })
+      body: JSON.stringify({ imageUrl, caption: cap, tags, target: isBusiness ? "company" : target, sizeBytes })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? "Failed to save");
@@ -65,10 +66,11 @@ export function PortfolioView({
     setUploading(true);
     try {
       if (files.length === 1) {
-        setPendingUrl(await uploadOne(files[0]));
+        const up = await uploadOne(files[0]);
+        setPendingUrl(up.url); setPendingSize(up.sizeBytes);
       } else {
         const created: Post[] = [];
-        for (const f of files) created.push(await createPost(await uploadOne(f), "", []));
+        for (const f of files) { const up = await uploadOne(f); created.push(await createPost(up.url, "", [], up.sizeBytes)); }
         setPosts((prev) => [...created, ...prev]);
       }
     } catch (err) {
@@ -92,7 +94,7 @@ export function PortfolioView({
     setError("");
     try {
       const tags = tagsInput.split(",").map((t) => t.trim()).filter(Boolean);
-      const post = await createPost(pendingUrl, caption, tags);
+      const post = await createPost(pendingUrl, caption, tags, pendingSize);
       setPosts((prev) => [post, ...prev]);
       setPendingUrl(null);
       setCaption("");

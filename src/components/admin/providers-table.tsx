@@ -13,6 +13,7 @@ type Provider = {
   id: string; businessName: string; handle: string; category: string;
   city: string; verified: boolean; isDemo: boolean; providerType: string; plan: "STARTER" | "PRO" | "BUSINESS";
   parentBusinessId: string | null; parentBusinessName: string | null; parentBusinessHandle: string | null;
+  storageBytes: number; storageQuotaBytes: number;
   email: string;
   bookings: number; services: number; posts: number; createdAt: string;
 };
@@ -139,6 +140,13 @@ export function ProvidersTable({ providers: initial, freelancerCount, demoAccoun
     await fetch(`/api/admin/providers/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plan }) });
     setProviders((prev) => prev.map((p) => p.id === id ? { ...p, plan: plan as any } : p));
   }
+
+  async function setQuota(id: string, gb: number) {
+    const bytes = Math.round(gb * 1024 * 1024 * 1024);
+    await fetch(`/api/admin/providers/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ storageQuotaBytes: bytes }) });
+    setProviders((prev) => prev.map((p) => p.id === id ? { ...p, storageQuotaBytes: bytes } : p));
+  }
+  const fmtGB = (b: number) => { const v = (b || 0) / (1024 * 1024 * 1024); return `${v.toFixed(v < 1 ? 2 : 1)} GB`; };
 
   async function toggleDemo(id: string, isDemo: boolean) {
     setLoading(`demo_${id}`);
@@ -320,7 +328,7 @@ export function ProvidersTable({ providers: initial, freelancerCount, demoAccoun
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-gray-50">
               <tr>
-                {["Studio", "Type", "Plan", "Category", "City", "Svcs", "Bookings", "Joined", "Status", "Actions"].map((h) => (
+                {["Studio", "Type", "Plan", "Storage", "Category", "City", "Svcs", "Bookings", "Joined", "Status", "Actions"].map((h) => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-400">{h}</th>
                 ))}
               </tr>
@@ -379,6 +387,19 @@ export function ProvidersTable({ providers: initial, freelancerCount, demoAccoun
                           <option value="PRO">Pro</option>
                           <option value="BUSINESS">Business</option>
                         </select>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {p.parentBusinessId ? (
+                        <span className="text-[11px] text-gray-400">{fmtGB(p.storageBytes)}</span>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] text-gray-500">{fmtGB(p.storageBytes)} /</span>
+                          <input type="number" min={0} step={1} defaultValue={+(p.storageQuotaBytes / (1024 * 1024 * 1024)).toFixed(0)}
+                            onBlur={(e) => { const v = parseFloat(e.target.value); if (!isNaN(v) && Math.round(v * 1024 * 1024 * 1024) !== p.storageQuotaBytes) setQuota(p.id, v); }}
+                            className="w-12 rounded border border-gray-200 bg-white px-1 py-0.5 text-[11px] outline-none focus:border-[#D94472]" />
+                          <span className="text-[11px] text-gray-400">GB</span>
+                        </div>
                       )}
                     </td>
                     <td className="px-4 py-3 text-gray-500">{p.category}</td>
