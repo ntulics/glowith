@@ -45,27 +45,35 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {
 const formatCurrency = (cents: number) =>
   new Intl.NumberFormat("en-ZA", { style: "currency", currency: "ZAR", maximumFractionDigits: 0 }).format(cents / 100);
 
-function getHeroHeadline(areaName: string | null): { headline: ReactNode; subtext: string } {
-  if (areaName) {
-    return {
-      headline: (
-        <>
-          Your glow awaits<br />
-          <span style={{ color: "#D94472" }}>in {areaName}</span>
-        </>
-      ),
-      subtext: `Discover top-rated salons, hair artists, nail techs and beauty experts in and around ${areaName}.`
-    };
-  }
-  return {
-    headline: (
-      <>
-        Beauty, on<br />
-        <span style={{ color: "#D94472" }}>your terms</span>
-      </>
-    ),
-    subtext: "Discover top-rated salons, hair artists, nail techs and beauty experts near you."
-  };
+// 20 short, punchy headlines — each reads naturally with "in {area}" / "near you" below.
+const HERO_HEADLINES = [
+  "Your glow awaits", "Look and feel amazing", "Treat yourself", "Beauty, sorted",
+  "Find your perfect look", "Book your glow-up", "Get glam", "Shine bright",
+  "Fresh looks await", "Beauty made easy", "Your beauty, your way", "Pamper time",
+  "Slay your next look", "Discover top stylists", "Self-care made simple", "Your best look yet",
+  "Beauty at your fingertips", "Glow up today", "Look good, feel great", "Your next appointment"
+];
+
+// Catchy, rotating subtexts. {a} is replaced with the area (or "near you").
+const HERO_SUBTEXTS = [
+  "Discover top-rated salons, stylists and beauty pros {a}.",
+  "Book hair, nails, makeup and more {a} — in seconds.",
+  "The best beauty pros {a}, all in one place.",
+  "From fresh fades to flawless nails — find it {a}.",
+  "Real reviews, instant booking. Beauty {a} made easy.",
+  "Your glow-up squad {a} is just a tap away.",
+  "Salons, freelancers and studios {a} — book instantly.",
+  "Hair, nails, lashes, brows and more {a}.",
+  "Find, book and glow — beauty {a}, sorted.",
+  "Top-rated beauty {a}, ready when you are.",
+  "Skip the calls. Book trusted beauty pros {a}.",
+  "Look your best for less — beauty {a}."
+];
+
+function getHeroHeadline(areaName: string | null, hIdx: number, sIdx: number): { phrase: string; areaLine: string; subtext: string } {
+  const where = areaName ? `in ${areaName}` : "near you";
+  const sub = HERO_SUBTEXTS[sIdx % HERO_SUBTEXTS.length].replace("{a}", areaName ? `around ${areaName}` : "near you");
+  return { phrase: HERO_HEADLINES[hIdx % HERO_HEADLINES.length], areaLine: where, subtext: sub };
 }
 
 export function MarketplaceApp() {
@@ -666,7 +674,12 @@ function HeroSection({
     [providers]
   );
   const calendarDays = Array.from({ length: 30 }, (_, index) => index + 1);
-  const { headline, subtext } = getHeroHeadline(areaName);
+  // Pick a random headline + subtext once on mount (avoids SSR hydration mismatch)
+  const [variant, setVariant] = useState({ h: 0, s: 0 });
+  useEffect(() => {
+    setVariant({ h: Math.floor(Math.random() * HERO_HEADLINES.length), s: Math.floor(Math.random() * HERO_SUBTEXTS.length) });
+  }, []);
+  const { phrase, areaLine, subtext } = getHeroHeadline(areaName, variant.h, variant.s);
 
   return (
     <section
@@ -674,7 +687,9 @@ function HeroSection({
     >
       <h1 className="text-balance font-black leading-[1.08] tracking-tight text-[var(--ink)]"
         style={{ fontSize: "clamp(2rem, 5vw, 3.6rem)" }}>
-        {headline}
+        {phrase}<br />
+        {/* Area line — 30% smaller than the main headline */}
+        <span style={{ color: "#D94472", fontSize: "0.7em" }}>{areaLine}</span>
       </h1>
 
       <p className="mx-auto mt-5 max-w-lg text-lg font-medium text-[var(--muted)]">
