@@ -44,14 +44,16 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
   };
 }
 
-export default async function Page({ params }: { params: Promise<{ handle: string }> }) {
+export default async function Page({ params, searchParams }: { params: Promise<{ handle: string }>; searchParams: Promise<{ embed?: string }> }) {
   const { handle } = await params;
+  const embed = (await searchParams)?.embed === "1";
   const resolved = await resolveAgent(handle);
   if (!resolved) notFound();
   const { agent, business } = resolved;
 
   return (
     <ProviderProfilePage
+      embed={embed}
       profile={{
         id: agent.id,
         parentBusinessName: business.businessName,

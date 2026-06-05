@@ -33,7 +33,7 @@ const formatDuration = (minutes: number) => {
   return m ? `${h} hour ${m} mins` : `${h} hour${h > 1 ? "s" : ""}`;
 };
 
-export function ProviderProfilePage({ profile }: { profile: Profile }) {
+export function ProviderProfilePage({ profile, embed = false }: { profile: Profile; embed?: boolean }) {
   const team = profile.team ?? [];
   const isAgent = !!profile.parentBusinessName;
 
@@ -95,10 +95,6 @@ export function ProviderProfilePage({ profile }: { profile: Profile }) {
   function openBooking(serviceId?: string) {
     setBook({ id: profile.id, name: profile.businessName, services: profile.services, preselect: serviceId ?? null });
   }
-  function bookAgent(m: TeamMember) {
-    setAgentPopup(null);
-    setBook({ id: m.id, name: m.name, services: m.services ?? [], preselect: null });
-  }
   function scrollTo(id: string) {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
   }
@@ -108,16 +104,13 @@ export function ProviderProfilePage({ profile }: { profile: Profile }) {
     if (host.endsWith(".glowith.co.za")) window.location.href = "https://glowith.co.za/";
     else window.location.href = "/";
   }
-  // An agent's page lives on the business subdomain — /team/{handle} needs the
-  // business tenant context, which the apex doesn't have.
-  function goToTeamMember(memberHandle: string) {
+  // The agent's profile lives at the business subdomain /team/{handle}; embed it
+  // in the popup. (The apex doesn't have the business tenant context.)
+  function teamEmbedUrl(memberHandle: string) {
     const slug = profile.handle.replace("@", "");
-    const host = window.location.host;
-    if (host.endsWith("glowith.co.za")) {
-      window.location.href = `https://${slug}.glowith.co.za/team/${memberHandle}`;
-    } else {
-      window.location.href = `/team/${memberHandle}`; // dev / already on tenant host
-    }
+    const host = typeof window !== "undefined" ? window.location.host : "";
+    if (host.endsWith("glowith.co.za")) return `https://${slug}.glowith.co.za/team/${memberHandle}?embed=1`;
+    return `/team/${memberHandle}?embed=1`;
   }
   function requireSignIn(): boolean {
     window.location.href = `/login?callbackUrl=${encodeURIComponent(window.location.pathname)}`;
@@ -142,7 +135,8 @@ export function ProviderProfilePage({ profile }: { profile: Profile }) {
 
   return (
     <div className="min-h-screen bg-[var(--background)]">
-      {/* ── Sticky top bar ── */}
+      {/* ── Sticky top bar (hidden when embedded in a popup) ── */}
+      {!embed && (
       <header className="sticky top-0 z-40 border-b border-[var(--line)]/60 bg-white/90 backdrop-blur-md">
         <div className="mx-auto flex h-[4.25rem] max-w-[90rem] items-center gap-3 px-4 sm:px-6">
           <button onClick={backToGlowith} aria-label="Back to Glowith" className="flex shrink-0 items-center gap-2 text-[var(--muted)] hover:text-[var(--ink)]">
@@ -177,6 +171,7 @@ export function ProviderProfilePage({ profile }: { profile: Profile }) {
           </div>
         </div>
       </header>
+      )}
 
       {/* Global menu drawer */}
       {menuOpen && (
@@ -429,46 +424,19 @@ export function ProviderProfilePage({ profile }: { profile: Profile }) {
         preselectedServiceId={book?.preselect ?? null}
       />
 
-      {/* Agent quick-view popup */}
+      {/* Agent full profile in a popup (loads their /team page embedded) */}
       {agentPopup && (
-        <div className="fixed inset-0 z-[65] flex items-center justify-center bg-black/50 p-4" onClick={() => setAgentPopup(null)}>
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-3">
-                <div className="relative h-14 w-14 overflow-hidden rounded-full bg-gradient-to-br from-[#fce8f0] to-[#fde8dc]">
-                  {agentPopup.avatarUrl ? (
-                    <Image src={agentPopup.avatarUrl} alt={agentPopup.name} fill sizes="56px" className="object-cover" />
-                  ) : <span className="flex h-full w-full items-center justify-center text-xl font-black text-[var(--brand)]">{agentPopup.name[0]}</span>}
-                </div>
-                <div>
-                  <h3 className="font-black">{agentPopup.name}</h3>
-                  <p className="text-xs text-[var(--muted)]">{agentPopup.role}</p>
-                </div>
-              </div>
-              <button onClick={() => setAgentPopup(null)} aria-label="Close" className="text-[var(--muted)] hover:text-[var(--ink)]"><X className="h-5 w-5" /></button>
+        <div className="fixed inset-0 z-[65] flex items-center justify-center bg-black/60 p-2 sm:p-6" onClick={() => setAgentPopup(null)}>
+          <div className="relative flex h-full max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-[var(--line)] px-4 py-2.5">
+              <p className="text-sm font-black">{agentPopup.name} · {agentPopup.role}</p>
+              <button onClick={() => setAgentPopup(null)} aria-label="Close" className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--line)] hover:bg-[var(--background)]"><X className="h-4 w-4" /></button>
             </div>
-
-            {agentPopup.services && agentPopup.services.length > 0 ? (
-              <div className="mt-4 max-h-52 space-y-1.5 overflow-y-auto">
-                {agentPopup.services.slice(0, 6).map((s) => (
-                  <div key={s.id} className="flex items-center justify-between text-sm">
-                    <span className="truncate">{s.name}</span>
-                    <span className="font-bold">{formatZAR(s.priceCents)}</span>
-                  </div>
-                ))}
-              </div>
-            ) : <p className="mt-4 text-sm text-[var(--muted)]">No services listed yet.</p>}
-
-            <div className="mt-5 flex gap-2">
-              <button onClick={() => bookAgent(agentPopup)} disabled={!agentPopup.services?.length}
-                className="flex-1 rounded-xl bg-[var(--ink)] py-2.5 text-sm font-bold text-white hover:bg-[var(--ink)]/90 disabled:opacity-40">
-                Book with {agentPopup.name.split(" ")[0]}
-              </button>
-              <button onClick={() => goToTeamMember(agentPopup.handle)}
-                className="rounded-xl border border-[var(--line)] px-4 py-2.5 text-sm font-bold hover:border-[var(--brand)]">
-                Full profile
-              </button>
-            </div>
+            <iframe
+              title={agentPopup.name}
+              src={teamEmbedUrl(agentPopup.handle)}
+              className="flex-1 w-full border-0"
+            />
           </div>
         </div>
       )}
