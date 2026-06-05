@@ -51,17 +51,21 @@ export async function POST(request: Request) {
     }
   }
 
-  const post = await prisma.portfolioPost.create({
-    data: {
-      providerProfileId,
-      imageUrl,
-      caption: (caption ?? "").toString().slice(0, 280),
-      tags: Array.isArray(tags) ? tags.slice(0, 10).map((t: string) => t.toString().slice(0, 30)) : [],
-      sizeBytes: bytes,
-      authorProfileId,
-      authorName
-    }
-  });
+  const baseData = {
+    providerProfileId,
+    imageUrl,
+    caption: (caption ?? "").toString().slice(0, 280),
+    tags: Array.isArray(tags) ? tags.slice(0, 10).map((t: string) => t.toString().slice(0, 30)) : [],
+    authorProfileId,
+    authorName
+  };
+  let post;
+  try {
+    post = await prisma.portfolioPost.create({ data: { ...baseData, sizeBytes: bytes } });
+  } catch {
+    // sizeBytes column may not exist yet — create without it
+    post = await prisma.portfolioPost.create({ data: baseData });
+  }
   // Count storage against the portfolio that holds the post (best-effort).
   if (bytes > 0) {
     try { await prisma.providerProfile.update({ where: { id: providerProfileId }, data: { storageBytes: { increment: bytes } } }); } catch { /* ignore */ }

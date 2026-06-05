@@ -28,8 +28,7 @@ export function PortfolioView({
   const [posts, setPosts] = useState<Post[]>(initial);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
-  const [pendingUrl, setPendingUrl] = useState<string | null>(null);
-  const [pendingSize, setPendingSize] = useState(0);
+  const [pending, setPending] = useState<{ url: string; sizeBytes: number }[]>([]);
   const [caption, setCaption] = useState("");
   const [tagsInput, setTagsInput] = useState("");
   const [saving, setSaving] = useState(false);
@@ -58,21 +57,16 @@ export function PortfolioView({
     return data.post;
   }
 
-  // Single file → caption editor; multiple files → upload all at once (Instagram-style)
+  // Upload one or many photos, then collect a shared caption/tags before posting.
   async function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     if (!files.length) return;
     setError("");
     setUploading(true);
     try {
-      if (files.length === 1) {
-        const up = await uploadOne(files[0]);
-        setPendingUrl(up.url); setPendingSize(up.sizeBytes);
-      } else {
-        const created: Post[] = [];
-        for (const f of files) { const up = await uploadOne(f); created.push(await createPost(up.url, "", [], up.sizeBytes)); }
-        setPosts((prev) => [...created, ...prev]);
-      }
+      const ups: { url: string; sizeBytes: number }[] = [];
+      for (const f of files) ups.push(await uploadOne(f));
+      setPending(ups);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
@@ -89,14 +83,15 @@ export function PortfolioView({
   }
 
   async function publish() {
-    if (!pendingUrl) return;
+    if (!pending.length) return;
     setSaving(true);
     setError("");
     try {
       const tags = tagsInput.split(",").map((t) => t.trim()).filter(Boolean);
-      const post = await createPost(pendingUrl, caption, tags, pendingSize);
-      setPosts((prev) => [post, ...prev]);
-      setPendingUrl(null);
+      const created: Post[] = [];
+      for (const p of pending) created.push(await createPost(p.url, caption, tags, p.sizeBytes));
+      setPosts((prev) => [...created, ...prev]);
+      setPending([]);
       setCaption("");
       setTagsInput("");
     } catch (err) {
@@ -131,7 +126,7 @@ export function PortfolioView({
       <div className="flex-1 space-y-6 overflow-y-auto p-6">
         {/* Uploader */}
         <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-          {!pendingUrl ? (
+          {!pending.length ? (
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
@@ -139,13 +134,20 @@ export function PortfolioView({
               className="flex w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-gray-200 py-10 text-gray-500 transition hover:border-[#D94472] hover:text-[#D94472] disabled:opacity-60"
             >
               {uploading ? <Loader2 className="h-7 w-7 animate-spin" /> : <ImagePlus className="h-7 w-7" />}
-              <span className="text-sm font-bold">{uploading ? "Uploading…" : "Upload a photo"}</span>
-              <span className="text-xs text-gray-400">JPEG, PNG, WebP or GIF · up to 10 MB</span>
+              <span className="text-sm font-bold">{uploading ? "Uploading…" : "Upload photos"}</span>
+              <span className="text-xs text-gray-400">Pick one or several · JPEG, PNG, WebP or GIF · up to 10 MB each</span>
             </button>
           ) : (
             <div className="flex flex-col gap-4 sm:flex-row">
-              <div className="relative h-44 w-full shrink-0 overflow-hidden rounded-xl bg-gray-100 sm:w-44">
-                <Image src={pendingUrl} alt="New portfolio photo" fill sizes="176px" className="object-cover" />
+              <div className="shrink-0">
+                <div className="grid w-full grid-cols-3 gap-2 sm:w-44 sm:grid-cols-2">
+                  {pending.map((p, i) => (
+                    <div key={i} className="relative aspect-square overflow-hidden rounded-xl bg-gray-100">
+                      <Image src={p.url} alt={`Photo ${i + 1}`} fill sizes="80px" className="object-cover" />
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-1.5 text-center text-[11px] text-gray-400">{pending.length} photo{pending.length !== 1 ? "s" : ""}</p>
               </div>
               <div className="flex flex-1 flex-col gap-3">
                 {showTargetToggle && (
@@ -164,7 +166,7 @@ export function PortfolioView({
                   </div>
                 )}
                 <div>
-                  <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-gray-500">Caption</label>
+                  <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-gray-500">Caption{pending.length > 1 ? " (applied to all)" : ""}</label>
                   <input value={caption} onChange={(e) => setCaption(e.target.value)} maxLength={280}
                     placeholder="e.g. Ombre acrylics with hand-painted detail"
                     className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-[#D94472] focus:bg-white" />
@@ -178,9 +180,9 @@ export function PortfolioView({
                 <div className="mt-auto flex gap-2">
                   <button type="button" onClick={publish} disabled={saving}
                     className="inline-flex items-center gap-2 rounded-xl bg-[#D94472] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#9f2852] disabled:opacity-60">
-                    {saving && <Loader2 className="h-4 w-4 animate-spin" />} Publish
+                    {saving && <Loader2 className="h-4 w-4 animate-spin" />} Publish {pending.length > 1 ? `${pending.length} photos` : ""}
                   </button>
-                  <button type="button" onClick={() => { setPendingUrl(null); setCaption(""); setTagsInput(""); }}
+                  <button type="button" onClick={() => { setPending([]); setCaption(""); setTagsInput(""); }}
                     className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-bold text-gray-600 hover:bg-gray-50">
                     Cancel
                   </button>
@@ -190,7 +192,7 @@ export function PortfolioView({
           )}
           {error && <p className="mt-3 text-sm font-semibold text-red-500">{error}</p>}
           <input ref={fileRef} type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif" onChange={onPickFile} className="hidden" />
-          <p className="mt-2 text-center text-xs text-gray-400">Select multiple photos to upload them all at once. Star a photo to feature it in your profile slider (up to 5).</p>
+          <p className="mt-2 text-center text-xs text-gray-400">Pick several photos to upload them together with one caption. Star a photo to feature it in your profile slider (up to 10).</p>
         </div>
 
         {/* Grid */}

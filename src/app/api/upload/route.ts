@@ -29,33 +29,38 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "File must be under 10 MB" }, { status: 400 });
   }
 
-  const ext = file.name.split(".").pop() ?? "jpg";
+  const rawExt = (file.name.split(".").pop() ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const ext = rawExt || (file.type.split("/")[1] ?? "jpg");
   const filename = `${randomUUID()}.${ext}`;
   const blobPath = getBlobPath({
     providerType: profile.providerType,
     profileId: profile.id,
     parentBusinessId: profile.parentBusinessId,
-    folder: folder as "profile" | "portfolio",
+    folder: folder === "portfolio" ? "portfolio" : "profile",
     filename
   });
 
-  const buffer = Buffer.from(await file.arrayBuffer());
-  await uploadBlob(blobPath, buffer, file.type);
+  const sizeBytes = file.size;
+
+  try {
+    const buffer = Buffer.from(await file.arrayBuffer());
+    await uploadBlob(blobPath, buffer, file.type);
+  } catch (e) {
+    console.error("[upload] blob upload failed:", e);
+    return NextResponse.json({ error: "Could not store the image. Please try again." }, { status: 500 });
+  }
 
   // Serve via the same-origin media proxy so it renders even when the
   // storage container is private (no anonymous blob access required).
   const url = `/api/media/${blobPath.split("/").map(encodeURIComponent).join("/")}`;
 
-  const sizeBytes = file.size;
-
-  // If uploading a profile avatar, save it and count its storage immediately.
-  // (Portfolio storage is counted when the post is created, so it can be
-  // decremented again on delete.)
+  // If uploading a profile avatar, save it and count its storage (best-effort).
   if (folder === "profile") {
-    await prisma.providerProfile.update({
-      where: { id: profile.id },
-      data: { avatarUrl: url, storageBytes: { increment: sizeBytes } }
-    });
+    try {
+      await prisma.providerProfile.update({ where: { id: profile.id }, data: { avatarUrl: url, storageBytes: { increment: sizeBytes } } });
+    } catch {
+      await prisma.providerProfile.update({ where: { id: profile.id }, data: { avatarUrl: url } }).catch(() => {});
+    }
   }
 
   return NextResponse.json({ url, blobPath, sizeBytes });
