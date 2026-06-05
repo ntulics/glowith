@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { format } from "date-fns";
@@ -8,16 +7,21 @@ import { renderMarkdown } from "@/lib/markdown";
 
 export const dynamic = "force-dynamic";
 
+async function getPost(slug: string) {
+  try { return await prisma.blogPost.findUnique({ where: { slug } }); }
+  catch { return null; }
+}
+
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const post = await prisma.blogPost.findUnique({ where: { slug } });
+  const post = await getPost(slug);
   if (!post) return { title: "Post not found | Glowith" };
   return { title: `${post.title} | Glowith`, description: post.excerpt };
 }
 
 export default async function BlogPostPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const post = await prisma.blogPost.findUnique({ where: { slug } });
+  const post = await getPost(slug);
   if (!post || !post.published) notFound();
 
   const html = renderMarkdown(post.content);
@@ -33,7 +37,8 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
 
       {post.coverImageUrl && (
         <div className="relative mt-8 aspect-[16/9] overflow-hidden rounded-2xl bg-[#f3e8e4]">
-          <Image src={post.coverImageUrl} alt={post.title} fill sizes="768px" className="object-cover" priority />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={post.coverImageUrl} alt={post.title} className="h-full w-full object-cover" />
         </div>
       )}
 

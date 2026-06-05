@@ -1,5 +1,4 @@
 import Link from "next/link";
-import Image from "next/image";
 import { format } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import { PageShell, PageHeader } from "@/components/site/page-shell";
@@ -8,7 +7,10 @@ export const metadata = { title: "Blog | Glowith" };
 export const dynamic = "force-dynamic";
 
 export default async function BlogPage() {
-  const posts = await prisma.blogPost.findMany({ where: { published: true }, orderBy: { publishedAt: "desc" } }).catch(() => []);
+  let posts: { id: string; slug: string; title: string; excerpt: string; coverImageUrl: string | null; publishedAt: Date | null }[] = [];
+  try {
+    posts = await prisma.blogPost.findMany({ where: { published: true }, orderBy: { publishedAt: "desc" } });
+  } catch { /* table not ready yet */ }
 
   return (
     <PageShell maxWidth="max-w-5xl">
@@ -21,8 +23,9 @@ export default async function BlogPage() {
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {posts.map((p) => (
             <Link key={p.id} href={`/blog/${p.slug}`} className="group overflow-hidden rounded-2xl border border-[var(--line)] bg-white shadow-sm transition hover:shadow-md">
-              <div className="relative aspect-[16/10] bg-[#f3e8e4]">
-                {p.coverImageUrl && <Image src={p.coverImageUrl} alt={p.title} fill sizes="(max-width:640px) 100vw, 33vw" className="object-cover transition group-hover:scale-105" />}
+              <div className="relative aspect-[16/10] overflow-hidden bg-[#f3e8e4]">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                {p.coverImageUrl && <img src={p.coverImageUrl} alt={p.title} className="h-full w-full object-cover transition group-hover:scale-105" />}
               </div>
               <div className="p-4">
                 <p className="text-xs text-[var(--muted)]">{p.publishedAt ? format(new Date(p.publishedAt), "d MMM yyyy") : ""}</p>
