@@ -486,9 +486,9 @@ function TopBar({ searchInTopBar, searchProps, providers, areaName }: { searchIn
           {/* Actions */}
           <div className="ml-auto flex shrink-0 items-center gap-2">
             {!searchInTopBar && (
-              <button className="focus-ring hidden h-9 items-center gap-1.5 rounded-xl border border-[var(--line)] px-3 text-sm font-semibold transition hover:bg-[var(--background)] sm:inline-flex">
+              <a href="/business" className="focus-ring hidden h-9 items-center gap-1.5 rounded-xl border border-[var(--line)] px-3 text-sm font-semibold transition hover:bg-[var(--background)] sm:inline-flex">
                 List your business
-              </button>
+              </a>
             )}
             <a
               href="/login"
@@ -557,9 +557,9 @@ function TopBar({ searchInTopBar, searchProps, providers, areaName }: { searchIn
 
               {/* Bottom actions */}
               <div className="mt-auto space-y-3 border-t border-[var(--line)] p-5">
-                <button className="w-full rounded-xl border border-[var(--line)] py-2.5 text-sm font-semibold hover:bg-[var(--background)]">
+                <a href="/business" className="block w-full rounded-xl border border-[var(--line)] py-2.5 text-center text-sm font-semibold hover:bg-[var(--background)]">
                   List your business
-                </button>
+                </a>
                 <a href="/login" className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] py-2.5 text-sm font-semibold text-white hover:bg-[var(--brand-dark)]">
                   <UserRoundPlus className="h-4 w-4" />
                   Log in
@@ -1298,12 +1298,12 @@ function Footer() {
             <h3 className="text-xs font-black uppercase tracking-widest text-[var(--ink)]">About Glowith</h3>
             <ul className="mt-4 space-y-3">
               {[
-                ["About us", "#about"],
-                ["Contact us", "#contact"],
-                ["Help & Support", "#support"],
-                ["Blog", "#blog"],
-                ["Careers", "#careers"],
-                ["List your business", "#list"]
+                ["About us", "/about"],
+                ["Contact us", "/contact"],
+                ["Help & Support", "/faq"],
+                ["Blog", "/blog"],
+                ["Careers", "/careers"],
+                ["List your business", "/business"]
               ].map(([label, href]) => (
                 <li key={label}>
                   <a href={href} className="text-sm text-[var(--muted)] transition hover:text-[var(--brand)]">{label}</a>
@@ -1317,11 +1317,11 @@ function Footer() {
             <h3 className="text-xs font-black uppercase tracking-widest text-[var(--ink)]">Legal</h3>
             <ul className="mt-4 space-y-3">
               {[
-                ["Privacy Policy", "#privacy"],
-                ["Terms of Service", "#terms"],
-                ["Terms of Use", "#terms-use"],
-                ["Cookie Policy", "#cookies"],
-                ["Accessibility", "#accessibility"]
+                ["Privacy Policy", "/legal/privacy"],
+                ["Terms of Service", "/legal/terms"],
+                ["Terms of Use", "/legal/terms-of-use"],
+                ["Cookie Policy", "/legal/cookies"],
+                ["Accessibility", "/legal/accessibility"]
               ].map(([label, href]) => (
                 <li key={label}>
                   <a href={href} className="text-sm text-[var(--muted)] transition hover:text-[var(--brand)]">{label}</a>

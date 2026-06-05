@@ -95,6 +95,41 @@
   .hover\:bg-\[\#1a1a1a\]\/90:hover { background-color: var(--brand-dark) !important; }
 }
 
+/* ── Blog article typography ─────────────────────────────────────── */
+.blog-content {
+  color: var(--foreground);
+  font-size: 1.075rem;
+  line-height: 1.85;
+}
+.blog-content h1 { font-size: 2rem; font-weight: 900; line-height: 1.15; margin: 2rem 0 1rem; }
+.blog-content h2 { font-size: 1.5rem; font-weight: 900; line-height: 1.2; margin: 2rem 0 0.75rem; }
+.blog-content h3 { font-size: 1.2rem; font-weight: 800; margin: 1.5rem 0 0.5rem; }
+.blog-content p { margin: 1rem 0; }
+.blog-content a { color: var(--brand); font-weight: 600; text-decoration: underline; }
+.blog-content ul, .blog-content ol { margin: 1rem 0; padding-left: 1.5rem; }
+.blog-content ul { list-style: disc; }
+.blog-content ol { list-style: decimal; }
+.blog-content li { margin: 0.4rem 0; }
+.blog-content img { width: 100%; border-radius: 1rem; margin: 1.75rem 0; }
+.blog-content blockquote {
+  border-left: 4px solid var(--brand);
+  padding: 0.25rem 0 0.25rem 1.25rem;
+  margin: 1.5rem 0;
+  font-style: italic;
+  color: var(--muted);
+}
+.blog-content hr { border: 0; border-top: 1px solid var(--line); margin: 2.5rem 0; }
+.blog-content code { background: var(--background); padding: 0.1rem 0.4rem; border-radius: 0.35rem; font-size: 0.9em; }
+/* Drop cap on the first paragraph */
+.blog-content > p:first-of-type::first-letter {
+  float: left;
+  font-size: 3.6rem;
+  line-height: 0.8;
+  font-weight: 900;
+  padding: 0.3rem 0.6rem 0 0;
+  color: var(--brand);
+}
+
 * {
   box-sizing: border-box;
 }
