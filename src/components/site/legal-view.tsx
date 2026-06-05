@@ -3,21 +3,9 @@ import { PageShell, PageHeader } from "@/components/site/page-shell";
 import { Accordion } from "@/components/site/accordion";
 import { LEGAL_DOCS } from "@/lib/legal";
 
-export function generateStaticParams() {
-  return Object.keys(LEGAL_DOCS).map((doc) => ({ doc }));
-}
-
-export async function generateMetadata({ params }: { params: Promise<{ doc: string }> }) {
-  const { doc } = await params;
-  const d = LEGAL_DOCS[doc];
-  return { title: d ? `${d.title} | Glowith` : "Legal | Glowith" };
-}
-
-export default async function LegalPage({ params }: { params: Promise<{ doc: string }> }) {
-  const { doc } = await params;
-  const d = LEGAL_DOCS[doc];
+export function LegalView({ docKey }: { docKey: string }) {
+  const d = LEGAL_DOCS[docKey];
   if (!d) notFound();
-
   return (
     <PageShell>
       <PageHeader kicker={`Updated ${d.updated}`} title={d.title} intro={d.intro} />

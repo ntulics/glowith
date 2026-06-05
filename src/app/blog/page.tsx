@@ -8,7 +8,7 @@ export const metadata = { title: "Blog | Glowith" };
 export const dynamic = "force-dynamic";
 
 export default async function BlogPage() {
-  const posts = await prisma.blogPost.findMany({ where: { published: true }, orderBy: { publishedAt: "desc" } });
+  const posts = await prisma.blogPost.findMany({ where: { published: true }, orderBy: { publishedAt: "desc" } }).catch(() => []);
 
   return (
     <PageShell maxWidth="max-w-5xl">

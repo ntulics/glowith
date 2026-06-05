@@ -14,6 +14,9 @@ export function middleware(request: NextRequest) {
   const slug = parts[0];
   const url = request.nextUrl.clone();
 
+  // Apple Pay / domain-verification files must be served on every host
+  if (url.pathname.startsWith("/.well-known")) return NextResponse.next();
+
   // ── freelancer.glowith.co.za ───────────────────────────────────────────────
   // /dashboard, /login, /api → pass through with slug header
   // /[handle]               → rewrite to public provider profile page
