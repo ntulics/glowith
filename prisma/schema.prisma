@@ -208,6 +208,7 @@ model Booking {
   notes             String?
   status            BookingStatus @default(PENDING_DEPOSIT)
   depositCents      Int
+  durationMinutes   Int           @default(0)
   couponId          String?
   discountCents     Int           @default(0)
   paymentProvider   String?
@@ -218,6 +219,18 @@ model Booking {
   client          User            @relation(fields: [clientId], references: [id])
   providerProfile ProviderProfile @relation(fields: [providerProfileId], references: [id])
   service         Service         @relation(fields: [serviceId], references: [id])
+  items           BookingItem[]
+}
+
+model BookingItem {
+  id              String  @id @default(cuid())
+  bookingId       String
+  serviceId       String
+  name            String
+  priceCents      Int
+  durationMinutes Int
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 }
 
 model Message {

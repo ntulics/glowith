@@ -20,12 +20,12 @@ export async function GET(request: Request) {
       status: "CONFIRMED", // only confirmed (paid/claimed) bookings reserve a slot
       startsAt: { gte: dayStart, lte: dayEnd }
     },
-    select: { startsAt: true, service: { select: { durationMinutes: true } } }
+    select: { startsAt: true, durationMinutes: true, service: { select: { durationMinutes: true } } }
   });
 
   const busy = bookings.map((b) => ({
     start: b.startsAt.toISOString(),
-    durationMinutes: b.service.durationMinutes
+    durationMinutes: b.durationMinutes || b.service.durationMinutes
   }));
   return NextResponse.json({ busy });
 }

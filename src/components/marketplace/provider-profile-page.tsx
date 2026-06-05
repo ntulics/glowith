@@ -9,9 +9,10 @@ import { cn } from "@/lib/utils";
 import { VerifiedBadge } from "@/components/verified-badge";
 import { BookingFlow } from "@/components/marketplace/booking-flow";
 
-type Service = { id: string; name: string; category: string; durationMinutes: number; priceCents: number; depositCents: number };
+type Service = { id: string; name: string; category: string; durationMinutes: number; priceCents: number; depositCents: number; performer?: string | null };
 type Post = { id: string; caption: string; imageUrl: string; tags: string[]; likes: number; saves: number };
-type TeamMember = { id: string; name: string; role: string; avatarUrl: string | null; handle: string };
+type TeamMember = { id: string; name: string; role: string; avatarUrl: string | null; handle: string; services?: Service[] };
+type BookTarget = { id: string; name: string; services: Service[]; preselect: string | null };
 
 type Profile = {
   id: string; handle: string; businessName: string; name: string;
@@ -36,8 +37,8 @@ export function ProviderProfilePage({ profile }: { profile: Profile }) {
   const team = profile.team ?? [];
   const isAgent = !!profile.parentBusinessName;
 
-  const [bookingOpen, setBookingOpen] = useState(false);
-  const [preselectService, setPreselectService] = useState<string | null>(null);
+  const [book, setBook] = useState<BookTarget | null>(null);
+  const [agentPopup, setAgentPopup] = useState<TeamMember | null>(null);
   const [serviceCat, setServiceCat] = useState<string>("All");
   const [showAllServices, setShowAllServices] = useState(false);
   const [docked, setDocked] = useState(false);
@@ -92,8 +93,11 @@ export function ProviderProfilePage({ profile }: { profile: Profile }) {
   ].filter(Boolean) as { id: string; label: string }[];
 
   function openBooking(serviceId?: string) {
-    setPreselectService(serviceId ?? null);
-    setBookingOpen(true);
+    setBook({ id: profile.id, name: profile.businessName, services: profile.services, preselect: serviceId ?? null });
+  }
+  function bookAgent(m: TeamMember) {
+    setAgentPopup(null);
+    setBook({ id: m.id, name: m.name, services: m.services ?? [], preselect: null });
   }
   function scrollTo(id: string) {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
@@ -288,7 +292,7 @@ export function ProviderProfilePage({ profile }: { profile: Profile }) {
                   <div key={service.id} className="flex items-center justify-between rounded-2xl border border-[var(--line)] bg-white px-5 py-4 shadow-sm">
                     <div>
                       <p className="font-bold">{service.name}</p>
-                      <p className="mt-0.5 flex items-center gap-1.5 text-xs text-[var(--muted)]"><Clock3 className="h-3 w-3" />{formatDuration(service.durationMinutes)}</p>
+                      <p className="mt-0.5 flex items-center gap-1.5 text-xs text-[var(--muted)]"><Clock3 className="h-3 w-3" />{formatDuration(service.durationMinutes)}{service.performer ? ` · with ${service.performer}` : ""}</p>
                       <p className="mt-1 text-sm font-black">{formatZAR(service.priceCents)}</p>
                     </div>
                     <button onClick={() => openBooking(service.id)} className="shrink-0 rounded-xl border border-[var(--line)] px-5 py-2 text-sm font-bold transition hover:border-[var(--brand)] hover:text-[var(--brand)]">
@@ -313,7 +317,7 @@ export function ProviderProfilePage({ profile }: { profile: Profile }) {
                 <h2 className="mb-4 text-xl font-black">Team</h2>
                 <div className="grid grid-cols-3 gap-4 sm:grid-cols-5">
                   {team.map((m) => (
-                    <button key={m.id} type="button" onClick={() => goToTeamMember(m.handle)} className="group text-center">
+                    <button key={m.id} type="button" onClick={() => setAgentPopup(m)} className="group text-center">
                       <div className="relative mx-auto h-20 w-20 overflow-hidden rounded-full border border-[var(--line)] bg-gradient-to-br from-[#fce8f0] to-[#fde8dc]">
                         {m.avatarUrl ? (
                           <Image src={m.avatarUrl} alt={m.name} fill sizes="80px" className="object-cover" />
@@ -417,13 +421,57 @@ export function ProviderProfilePage({ profile }: { profile: Profile }) {
       </div>
 
       <BookingFlow
-        open={bookingOpen}
-        onClose={() => setBookingOpen(false)}
-        providerProfileId={profile.id}
-        providerName={profile.businessName}
-        services={profile.services}
-        preselectedServiceId={preselectService}
+        open={!!book}
+        onClose={() => setBook(null)}
+        providerProfileId={book?.id ?? profile.id}
+        providerName={book?.name ?? profile.businessName}
+        services={book?.services ?? profile.services}
+        preselectedServiceId={book?.preselect ?? null}
       />
+
+      {/* Agent quick-view popup */}
+      {agentPopup && (
+        <div className="fixed inset-0 z-[65] flex items-center justify-center bg-black/50 p-4" onClick={() => setAgentPopup(null)}>
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="relative h-14 w-14 overflow-hidden rounded-full bg-gradient-to-br from-[#fce8f0] to-[#fde8dc]">
+                  {agentPopup.avatarUrl ? (
+                    <Image src={agentPopup.avatarUrl} alt={agentPopup.name} fill sizes="56px" className="object-cover" />
+                  ) : <span className="flex h-full w-full items-center justify-center text-xl font-black text-[var(--brand)]">{agentPopup.name[0]}</span>}
+                </div>
+                <div>
+                  <h3 className="font-black">{agentPopup.name}</h3>
+                  <p className="text-xs text-[var(--muted)]">{agentPopup.role}</p>
+                </div>
+              </div>
+              <button onClick={() => setAgentPopup(null)} aria-label="Close" className="text-[var(--muted)] hover:text-[var(--ink)]"><X className="h-5 w-5" /></button>
+            </div>
+
+            {agentPopup.services && agentPopup.services.length > 0 ? (
+              <div className="mt-4 max-h-52 space-y-1.5 overflow-y-auto">
+                {agentPopup.services.slice(0, 6).map((s) => (
+                  <div key={s.id} className="flex items-center justify-between text-sm">
+                    <span className="truncate">{s.name}</span>
+                    <span className="font-bold">{formatZAR(s.priceCents)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : <p className="mt-4 text-sm text-[var(--muted)]">No services listed yet.</p>}
+
+            <div className="mt-5 flex gap-2">
+              <button onClick={() => bookAgent(agentPopup)} disabled={!agentPopup.services?.length}
+                className="flex-1 rounded-xl bg-[var(--ink)] py-2.5 text-sm font-bold text-white hover:bg-[var(--ink)]/90 disabled:opacity-40">
+                Book with {agentPopup.name.split(" ")[0]}
+              </button>
+              <button onClick={() => goToTeamMember(agentPopup.handle)}
+                className="rounded-xl border border-[var(--line)] px-4 py-2.5 text-sm font-bold hover:border-[var(--brand)]">
+                Full profile
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {rateOpen && (
         <RateModal

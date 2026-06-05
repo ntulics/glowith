@@ -26,7 +26,12 @@ export default async function Page({ params }: { params: Promise<{ handle: strin
       user: { select: { name: true, createdAt: true } },
       services: { where: { active: true }, orderBy: { createdAt: "asc" } },
       posts: { orderBy: { createdAt: "desc" } },
-      agents: { select: { id: true, businessName: true, category: true, avatarUrl: true, handle: true } },
+      agents: {
+        select: {
+          id: true, businessName: true, category: true, avatarUrl: true, handle: true,
+          services: { where: { active: true }, orderBy: { createdAt: "asc" } }
+        }
+      },
       _count: { select: { bookings: true } }
     }
   });
@@ -38,6 +43,16 @@ export default async function Page({ params }: { params: Promise<{ handle: strin
   // their business's /team/{handle} route while employed.
   const tenantSlug = (await headers()).get("x-tenant-slug");
   if (tenantSlug === "freelancer" && profile.parentBusinessId) notFound();
+
+  const mapSvc = (s: { id: string; name: string; category: string; durationMinutes: number; priceCents: number; depositCents: number }, performer: string | null) => ({
+    id: s.id, name: s.name, category: s.category, durationMinutes: s.durationMinutes,
+    priceCents: s.priceCents, depositCents: s.depositCents, performer
+  });
+  // Business storefront lists its own services + every agent's services.
+  const combinedServices = [
+    ...profile.services.map((s) => mapSvc(s, null)),
+    ...profile.agents.flatMap((a) => a.services.map((s) => mapSvc(s, a.businessName)))
+  ];
 
   return (
     <ProviderProfilePage
@@ -57,14 +72,7 @@ export default async function Page({ params }: { params: Promise<{ handle: strin
         providerType: profile.providerType,
         memberSince: profile.user.createdAt.toISOString(),
         appointmentsCompleted: profile._count.bookings,
-        services: profile.services.map((s) => ({
-          id: s.id,
-          name: s.name,
-          category: s.category,
-          durationMinutes: s.durationMinutes,
-          priceCents: s.priceCents,
-          depositCents: s.depositCents
-        })),
+        services: combinedServices,
         posts: profile.posts.map((p) => ({
           id: p.id,
           caption: p.caption,
@@ -78,7 +86,8 @@ export default async function Page({ params }: { params: Promise<{ handle: strin
           name: a.businessName,
           role: a.category,
           avatarUrl: mediaUrl(a.avatarUrl),
-          handle: a.handle.replace("@", "")
+          handle: a.handle.replace("@", ""),
+          services: a.services.map((s) => mapSvc(s, a.businessName))
         }))
       }}
     />

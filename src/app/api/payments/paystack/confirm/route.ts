@@ -20,18 +20,21 @@ export async function POST(request: Request) {
     const { success } = await verifyTransaction(reference);
     if (success) {
       // Guard against a slot being confirmed twice between popup steps.
-      const svc = await prisma.service.findUnique({ where: { id: booking.serviceId }, select: { durationMinutes: true } });
-      const dur = svc?.durationMinutes ?? 0;
+      let dur = booking.durationMinutes;
+      if (!dur) {
+        const svc = await prisma.service.findUnique({ where: { id: booking.serviceId }, select: { durationMinutes: true } });
+        dur = svc?.durationMinutes ?? 0;
+      }
       const start = booking.startsAt.getTime();
       const end = start + dur * 60000;
       const dayStart = new Date(booking.startsAt); dayStart.setHours(0, 0, 0, 0);
       const dayEnd = new Date(booking.startsAt); dayEnd.setHours(23, 59, 59, 999);
       const others = await prisma.booking.findMany({
         where: { providerProfileId: booking.providerProfileId, status: "CONFIRMED", id: { not: booking.id }, startsAt: { gte: dayStart, lte: dayEnd } },
-        select: { startsAt: true, service: { select: { durationMinutes: true } } }
+        select: { startsAt: true, durationMinutes: true, service: { select: { durationMinutes: true } } }
       });
       const clash = others.some((b) => {
-        const bs = b.startsAt.getTime(); const be = bs + b.service.durationMinutes * 60000;
+        const bs = b.startsAt.getTime(); const be = bs + (b.durationMinutes || b.service.durationMinutes) * 60000;
         return start < be && end > bs;
       });
       if (clash) {

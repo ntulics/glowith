@@ -3,15 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { signIn } from "next-auth/react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, ArrowRight, Check, Clock3, Loader2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Clock3, Loader2, Plus, X } from "lucide-react";
 
-type Service = { id: string; name: string; durationMinutes: number; priceCents: number; depositCents: number };
+type Service = { id: string; name: string; category?: string; durationMinutes: number; priceCents: number; depositCents: number; performer?: string | null };
 type Busy = { start: string; durationMinutes: number };
 
 const ZAR = (c: number) => new Intl.NumberFormat("en-ZA", { style: "currency", currency: "ZAR", maximumFractionDigits: 0 }).format(c / 100);
 const fmtDur = (m: number) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ""}`);
 
-// 08:00–18:00 in 30-min steps
 const SLOTS = Array.from({ length: 20 }, (_, i) => {
   const mins = 8 * 60 + i * 30;
   return { h: Math.floor(mins / 60), m: mins % 60, label: `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}` };
@@ -33,9 +32,10 @@ export function BookingFlow({
   services: Service[]; preselectedServiceId?: string | null;
 }) {
   const [step, setStep] = useState<Step>("service");
-  const [serviceId, setServiceId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [serviceCat, setServiceCat] = useState("All");
   const [date, setDate] = useState<Date | null>(null);
-  const [slot, setSlot] = useState<string | null>(null); // HH:MM
+  const [slot, setSlot] = useState<string | null>(null);
   const [busy, setBusy] = useState<Busy[]>([]);
   const [notes, setNotes] = useState("");
   const [authed, setAuthed] = useState<boolean | null>(null);
@@ -44,32 +44,40 @@ export function BookingFlow({
   const [busyLoading, setBusyLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  // Coupon
   const [couponInput, setCouponInput] = useState("");
   const [appliedCode, setAppliedCode] = useState<string | null>(null);
   const [discountCents, setDiscountCents] = useState(0);
   const [couponLabel, setCouponLabel] = useState("");
   const [couponError, setCouponError] = useState("");
   const [applyingCoupon, setApplyingCoupon] = useState(false);
-  // Inline payment (Paystack popup)
   const [payInfo, setPayInfo] = useState<{ bookingId: string; reference: string; publicKey: string; email: string; amountCents: number } | null>(null);
   const [payError, setPayError] = useState("");
   const payMountedRef = useRef(false);
   const popupRef = useRef<any>(null);
 
-  const service = useMemo(() => services.find((s) => s.id === serviceId) ?? null, [services, serviceId]);
+  const selectedServices = useMemo(() => services.filter((s) => selectedIds.includes(s.id)), [services, selectedIds]);
+  const totalDuration = selectedServices.reduce((a, s) => a + s.durationMinutes, 0);
+  const totalPrice = selectedServices.reduce((a, s) => a + s.priceCents, 0);
+  const totalDeposit = selectedServices.reduce((a, s) => a + (s.depositCents ?? 0), 0);
+  const categories = useMemo(() => {
+    const set = new Set(services.map((s) => s.category).filter(Boolean) as string[]);
+    return ["All", ...Array.from(set)];
+  }, [services]);
+  const catServices = serviceCat === "All" ? services : services.filter((s) => s.category === serviceCat);
 
-  // On open: reset + detect session + honour preselected service
+  function toggleService(id: string) {
+    setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  }
+
   useEffect(() => {
     if (!open) return;
     setError("");
-    setServiceId(preselectedServiceId ?? null);
-    setDate(null); setSlot(null); setNotes("");
+    setSelectedIds(preselectedServiceId ? [preselectedServiceId] : []);
+    setDate(null); setSlot(null); setNotes(""); setServiceCat("All");
     setStep(preselectedServiceId ? "date" : "service");
     fetch("/api/auth/session").then((r) => r.json()).then((s) => setAuthed(!!s?.user)).catch(() => setAuthed(false));
   }, [open, preselectedServiceId]);
 
-  // Fetch availability when a date is chosen
   useEffect(() => {
     if (!date) return;
     setBusyLoading(true);
@@ -90,69 +98,43 @@ export function BookingFlow({
     setStep("done");
   }
 
-  // Standard Paystack popup (card / EFT / etc.) — the reliable path on any browser.
   function openCheckout() {
     const popup = popupRef.current;
     if (!popup || !payInfo) { setPayError("Payment is still loading — try again in a moment"); return; }
-    const opts = {
-      key: payInfo.publicKey,
-      email: payInfo.email,
-      amount: payInfo.amountCents,
-      currency: "ZAR",
-      reference: payInfo.reference,
-      ref: payInfo.reference,
-      onSuccess: onPaid,
-      onLoad: () => {},
-      onCancel: () => {},
-      onClose: () => {}
+    const opts: any = {
+      key: payInfo.publicKey, email: payInfo.email, amount: payInfo.amountCents,
+      currency: "ZAR", reference: payInfo.reference, ref: payInfo.reference,
+      onSuccess: onPaid, onLoad: () => {}, onCancel: () => {}, onClose: () => {}
     };
     try {
       if (typeof popup.newTransaction === "function") popup.newTransaction(opts);
       else if (typeof popup.checkout === "function") popup.checkout(opts);
-      else if (typeof popup.resumeTransaction === "function") popup.resumeTransaction(payInfo.reference);
       else setPayError("Could not open checkout");
-    } catch {
-      setPayError("Could not open checkout");
-    }
+    } catch { setPayError("Could not open checkout"); }
   }
 
-  // Load the Paystack inline script and best-effort mount the Apple Pay button.
-  // Must run unconditionally (before any early return) to satisfy Rules of Hooks.
   useEffect(() => {
     if (!open || step !== "pay" || !payInfo || payMountedRef.current) return;
     payMountedRef.current = true;
-
     function mount() {
       const Pop = (window as any).PaystackPop;
       if (!Pop) { setPayError("Could not load the payment widget"); return; }
       popupRef.current = new Pop();
-      // Apple Pay button (only renders on supported Safari/iOS with a registered domain)
       try {
         popupRef.current.paymentRequest?.({
-          key: payInfo!.publicKey,
-          email: payInfo!.email,
-          amount: payInfo!.amountCents,
-          currency: "ZAR",
-          ref: payInfo!.reference,
-          container: "paystack-apple-pay",
+          key: payInfo!.publicKey, email: payInfo!.email, amount: payInfo!.amountCents,
+          currency: "ZAR", ref: payInfo!.reference, container: "paystack-apple-pay",
           style: { theme: "light", applePay: { width: "100%", borderRadius: "10px", type: "pay", locale: "en" } },
-          onSuccess: onPaid,
-          onError: () => {},
-          onCancel: () => {}
+          onSuccess: onPaid, onError: () => {}, onCancel: () => {}
         });
-      } catch {
-        /* Apple Pay unavailable — the "More payment options" button still works */
-      }
+      } catch { /* Apple Pay unavailable */ }
     }
-
     if ((window as any).PaystackPop) { mount(); return; }
     const existing = document.getElementById("paystack-inline-js");
     if (existing) { existing.addEventListener("load", mount); return; }
     const s = document.createElement("script");
-    s.id = "paystack-inline-js";
-    s.src = "https://js.paystack.co/v2/inline.js";
-    s.onload = mount;
-    s.onerror = () => setPayError("Could not load Paystack");
+    s.id = "paystack-inline-js"; s.src = "https://js.paystack.co/v2/inline.js";
+    s.onload = mount; s.onerror = () => setPayError("Could not load Paystack");
     document.body.appendChild(s);
   }, [open, step, payInfo]);
 
@@ -163,11 +145,11 @@ export function BookingFlow({
     const d = new Date(date!); d.setHours(h, m, 0, 0); return d;
   }
   function slotDisabled(hhmm: string): boolean {
-    if (!date || !service) return true;
+    if (!date || totalDuration === 0) return true;
     const start = slotDate(hhmm);
     if (start.getTime() < Date.now()) return true;
-    const end = start.getTime() + service.durationMinutes * 60000;
-    if (start.getHours() * 60 + start.getMinutes() + service.durationMinutes > 18 * 60) return true;
+    const end = start.getTime() + totalDuration * 60000;
+    if (start.getHours() * 60 + start.getMinutes() + totalDuration > 18 * 60) return true;
     return busy.some((b) => {
       const bs = new Date(b.start).getTime(); const be = bs + b.durationMinutes * 60000;
       return start.getTime() < be && end > bs;
@@ -197,20 +179,18 @@ export function BookingFlow({
   }
 
   async function confirm() {
-    if (!service || !date || !slot) return;
+    if (!selectedServices.length || !date || !slot) return;
     setError(""); setSubmitting(true);
     try {
       const startsAt = slotDate(slot).toISOString();
       const res = await fetch("/api/bookings/create", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ providerProfileId, serviceId: service.id, startsAt, notes, couponCode: appliedCode })
+        body: JSON.stringify({ providerProfileId, serviceIds: selectedIds, startsAt, notes, couponCode: appliedCode })
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error ?? "Could not create booking");
 
       if (d.booking.depositCents > 0) {
-        // Prepare an inline (popup) payment. Returns key + reference, or
-        // { simulated } when the gateway isn't configured yet.
         const prep = await fetch("/api/payments/paystack/prepare", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ bookingId: d.booking.id })
@@ -232,22 +212,18 @@ export function BookingFlow({
   }
 
   async function releaseAndBack() {
-    if (payInfo?.bookingId) {
-      await fetch(`/api/bookings/${payInfo.bookingId}`, { method: "DELETE" });
-    }
+    if (payInfo?.bookingId) await fetch(`/api/bookings/${payInfo.bookingId}`, { method: "DELETE" });
     payMountedRef.current = false;
-    setPayInfo(null);
-    setPayError("");
-    setStep("review");
+    setPayInfo(null); setPayError(""); setStep("review");
   }
 
   async function applyCoupon() {
-    if (!service || !couponInput.trim()) return;
+    if (!selectedServices.length || !couponInput.trim()) return;
     setApplyingCoupon(true); setCouponError("");
     try {
       const res = await fetch("/api/coupons/validate", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ providerProfileId, code: couponInput.trim(), serviceId: service.id })
+        body: JSON.stringify({ providerProfileId, code: couponInput.trim(), serviceId: selectedServices[0].id })
       });
       const d = await res.json();
       if (!d.valid) { setCouponError(d.error ?? "Invalid code"); setAppliedCode(null); setDiscountCents(0); return; }
@@ -257,193 +233,234 @@ export function BookingFlow({
     }
   }
 
-  function goAfterTime() {
-    if (authed === false) { setStep("auth"); } else { setStep("review"); }
-  }
+  function goAfterTime() { setStep(authed === false ? "auth" : "review"); }
 
-  const stepsOrder: Step[] = preselectedServiceId
-    ? ["date", "time", ...(authed === false ? ["auth" as Step] : []), "review", "pay", "done"]
-    : ["service", "date", "time", ...(authed === false ? ["auth" as Step] : []), "review", "pay", "done"];
+  const stepsOrder: Step[] = [
+    ...(preselectedServiceId ? [] : ["service" as Step]),
+    "date", "time", ...(authed === false ? ["auth" as Step] : []), "review", "pay", "done"
+  ];
   const progress = (stepsOrder.indexOf(step) + 1) / stepsOrder.length;
 
   return (
     <div className="fixed inset-0 z-[60] flex flex-col bg-[var(--background)]">
       {/* Top bar */}
-      <div className="flex items-center gap-4 px-4 py-3 sm:px-8">
-        <button onClick={onClose} aria-label="Close booking" className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--line)] hover:bg-white">
-          <X className="h-4 w-4" />
-        </button>
-        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--line)]">
-          <motion.div className="h-full rounded-full bg-[var(--brand)]" animate={{ width: `${progress * 100}%` }} transition={{ duration: 0.3 }} />
-        </div>
-        <span className="text-xs font-bold text-[var(--muted)]">{providerName}</span>
+      <div className="flex items-center gap-4 border-b border-[var(--line)] bg-white px-4 py-3 sm:px-8">
+        {step === "service" ? (
+          <button onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--line)] hover:bg-[var(--background)]"><ArrowLeft className="h-4 w-4" /></button>
+        ) : (
+          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--line)]">
+            <motion.div className="h-full rounded-full bg-[var(--brand)]" animate={{ width: `${progress * 100}%` }} transition={{ duration: 0.3 }} />
+          </div>
+        )}
+        <h2 className="text-lg font-black">{step === "service" ? "Select services" : providerName}</h2>
+        <button onClick={onClose} aria-label="Close" className="ml-auto flex h-9 w-9 items-center justify-center rounded-full border border-[var(--line)] hover:bg-[var(--background)]"><X className="h-4 w-4" /></button>
       </div>
 
-      <div className="flex flex-1 items-start justify-center overflow-y-auto px-4 py-8 sm:items-center">
-        <div className="w-full max-w-lg">
-          <AnimatePresence mode="wait">
-            <motion.div key={step}
-              initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.25 }}>
+      {/* ── Service selection: two-column ── */}
+      {step === "service" ? (
+        <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 overflow-y-auto px-4 py-6 sm:px-8 lg:flex-row">
+          <div className="min-w-0 flex-1">
+            <h3 className="mb-1 text-2xl font-black">{providerName}</h3>
+            {categories.length > 1 && (
+              <div className="mb-5 mt-3 flex gap-2 overflow-x-auto">
+                {categories.map((c) => (
+                  <button key={c} onClick={() => setServiceCat(c)}
+                    className={`shrink-0 rounded-full border px-4 py-2 text-sm font-bold transition ${serviceCat === c ? "border-[var(--ink)] bg-[var(--ink)] text-white" : "border-[var(--line)] bg-white text-[var(--muted)] hover:border-[var(--ink)]"}`}>
+                    {c}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="space-y-3">
+              {catServices.map((s) => {
+                const sel = selectedIds.includes(s.id);
+                return (
+                  <button key={s.id} onClick={() => toggleService(s.id)}
+                    className={`flex w-full items-center justify-between gap-3 rounded-2xl border bg-white p-4 text-left transition ${sel ? "border-[var(--brand)] ring-1 ring-[var(--brand)]" : "border-[var(--line)] hover:border-[var(--ink)]"}`}>
+                    <div className="min-w-0">
+                      <p className="font-bold">{s.name}</p>
+                      <p className="mt-0.5 text-xs text-[var(--muted)]">{fmtDur(s.durationMinutes)}{s.performer ? ` · with ${s.performer}` : ""}</p>
+                      <p className="mt-1 text-sm font-black">{ZAR(s.priceCents)}</p>
+                    </div>
+                    <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${sel ? "bg-[var(--brand)] text-white" : "border border-[var(--line)] text-[var(--muted)]"}`}>
+                      {sel ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                    </span>
+                  </button>
+                );
+              })}
+              {catServices.length === 0 && <p className="py-12 text-center text-sm text-[var(--muted)]">No services in this category.</p>}
+            </div>
+          </div>
 
-              {step === "service" && (
-                <Section title="Which service would you like?">
-                  <div className="space-y-2">
-                    {services.map((s) => (
-                      <button key={s.id} onClick={() => { setServiceId(s.id); setStep("date"); }}
-                        className="flex w-full items-center justify-between rounded-2xl border border-[var(--line)] bg-white p-4 text-left transition hover:border-[var(--brand)]">
-                        <span>
-                          <span className="block font-bold">{s.name}</span>
-                          <span className="text-xs text-[var(--muted)]"><Clock3 className="mr-1 inline h-3 w-3" />{fmtDur(s.durationMinutes)}</span>
-                        </span>
-                        <span className="font-black">{ZAR(s.priceCents)}</span>
-                      </button>
-                    ))}
-                  </div>
-                </Section>
+          {/* Summary */}
+          <aside className="lg:w-80 lg:shrink-0">
+            <div className="rounded-2xl border border-[var(--line)] bg-white p-5 shadow-sm lg:sticky lg:top-4">
+              <p className="font-black">{providerName}</p>
+              {selectedServices.length === 0 ? (
+                <p className="mt-3 text-sm text-[var(--muted)]">No services selected yet. Tap a service to add it.</p>
+              ) : (
+                <div className="mt-3 space-y-2 border-t border-[var(--line)] pt-3">
+                  {selectedServices.map((s) => (
+                    <div key={s.id} className="flex items-start justify-between gap-2 text-sm">
+                      <span><span className="block font-semibold">{s.name}</span><span className="text-xs text-[var(--muted)]">{fmtDur(s.durationMinutes)}{s.performer ? ` with ${s.performer}` : ""}</span></span>
+                      <span className="font-bold">{ZAR(s.priceCents)}</span>
+                    </div>
+                  ))}
+                </div>
               )}
+              <div className="mt-4 flex items-center justify-between border-t border-[var(--line)] pt-3">
+                <span className="font-black">Total</span>
+                <span className="font-black">{ZAR(totalPrice)}</span>
+              </div>
+              <button onClick={() => setStep("date")} disabled={!selectedServices.length}
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--ink)] py-3.5 text-sm font-bold text-white transition hover:bg-[var(--ink)]/90 disabled:opacity-40">
+                Continue <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+          </aside>
+        </div>
+      ) : (
+        /* ── Other steps: centered ── */
+        <div className="flex flex-1 items-start justify-center overflow-y-auto px-4 py-8 sm:items-center">
+          <div className="w-full max-w-lg">
+            <AnimatePresence mode="wait">
+              <motion.div key={step} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.25 }}>
 
-              {step === "date" && (
-                <Section title="Pick a day" onBack={preselectedServiceId ? undefined : () => setStep("service")}>
-                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                    {nextDays(14).map((d) => {
-                      const sel = date && d.toDateString() === date.toDateString();
-                      return (
-                        <button key={d.toISOString()} onClick={() => { setDate(d); setSlot(null); setStep("time"); }}
-                          className={`rounded-2xl border p-3 text-center transition ${sel ? "border-[var(--brand)] bg-[var(--brand)]/5" : "border-[var(--line)] bg-white hover:border-[var(--brand)]"}`}>
-                          <span className="block text-[10px] font-bold uppercase text-[var(--muted)]">{d.toLocaleDateString("en-ZA", { weekday: "short" })}</span>
-                          <span className="block text-lg font-black">{d.getDate()}</span>
-                          <span className="block text-[10px] text-[var(--muted)]">{d.toLocaleDateString("en-ZA", { month: "short" })}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </Section>
-              )}
-
-              {step === "time" && (
-                <Section title="Choose a time" onBack={() => setStep("date")}>
-                  {busyLoading ? (
-                    <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-[var(--muted)]" /></div>
-                  ) : (
+                {step === "date" && (
+                  <Section title="Pick a day" onBack={preselectedServiceId ? undefined : () => setStep("service")}>
                     <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                      {SLOTS.map((s) => {
-                        const disabled = slotDisabled(s.label);
-                        const sel = slot === s.label;
+                      {nextDays(14).map((d) => {
+                        const sel = date && d.toDateString() === date.toDateString();
                         return (
-                          <button key={s.label} disabled={disabled} onClick={() => setSlot(s.label)}
-                            className={`rounded-xl border py-2.5 text-sm font-bold transition ${sel ? "border-[var(--brand)] bg-[var(--brand)] text-white" : disabled ? "cursor-not-allowed border-[var(--line)] bg-[var(--line)]/30 text-[var(--muted)]/40" : "border-[var(--line)] bg-white hover:border-[var(--brand)]"}`}>
-                            {s.label}
+                          <button key={d.toISOString()} onClick={() => { setDate(d); setSlot(null); setStep("time"); }}
+                            className={`rounded-2xl border p-3 text-center transition ${sel ? "border-[var(--brand)] bg-[var(--brand)]/5" : "border-[var(--line)] bg-white hover:border-[var(--brand)]"}`}>
+                            <span className="block text-[10px] font-bold uppercase text-[var(--muted)]">{d.toLocaleDateString("en-ZA", { weekday: "short" })}</span>
+                            <span className="block text-lg font-black">{d.getDate()}</span>
+                            <span className="block text-[10px] text-[var(--muted)]">{d.toLocaleDateString("en-ZA", { month: "short" })}</span>
                           </button>
                         );
                       })}
                     </div>
-                  )}
-                  <NextButton disabled={!slot} onClick={goAfterTime} />
-                </Section>
-              )}
+                  </Section>
+                )}
 
-              {step === "auth" && (
-                <Section title="Sign in to confirm" onBack={() => setStep("time")}>
-                  <div className="mb-4 flex gap-2">
-                    <button onClick={() => setAuthMode("signin")} className={`flex-1 rounded-xl border py-2 text-sm font-bold ${authMode === "signin" ? "border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]" : "border-[var(--line)]"}`}>Sign in</button>
-                    <button onClick={() => setAuthMode("register")} className={`flex-1 rounded-xl border py-2 text-sm font-bold ${authMode === "register" ? "border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]" : "border-[var(--line)]"}`}>Create account</button>
-                  </div>
-                  <div className="space-y-3">
-                    {authMode === "register" && (
-                      <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name"
-                        className="w-full rounded-xl border border-[var(--line)] bg-white px-4 py-3 text-sm outline-none focus:border-[var(--brand)]" />
-                    )}
-                    <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="Email"
-                      className="w-full rounded-xl border border-[var(--line)] bg-white px-4 py-3 text-sm outline-none focus:border-[var(--brand)]" />
-                    <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Password"
-                      className="w-full rounded-xl border border-[var(--line)] bg-white px-4 py-3 text-sm outline-none focus:border-[var(--brand)]" />
-                  </div>
-                  <button onClick={doAuth} disabled={submitting || !email || !password || (authMode === "register" && !name)}
-                    className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] py-3 text-sm font-bold text-white hover:bg-[var(--brand-dark)] disabled:opacity-50">
-                    {submitting && <Loader2 className="h-4 w-4 animate-spin" />} Continue
-                  </button>
-                </Section>
-              )}
-
-              {step === "review" && service && date && slot && (
-                <Section title="Review & confirm" onBack={() => setStep(authed === false ? "auth" : "time")}>
-                  <div className="space-y-3 rounded-2xl border border-[var(--line)] bg-white p-5">
-                    <Row label="Service" value={service.name} />
-                    <Row label="When" value={`${date.toLocaleDateString("en-ZA", { weekday: "long", day: "numeric", month: "long" })} at ${slot}`} />
-                    <Row label="Duration" value={fmtDur(service.durationMinutes)} />
-                    <Row label="Price" value={ZAR(service.priceCents)} />
-                    {appliedCode && (
-                      <Row label={`Coupon ${appliedCode} (${couponLabel})`} value={`– ${ZAR(discountCents)}`} highlight />
-                    )}
-                    {appliedCode && <Row label="Total" value={ZAR(service.priceCents - discountCents)} />}
-                    {service.depositCents > 0 && <Row label="Deposit due now" value={ZAR(service.depositCents)} highlight />}
-                  </div>
-
-                  {/* Coupon */}
-                  <div className="mt-3">
-                    {appliedCode ? (
-                      <button onClick={() => { setAppliedCode(null); setDiscountCents(0); setCouponInput(""); }}
-                        className="text-xs font-bold text-[var(--brand)] hover:underline">Remove coupon</button>
+                {step === "time" && (
+                  <Section title="Choose a time" onBack={() => setStep("date")}>
+                    {busyLoading ? (
+                      <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-[var(--muted)]" /></div>
                     ) : (
-                      <div className="flex gap-2">
-                        <input value={couponInput} onChange={(e) => setCouponInput(e.target.value.toUpperCase())} placeholder="Coupon code"
-                          className="flex-1 rounded-xl border border-[var(--line)] bg-white px-4 py-2.5 text-sm uppercase outline-none focus:border-[var(--brand)]" />
-                        <button onClick={applyCoupon} disabled={applyingCoupon || !couponInput.trim()}
-                          className="rounded-xl border border-[var(--line)] px-4 py-2.5 text-sm font-bold hover:border-[var(--brand)] disabled:opacity-50">
-                          {applyingCoupon ? "…" : "Apply"}
-                        </button>
+                      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                        {SLOTS.map((s) => {
+                          const disabled = slotDisabled(s.label);
+                          const sel = slot === s.label;
+                          return (
+                            <button key={s.label} disabled={disabled} onClick={() => setSlot(s.label)}
+                              className={`rounded-xl border py-2.5 text-sm font-bold transition ${sel ? "border-[var(--brand)] bg-[var(--brand)] text-white" : disabled ? "cursor-not-allowed border-[var(--line)] bg-[var(--line)]/30 text-[var(--muted)]/40" : "border-[var(--line)] bg-white hover:border-[var(--brand)]"}`}>
+                              {s.label}
+                            </button>
+                          );
+                        })}
                       </div>
                     )}
-                    {couponError && <p className="mt-1 text-xs font-semibold text-red-500">{couponError}</p>}
-                  </div>
-                  <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Anything the provider should know? (optional)"
-                    className="mt-3 w-full resize-none rounded-xl border border-[var(--line)] bg-white px-4 py-3 text-sm outline-none focus:border-[var(--brand)]" />
-                  <button onClick={confirm} disabled={submitting}
-                    className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] py-3.5 text-sm font-black text-white hover:bg-[var(--brand-dark)] disabled:opacity-50">
-                    {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                    {service.depositCents > 0 ? "Continue to payment" : "Confirm booking"}
-                  </button>
-                </Section>
-              )}
+                    <p className="mt-3 text-center text-xs text-[var(--muted)]">Total time: {fmtDur(totalDuration)}</p>
+                    <NextButton disabled={!slot} onClick={goAfterTime} />
+                  </Section>
+                )}
 
-              {step === "pay" && service && date && slot && (
-                <Section title="Pay your deposit" onBack={releaseAndBack}>
-                  {/* Booking summary, shown again right before payment */}
-                  <div className="mb-4 space-y-2 rounded-2xl border border-[var(--line)] bg-white p-4">
-                    <Row label="Service" value={service.name} />
-                    <Row label="When" value={`${date.toLocaleDateString("en-ZA", { weekday: "long", day: "numeric", month: "long" })} at ${slot}`} />
-                    {appliedCode && <Row label={`Coupon ${appliedCode}`} value={`– ${ZAR(discountCents)}`} highlight />}
-                    <Row label="Deposit due now" value={ZAR(service.depositCents)} highlight />
-                  </div>
-                  <p className="mb-3 text-xs text-[var(--muted)]">
-                    Your slot is confirmed only once the deposit is paid. Apple Pay appears automatically on supported devices.
-                  </p>
-                  {/* Paystack injects the Apple Pay button here (Safari/iOS only) */}
-                  <div id="paystack-apple-pay" className="w-full [&>*]:!w-full empty:hidden" />
-                  <button id="paystack-other-channels" type="button" onClick={openCheckout}
-                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] py-3.5 text-sm font-black text-white hover:bg-[var(--brand-dark)]">
-                    Pay {service ? ZAR(service.depositCents) : "deposit"} — card, EFT &amp; more
-                  </button>
-                  {payError && <p className="mt-3 text-center text-sm font-semibold text-red-500">{payError}</p>}
-                </Section>
-              )}
+                {step === "auth" && (
+                  <Section title="Sign in to confirm" onBack={() => setStep("time")}>
+                    <div className="mb-4 flex gap-2">
+                      <button onClick={() => setAuthMode("signin")} className={`flex-1 rounded-xl border py-2 text-sm font-bold ${authMode === "signin" ? "border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]" : "border-[var(--line)]"}`}>Sign in</button>
+                      <button onClick={() => setAuthMode("register")} className={`flex-1 rounded-xl border py-2 text-sm font-bold ${authMode === "register" ? "border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]" : "border-[var(--line)]"}`}>Create account</button>
+                    </div>
+                    <div className="space-y-3">
+                      {authMode === "register" && (
+                        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name"
+                          className="w-full rounded-xl border border-[var(--line)] bg-white px-4 py-3 text-sm outline-none focus:border-[var(--brand)]" />
+                      )}
+                      <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="Email"
+                        className="w-full rounded-xl border border-[var(--line)] bg-white px-4 py-3 text-sm outline-none focus:border-[var(--brand)]" />
+                      <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Password"
+                        className="w-full rounded-xl border border-[var(--line)] bg-white px-4 py-3 text-sm outline-none focus:border-[var(--brand)]" />
+                    </div>
+                    <button onClick={doAuth} disabled={submitting || !email || !password || (authMode === "register" && !name)}
+                      className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] py-3 text-sm font-bold text-white hover:bg-[var(--brand-dark)] disabled:opacity-50">
+                      {submitting && <Loader2 className="h-4 w-4 animate-spin" />} Continue
+                    </button>
+                  </Section>
+                )}
 
-              {step === "done" && (
-                <div className="text-center">
-                  <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
-                    <Check className="h-8 w-8 text-emerald-600" />
-                  </div>
-                  <h2 className="text-2xl font-black">Booking confirmed!</h2>
-                  <p className="mt-2 text-[var(--muted)]">{providerName} has your appointment{date && slot ? ` for ${date.toLocaleDateString("en-ZA", { weekday: "long", day: "numeric", month: "long" })} at ${slot}` : ""}.</p>
-                  <button onClick={onClose} className="mt-6 rounded-xl bg-[var(--ink)] px-6 py-3 text-sm font-bold text-white hover:bg-[var(--ink)]/90">Done</button>
-                </div>
-              )}
+                {step === "review" && selectedServices.length > 0 && date && slot && (
+                  <Section title="Review & confirm" onBack={() => setStep(authed === false ? "auth" : "time")}>
+                    <div className="space-y-3 rounded-2xl border border-[var(--line)] bg-white p-5">
+                      {selectedServices.map((s) => (
+                        <Row key={s.id} label={`${s.name}${s.performer ? ` · ${s.performer}` : ""}`} value={ZAR(s.priceCents)} />
+                      ))}
+                      <div className="border-t border-[var(--line)] pt-3">
+                        <Row label="When" value={`${date.toLocaleDateString("en-ZA", { weekday: "long", day: "numeric", month: "long" })} at ${slot}`} />
+                        <Row label="Total time" value={fmtDur(totalDuration)} />
+                      </div>
+                      {appliedCode && <Row label={`Coupon ${appliedCode} (${couponLabel})`} value={`– ${ZAR(discountCents)}`} highlight />}
+                      <div className="border-t border-[var(--line)] pt-3">
+                        <Row label="Total" value={ZAR(totalPrice - (appliedCode ? discountCents : 0))} />
+                        {totalDeposit > 0 && <Row label="Deposit at checkout" value="required" highlight />}
+                      </div>
+                    </div>
+                    <div className="mt-3">
+                      {appliedCode ? (
+                        <button onClick={() => { setAppliedCode(null); setDiscountCents(0); setCouponInput(""); }} className="text-xs font-bold text-[var(--brand)] hover:underline">Remove coupon</button>
+                      ) : (
+                        <div className="flex gap-2">
+                          <input value={couponInput} onChange={(e) => setCouponInput(e.target.value.toUpperCase())} placeholder="Coupon code"
+                            className="flex-1 rounded-xl border border-[var(--line)] bg-white px-4 py-2.5 text-sm uppercase outline-none focus:border-[var(--brand)]" />
+                          <button onClick={applyCoupon} disabled={applyingCoupon || !couponInput.trim()}
+                            className="rounded-xl border border-[var(--line)] px-4 py-2.5 text-sm font-bold hover:border-[var(--brand)] disabled:opacity-50">{applyingCoupon ? "…" : "Apply"}</button>
+                        </div>
+                      )}
+                      {couponError && <p className="mt-1 text-xs font-semibold text-red-500">{couponError}</p>}
+                    </div>
+                    <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Anything the provider should know? (optional)"
+                      className="mt-3 w-full resize-none rounded-xl border border-[var(--line)] bg-white px-4 py-3 text-sm outline-none focus:border-[var(--brand)]" />
+                    <button onClick={confirm} disabled={submitting}
+                      className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] py-3.5 text-sm font-black text-white hover:bg-[var(--brand-dark)] disabled:opacity-50">
+                      {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                      {totalDeposit > 0 ? "Continue to payment" : "Confirm booking"}
+                    </button>
+                  </Section>
+                )}
 
-              {error && <p className="mt-4 text-center text-sm font-semibold text-red-500">{error}</p>}
-            </motion.div>
-          </AnimatePresence>
+                {step === "pay" && payInfo && (
+                  <Section title="Pay your deposit" onBack={releaseAndBack}>
+                    <div className="mb-4 space-y-2 rounded-2xl border border-[var(--line)] bg-white p-4">
+                      {selectedServices.map((s) => <Row key={s.id} label={s.name} value={ZAR(s.priceCents)} />)}
+                      {date && slot && <Row label="When" value={`${date.toLocaleDateString("en-ZA", { weekday: "short", day: "numeric", month: "short" })} at ${slot}`} />}
+                      <div className="border-t border-[var(--line)] pt-2"><Row label="Deposit due now" value={ZAR(payInfo.amountCents)} highlight /></div>
+                    </div>
+                    <p className="mb-3 text-xs text-[var(--muted)]">Your slot is confirmed once the deposit is paid. Apple Pay appears automatically on supported devices.</p>
+                    <div id="paystack-apple-pay" className="w-full [&>*]:!w-full empty:hidden" />
+                    <button id="paystack-other-channels" type="button" onClick={openCheckout}
+                      className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] py-3.5 text-sm font-black text-white hover:bg-[var(--brand-dark)]">
+                      Pay {ZAR(payInfo.amountCents)} — card, EFT &amp; more
+                    </button>
+                    {payError && <p className="mt-3 text-center text-sm font-semibold text-red-500">{payError}</p>}
+                  </Section>
+                )}
+
+                {step === "done" && (
+                  <div className="text-center">
+                    <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100"><Check className="h-8 w-8 text-emerald-600" /></div>
+                    <h2 className="text-2xl font-black">Booking confirmed!</h2>
+                    <p className="mt-2 text-[var(--muted)]">{providerName} has your appointment{date && slot ? ` for ${date.toLocaleDateString("en-ZA", { weekday: "long", day: "numeric", month: "long" })} at ${slot}` : ""}.</p>
+                    <button onClick={onClose} className="mt-6 rounded-xl bg-[var(--ink)] px-6 py-3 text-sm font-bold text-white hover:bg-[var(--ink)]/90">Done</button>
+                  </div>
+                )}
+
+                {error && <p className="mt-4 text-center text-sm font-semibold text-red-500">{error}</p>}
+              </motion.div>
+            </AnimatePresence>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
