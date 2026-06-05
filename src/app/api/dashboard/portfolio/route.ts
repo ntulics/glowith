@@ -62,7 +62,9 @@ export async function POST(request: Request) {
       authorName
     }
   });
-  // Count storage against the portfolio that holds the post.
-  if (bytes > 0) await prisma.providerProfile.update({ where: { id: providerProfileId }, data: { storageBytes: { increment: bytes } } });
+  // Count storage against the portfolio that holds the post (best-effort).
+  if (bytes > 0) {
+    try { await prisma.providerProfile.update({ where: { id: providerProfileId }, data: { storageBytes: { increment: bytes } } }); } catch { /* ignore */ }
+  }
   return NextResponse.json({ post });
 }

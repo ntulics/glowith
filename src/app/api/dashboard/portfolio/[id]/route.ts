@@ -49,7 +49,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (m) { try { await deleteBlob(decodeURIComponent(m[1])); } catch { /* ignore */ } }
   await prisma.portfolioPost.delete({ where: { id } });
   if (post.sizeBytes > 0) {
-    await prisma.providerProfile.update({ where: { id: post.providerProfileId }, data: { storageBytes: { decrement: post.sizeBytes } } });
+    try { await prisma.providerProfile.update({ where: { id: post.providerProfileId }, data: { storageBytes: { decrement: post.sizeBytes } } }); } catch { /* ignore */ }
   }
   return NextResponse.json({ ok: true });
 }
