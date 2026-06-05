@@ -312,5 +312,52 @@ export async function POST() {
     });
   }
 
+  // ── Sample blog post (showcases all editor features) ─────────────────────
+  const SAMPLE_BLOG = `Welcome to **Glowith** — South Africa's social beauty marketplace. This sample post shows everything the blog supports, from headings to drop caps, so you can see how your stories will look. Notice the large drop cap on this very first paragraph.
+
+## Why we built Glowith
+
+Finding a great beauty professional shouldn't mean endless DMs and guesswork. Glowith brings salons, studios and independent freelancers into one place — with real portfolios, honest reviews and instant booking.
+
+> "Beauty is power; a smile is its sword." — and a good booking experience is the scabbard.
+
+### What you can do here
+
+- Discover top-rated pros **near you** with live distances on the map
+- Browse portfolios and *real* reviews before you book
+- Book multiple services in one go and pay a secure deposit
+
+### Getting the most from your profile
+
+1. Add a clear, well-lit **cover photo**
+2. Write a short, friendly bio
+3. Upload at least 6 portfolio images
+4. Keep your services and prices up to date
+
+![A bright, modern nail studio](https://images.unsplash.com/photo-1604654894610-df63bc536371?w=1200&q=80)
+
+## Formatting you can use
+
+You can add \`inline code\`, [links to other pages](/about), **bold** and *italic* text, lists, quotes, images and horizontal rules.
+
+---
+
+Ready to glow? [List your business](/business) or [discover beauty near you](/). We can't wait to see what you create.`;
+
+  await prisma.blogPost.upsert({
+    where: { slug: "welcome-to-glowith" },
+    update: {},
+    create: {
+      slug: "welcome-to-glowith",
+      title: "Welcome to Glowith — your beauty, beautifully booked",
+      excerpt: "A quick tour of everything the Glowith blog can do — headings, drop caps, images, quotes and more.",
+      coverImageUrl: "https://images.unsplash.com/photo-1560066984-138dadb4c035?w=1600&q=80",
+      content: SAMPLE_BLOG,
+      published: true,
+      publishedAt: new Date(),
+      authorName: "The Glowith Team"
+    }
+  });
+
   return NextResponse.json({ ok: true, credentials: created });
 }
