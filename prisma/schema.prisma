@@ -206,6 +206,7 @@ model PortfolioPost {
   tags              String[]
   likes             Int      @default(0)
   saves             Int      @default(0)
+  featured          Boolean  @default(false)
   authorProfileId   String?
   authorName        String?
   createdAt         DateTime @default(now())

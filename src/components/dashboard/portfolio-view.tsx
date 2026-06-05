@@ -2,11 +2,11 @@
 
 import { useRef, useState } from "react";
 import Image from "next/image";
-import { Heart, Bookmark, ImagePlus, Loader2, Trash2, Images } from "lucide-react";
+import { Heart, Bookmark, ImagePlus, Loader2, Trash2, Images, Star } from "lucide-react";
 
 type Post = {
   id: string; imageUrl: string; caption: string; tags: string[];
-  likes: number; saves: number;
+  likes: number; saves: number; featured: boolean;
   providerProfileId: string; authorName: string | null;
 };
 
@@ -38,19 +38,39 @@ export function PortfolioView({
   const fileRef = useRef<HTMLInputElement>(null);
   const showTargetToggle = canPostToCompany && !isBusiness;
 
+  async function uploadOne(file: File): Promise<string> {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("folder", "portfolio");
+    const res = await fetch("/api/upload", { method: "POST", body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? "Upload failed");
+    return data.url;
+  }
+  async function createPost(imageUrl: string, cap: string, tags: string[]): Promise<Post> {
+    const res = await fetch("/api/dashboard/portfolio", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ imageUrl, caption: cap, tags, target: isBusiness ? "company" : target })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? "Failed to save");
+    return data.post;
+  }
+
+  // Single file → caption editor; multiple files → upload all at once (Instagram-style)
   async function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
     setError("");
     setUploading(true);
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("folder", "portfolio");
-      const res = await fetch("/api/upload", { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Upload failed");
-      setPendingUrl(data.url);
+      if (files.length === 1) {
+        setPendingUrl(await uploadOne(files[0]));
+      } else {
+        const created: Post[] = [];
+        for (const f of files) created.push(await createPost(await uploadOne(f), "", []));
+        setPosts((prev) => [...created, ...prev]);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
@@ -59,20 +79,21 @@ export function PortfolioView({
     }
   }
 
+  async function toggleFeatured(id: string, featured: boolean) {
+    setPosts((prev) => prev.map((p) => p.id === id ? { ...p, featured } : p));
+    await fetch(`/api/dashboard/portfolio/${id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ featured })
+    });
+  }
+
   async function publish() {
     if (!pendingUrl) return;
     setSaving(true);
     setError("");
     try {
       const tags = tagsInput.split(",").map((t) => t.trim()).filter(Boolean);
-      const res = await fetch("/api/dashboard/portfolio", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageUrl: pendingUrl, caption, tags, target: isBusiness ? "company" : target })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to save");
-      setPosts((prev) => [data.post, ...prev]);
+      const post = await createPost(pendingUrl, caption, tags);
+      setPosts((prev) => [post, ...prev]);
       setPendingUrl(null);
       setCaption("");
       setTagsInput("");
@@ -166,7 +187,8 @@ export function PortfolioView({
             </div>
           )}
           {error && <p className="mt-3 text-sm font-semibold text-red-500">{error}</p>}
-          <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={onPickFile} className="hidden" />
+          <input ref={fileRef} type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif" onChange={onPickFile} className="hidden" />
+          <p className="mt-2 text-center text-xs text-gray-400">Select multiple photos to upload them all at once. Star a photo to feature it in your profile slider (up to 5).</p>
         </div>
 
         {/* Grid */}
@@ -176,6 +198,11 @@ export function PortfolioView({
               <div key={post.id} className="group overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
                 <div className="relative aspect-square bg-gray-100">
                   <Image src={post.imageUrl} alt={post.caption || "Portfolio photo"} fill sizes="(max-width:640px) 100vw, 25vw" className="object-cover" />
+                  <button type="button" onClick={() => toggleFeatured(post.id, !post.featured)}
+                    aria-label={post.featured ? "Unfeature" : "Feature"} title={post.featured ? "Featured in your slider" : "Feature in your slider"}
+                    className={`absolute left-2 top-2 flex h-8 w-8 items-center justify-center rounded-lg shadow transition ${post.featured ? "bg-[#D94472] text-white" : "bg-white/90 text-gray-400 opacity-0 hover:text-[#D94472] group-hover:opacity-100"}`}>
+                    <Star className={`h-4 w-4 ${post.featured ? "fill-white" : ""}`} />
+                  </button>
                   <button type="button" onClick={() => remove(post.id)} disabled={deleting === post.id}
                     aria-label="Delete photo"
                     className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-lg bg-white/90 text-gray-500 opacity-0 shadow transition hover:text-red-500 group-hover:opacity-100">

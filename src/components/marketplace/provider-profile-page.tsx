@@ -10,7 +10,7 @@ import { VerifiedBadge } from "@/components/verified-badge";
 import { BookingFlow } from "@/components/marketplace/booking-flow";
 
 type Service = { id: string; name: string; category: string; durationMinutes: number; priceCents: number; depositCents: number; performer?: string | null };
-type Post = { id: string; caption: string; imageUrl: string; tags: string[]; likes: number; saves: number };
+type Post = { id: string; caption: string; imageUrl: string; tags: string[]; likes: number; saves: number; featured?: boolean };
 type TeamMember = { id: string; name: string; role: string; avatarUrl: string | null; handle: string; services?: Service[] };
 type BookTarget = { id: string; name: string; services: Service[]; preselect: string | null };
 
@@ -85,6 +85,10 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
   }, [profile.services, serviceCat, showAllServices]);
 
   const galleryImages = profile.posts.map((p) => p.imageUrl);
+  // Mobile hero slider: featured photos, or the 5 most recent if none featured
+  const featuredPhotos = profile.posts.filter((p) => p.featured);
+  const heroPhotos = (featuredPhotos.length ? featuredPhotos : profile.posts).slice(0, 5).map((p) => p.imageUrl);
+  const [heroIndex, setHeroIndex] = useState(0);
 
   const sections = [
     profile.posts.length > 0 ? { id: "photos", label: "Photos" } : null,
@@ -143,15 +147,20 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
       {!embed && (
       <header className="sticky top-0 z-40 border-b border-[var(--line)]/60 bg-white/90 backdrop-blur-md">
         <div className="mx-auto flex h-[4.25rem] max-w-[90rem] items-center gap-3 px-4 sm:px-6">
-          <button onClick={backToGlowith} aria-label="Back to Glowith" className="flex shrink-0 items-center gap-2 text-[var(--muted)] hover:text-[var(--ink)]">
+          <button onClick={backToGlowith} aria-label="Back" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[var(--muted)] hover:bg-[var(--background)] hover:text-[var(--ink)]">
             <ArrowLeft className="h-4 w-4" />
-            <span role="img" aria-label="Glowith" className="logo-adaptive h-6" />
           </button>
+          {/* Provider name with a small "by Glowith" mark */}
+          <div className="min-w-0 shrink">
+            <p className="truncate text-sm font-black sm:text-base">{profile.businessName}</p>
+            <button onClick={backToGlowith} className="flex items-center gap-1 text-[10px] font-semibold text-[var(--muted)] hover:text-[var(--ink)]">
+              by <span role="img" aria-label="Glowith" className="logo-adaptive h-2.5" />
+            </button>
+          </div>
 
-          {/* Docked business section nav */}
+          {/* Docked business section nav (desktop) */}
           {docked && (
             <nav className="hidden min-w-0 flex-1 items-center gap-1 overflow-x-auto md:flex">
-              <span className="mr-2 shrink-0 truncate text-sm font-black">{profile.businessName}</span>
               {sections.map((s) => (
                 <button key={s.id} onClick={() => scrollTo(s.id)}
                   className="shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold text-[var(--muted)] hover:bg-[var(--background)] hover:text-[var(--ink)]">
@@ -183,19 +192,56 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
           <div className="fixed inset-0 z-50 bg-black/40" onClick={() => setMenuOpen(false)} />
           <div className="fixed inset-y-0 right-0 z-50 flex w-72 flex-col gap-1 bg-white p-5 shadow-2xl">
             <div className="mb-3 flex items-center justify-between">
-              <span role="img" aria-label="Glowith" className="logo-adaptive h-6" />
+              <p className="truncate text-sm font-black">{profile.businessName}</p>
               <button onClick={() => setMenuOpen(false)} aria-label="Close"><X className="h-5 w-5 text-[var(--muted)]" /></button>
             </div>
-            <Link href="/" className="rounded-xl px-3 py-2.5 text-sm font-semibold hover:bg-[var(--background)]">Discover</Link>
-            <a href="/login" className="rounded-xl px-3 py-2.5 text-sm font-semibold hover:bg-[var(--background)]">Log in</a>
-            <a href="/signup" className="rounded-xl px-3 py-2.5 text-sm font-semibold hover:bg-[var(--background)]">List your business</a>
+            {/* This provider's sections */}
+            {sections.map((s) => (
+              <button key={s.id} onClick={() => { setMenuOpen(false); scrollTo(s.id); }}
+                className="rounded-xl px-3 py-2.5 text-left text-sm font-bold hover:bg-[var(--background)]">{s.label}</button>
+            ))}
+            <div className="my-2 border-t border-[var(--line)]" />
+            <Link href="/" className="rounded-xl px-3 py-2.5 text-sm font-semibold text-[var(--muted)] hover:bg-[var(--background)]">Discover on Glowith</Link>
+            <a href="/login" className="rounded-xl px-3 py-2.5 text-sm font-semibold text-[var(--muted)] hover:bg-[var(--background)]">Log in</a>
+            <a href="/business" className="rounded-xl px-3 py-2.5 text-sm font-semibold text-[var(--muted)] hover:bg-[var(--background)]">List your business</a>
           </div>
         </>
       )}
 
+      {/* ── Mobile hero photo slider (featured, or 5 most recent) ── */}
+      {heroPhotos.length > 0 && (
+        <div className="relative sm:hidden">
+          <div
+            onScroll={(e) => {
+              const el = e.currentTarget;
+              setHeroIndex(Math.round(el.scrollLeft / el.clientWidth));
+            }}
+            className="flex snap-x snap-mandatory overflow-x-auto scroll-x"
+          >
+            {heroPhotos.map((src, i) => (
+              <div key={i} className="relative aspect-[4/5] w-full shrink-0 snap-center bg-[#f3e8e4]">
+                <Image src={src} alt={`${profile.businessName} ${i + 1}`} fill sizes="100vw" className="object-cover" priority={i === 0} />
+              </div>
+            ))}
+          </div>
+          {/* counter */}
+          <div className="pointer-events-none absolute bottom-3 right-3 rounded-full bg-black/55 px-2.5 py-1 text-xs font-bold text-white">
+            {Math.min(heroIndex + 1, heroPhotos.length)}/{heroPhotos.length}
+          </div>
+          {/* dots */}
+          {heroPhotos.length > 1 && (
+            <div className="pointer-events-none absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-1.5">
+              {heroPhotos.map((_, i) => (
+                <span key={i} className={`h-1.5 rounded-full transition-all ${i === heroIndex ? "w-4 bg-white" : "w-1.5 bg-white/60"}`} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
-        {/* ── Hero gallery (portfolio) ── */}
-        <div className="grid gap-2 sm:grid-cols-3 sm:grid-rows-2">
+        {/* ── Hero gallery (portfolio) — desktop only ── */}
+        <div className="hidden gap-2 sm:grid sm:grid-cols-3 sm:grid-rows-2">
           <div className="relative aspect-[16/10] overflow-hidden rounded-2xl bg-[#f3e8e4] sm:col-span-2 sm:row-span-2 sm:aspect-auto">
             {galleryImages[0] ? (
               <Image src={galleryImages[0]} alt={profile.businessName} fill sizes="(max-width:640px) 100vw, 66vw" className="object-cover" />

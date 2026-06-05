@@ -37,6 +37,7 @@ export default async function PortfolioPage() {
         tags: p.tags,
         likes: p.likes,
         saves: p.saves,
+        featured: p.featured,
         providerProfileId: p.providerProfileId,
         authorName: p.authorName
       }))}

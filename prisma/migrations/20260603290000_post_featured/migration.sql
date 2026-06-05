@@ -1,0 +1,1 @@
+ALTER TABLE "PortfolioPost" ADD COLUMN "featured" BOOLEAN NOT NULL DEFAULT false;

@@ -15,12 +15,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const post = await prisma.portfolioPost.findUnique({ where: { id } });
   if (!post || post.providerProfileId !== profile.id) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const { caption, tags } = await request.json();
+  const { caption, tags, featured } = await request.json();
   const updated = await prisma.portfolioPost.update({
     where: { id },
     data: {
       ...(caption !== undefined ? { caption: caption.toString().slice(0, 280) } : {}),
-      ...(Array.isArray(tags) ? { tags: tags.slice(0, 10).map((t: string) => t.toString().slice(0, 30)) } : {})
+      ...(Array.isArray(tags) ? { tags: tags.slice(0, 10).map((t: string) => t.toString().slice(0, 30)) } : {}),
+      ...(typeof featured === "boolean" ? { featured } : {})
     }
   });
   return NextResponse.json({ post: updated });
