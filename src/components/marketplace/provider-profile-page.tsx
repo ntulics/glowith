@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type WheelEvent } from "react";
 import Image, { type ImageProps } from "next/image";
 import Link from "next/link";
 import { format } from "date-fns";
@@ -101,7 +101,8 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
   const [heroIndex, setHeroIndex] = useState(0);
   const heroService = heroItems[heroIndex]?.post.serviceId ? serviceById.get(heroItems[heroIndex].post.serviceId!) : undefined;
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null);
-  const lightboxScroller = useRef<HTMLDivElement>(null);
+  const lightboxTouchStartX = useRef(0);
+  const lightboxWheelLocked = useRef(false);
   const openHeroLightbox = (index: number) => {
     const item = heroItems[index];
     if (item) setLightbox({ images: item.images, index: 0 });
@@ -113,12 +114,15 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
       return { ...lb, index };
     });
   };
-
-  useEffect(() => {
-    const el = lightboxScroller.current;
-    if (!el || !lightbox) return;
-    el.scrollTo({ left: lightbox.index * el.clientWidth, behavior: "instant" });
-  }, [lightbox?.images, lightbox?.index]);
+  const handleLightboxWheel = (event: WheelEvent<HTMLDivElement>) => {
+    if (!lightbox || Math.abs(event.deltaX) <= Math.abs(event.deltaY) || Math.abs(event.deltaX) < 12) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (lightboxWheelLocked.current) return;
+    lightboxWheelLocked.current = true;
+    stepLightbox(event.deltaX > 0 ? 1 : -1);
+    window.setTimeout(() => { lightboxWheelLocked.current = false; }, 280);
+  };
 
   const sections = [
     gridPhotos.length > 0 ? { id: "photos", label: "Photos" } : null,
@@ -533,22 +537,34 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
 
       {/* Carousel lightbox */}
       {lightbox && (
-        <div className="fixed inset-0 z-[68] flex flex-col bg-black/95" onClick={() => setLightbox(null)}>
-          <div className="flex items-center justify-between px-4 py-3">
+        <div
+          className="fixed inset-0 z-[68] flex touch-none flex-col overscroll-none bg-black/95"
+          onClick={() => setLightbox(null)}
+          onWheel={handleLightboxWheel}
+          onTouchStart={(e) => { lightboxTouchStartX.current = e.touches[0].clientX; }}
+          onTouchMove={(e) => {
+            const dx = e.touches[0].clientX - lightboxTouchStartX.current;
+            if (Math.abs(dx) > 8) e.preventDefault();
+          }}
+          onTouchEnd={(e) => {
+            const dx = e.changedTouches[0].clientX - lightboxTouchStartX.current;
+            if (dx > 50) stepLightbox(-1);
+            else if (dx < -50) stepLightbox(1);
+          }}
+        >
+          <div className="flex items-center justify-between px-4 py-3" onClick={(e) => e.stopPropagation()}>
             <span className="text-sm font-bold text-white/80">{Math.min(lightbox.index + 1, lightbox.images.length)} / {lightbox.images.length}</span>
             <button onClick={() => setLightbox(null)} aria-label="Close" className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white"><X className="h-5 w-5" /></button>
           </div>
           <div
-            ref={lightboxScroller}
             onClick={(e) => e.stopPropagation()}
-            onScroll={(e) => setLightbox((lb) => lb ? { ...lb, index: Math.round(e.currentTarget.scrollLeft / e.currentTarget.clientWidth) } : lb)}
-            className="flex flex-1 snap-x snap-mandatory items-center overflow-x-auto scroll-x"
+            className="relative flex flex-1 items-center justify-center overflow-hidden"
           >
-            {lightbox.images.map((src, i) => (
-              <div key={i} className="relative h-full w-full shrink-0 snap-center">
-                <PortfolioImage src={src} alt={`Photo ${i + 1}`} fill sizes="100vw" className="object-contain" />
-              </div>
-            ))}
+            <LightboxPhoto
+              key={`${lightbox.index}-${lightbox.images[lightbox.index]}`}
+              src={lightbox.images[lightbox.index]}
+              alt={`Photo ${lightbox.index + 1}`}
+            />
           </div>
           {lightbox.images.length > 1 && (
             <>
@@ -569,6 +585,18 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
                 <ChevronRight className="h-6 w-6" />
               </button>
             </>
+          )}
+          {lightbox.images.length > 1 && (
+            <div className="flex justify-center gap-1.5 py-4" onClick={(e) => e.stopPropagation()}>
+              {lightbox.images.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setLightbox((lb) => lb ? { ...lb, index: i } : lb)}
+                  aria-label={`Show photo ${i + 1}`}
+                  className={`h-1.5 rounded-full transition-all ${i === lightbox.index ? "w-4 bg-white" : "w-1.5 bg-white/40"}`}
+                />
+              ))}
+            </div>
           )}
         </div>
       )}
@@ -646,6 +674,25 @@ function PortfolioImage({ src, unoptimized, onError, ...props }: ImageProps) {
         if (srcValue) setFailedSrc(srcValue);
         onError?.(event);
       }}
+    />
+  );
+}
+
+function LightboxPhoto({ src, alt }: { src: string; alt: string }) {
+  const [fallback, setFallback] = useState(false);
+
+  useEffect(() => {
+    setFallback(false);
+  }, [src]);
+
+  return (
+    // Plain img keeps fullscreen carousel navigation out of Next's image optimizer.
+    <img
+      src={fallback ? IMAGE_FALLBACK_SRC : src}
+      alt={alt}
+      className="absolute inset-0 h-full w-full object-contain"
+      draggable={false}
+      onError={() => setFallback(true)}
     />
   );
 }

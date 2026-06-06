@@ -1,8 +1,10 @@
 "use client";
 
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, type WheelEvent } from "react";
 import Image from "next/image";
 import { Heart, Bookmark, ImagePlus, Loader2, Trash2, Images, Star, Layers, ChevronLeft, ChevronRight, X } from "lucide-react";
+
+const IMAGE_FALLBACK_SRC = "/images/glowith-hero.png";
 
 type Post = {
   id: string; imageUrl: string; images?: string[]; caption: string; tags: string[];
@@ -38,8 +40,19 @@ export function PortfolioView({
   const [deleting, setDeleting] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null);
   const touchStartX = useRef<number>(0);
+  const wheelLocked = useRef(false);
   const lbNext = useCallback(() => setLightbox((l) => l && l.index < l.images.length - 1 ? { ...l, index: l.index + 1 } : l), []);
   const lbPrev = useCallback(() => setLightbox((l) => l && l.index > 0 ? { ...l, index: l.index - 1 } : l), []);
+  const onLightboxWheel = useCallback((event: WheelEvent<HTMLDivElement>) => {
+    if (!lightbox || Math.abs(event.deltaX) <= Math.abs(event.deltaY) || Math.abs(event.deltaX) < 12) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (wheelLocked.current) return;
+    wheelLocked.current = true;
+    if (event.deltaX > 0) lbNext();
+    else lbPrev();
+    window.setTimeout(() => { wheelLocked.current = false; }, 280);
+  }, [lbNext, lbPrev, lightbox]);
   // Where a new post goes: own profile, or the company portfolio (if allowed & not the owner)
   const [target, setTarget] = useState<"self" | "company">(isBusiness ? "company" : "self");
   const [linkServiceId, setLinkServiceId] = useState("");
@@ -288,9 +301,14 @@ export function PortfolioView({
       {/* Carousel lightbox */}
       {lightbox && (
         <div
-          className="fixed inset-0 z-[68] flex flex-col bg-black/95"
+          className="fixed inset-0 z-[68] flex touch-none flex-col overscroll-none bg-black/95"
           onClick={() => setLightbox(null)}
+          onWheel={onLightboxWheel}
           onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX; }}
+          onTouchMove={(e) => {
+            const dx = e.touches[0].clientX - touchStartX.current;
+            if (Math.abs(dx) > 8) e.preventDefault();
+          }}
           onTouchEnd={(e) => {
             const dx = e.changedTouches[0].clientX - touchStartX.current;
             if (dx > 50) lbPrev();
@@ -304,13 +322,10 @@ export function PortfolioView({
             </button>
           </div>
           <div className="relative flex flex-1 items-center justify-center overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <Image
+            <LightboxPhoto
               key={lightbox.index}
               src={lightbox.images[lightbox.index]}
               alt={`Photo ${lightbox.index + 1}`}
-              fill
-              sizes="100vw"
-              className="object-contain"
             />
             {lightbox.index > 0 && (
               <button onClick={lbPrev} className="absolute left-3 flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60">
@@ -333,5 +348,20 @@ export function PortfolioView({
         </div>
       )}
     </div>
+  );
+}
+
+function LightboxPhoto({ src, alt }: { src: string; alt: string }) {
+  const [fallback, setFallback] = useState(false);
+
+  return (
+    // Plain img keeps fullscreen carousel navigation independent of Next image routing.
+    <img
+      src={fallback ? IMAGE_FALLBACK_SRC : src}
+      alt={alt}
+      className="absolute inset-0 h-full w-full object-contain"
+      draggable={false}
+      onError={() => setFallback(true)}
+    />
   );
 }
