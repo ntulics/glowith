@@ -20,6 +20,7 @@ import {
   X
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useEffect, useState } from "react";
 
 const nav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -47,6 +48,22 @@ interface Props {
 export function Sidebar({ businessName, handle, role, providerType, parentBusinessName, onClose }: Props) {
   const pathname = usePathname();
   const isAgent = !!parentBusinessName;
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    let mounted = true;
+    async function check() {
+      try {
+        const res = await fetch("/api/conversations");
+        if (!res.ok || !mounted) return;
+        const data = await res.json();
+        setUnreadCount((data.conversations as any[]).filter((c: any) => c.unread).length);
+      } catch { /* ignore */ }
+    }
+    check();
+    const t = setInterval(check, 10000);
+    return () => { mounted = false; clearInterval(t); };
+  }, []);
   // Agents work under a business — team & client management live at company level
   const visibleNav = isAgent
     ? nav.filter((item) => !["/dashboard/agents", "/dashboard/clients", "/dashboard/coupons"].includes(item.href))
@@ -124,6 +141,11 @@ export function Sidebar({ businessName, handle, role, providerType, parentBusine
                 >
                   <Icon className="h-4 w-4 shrink-0" />
                   {label}
+                  {href === "/dashboard/inbox" && unreadCount > 0 && (
+                    <span className="ml-auto flex h-4 min-w-4 items-center justify-center rounded-full bg-[#E85D2F] px-1 text-[9px] font-bold text-white">
+                      {unreadCount > 9 ? "9+" : unreadCount}
+                    </span>
+                  )}
                 </Link>
               </li>
             );

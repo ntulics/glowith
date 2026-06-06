@@ -56,6 +56,7 @@ export default async function Page({ params, searchParams }: { params: Promise<{
       embed={embed}
       profile={{
         id: agent.id,
+        userId: agent.userId,
         parentBusinessName: business.businessName,
         parentBusinessCity: business.city,
         handle: agent.handle,

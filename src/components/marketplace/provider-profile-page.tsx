@@ -15,7 +15,7 @@ type TeamMember = { id: string; name: string; role: string; avatarUrl: string | 
 type BookTarget = { id: string; name: string; services: Service[]; preselect: string | null };
 
 type Profile = {
-  id: string; handle: string; businessName: string; name: string;
+  id: string; userId?: string; handle: string; businessName: string; name: string;
   category: string; bio: string; city: string; avatarUrl: string | null;
   verified: boolean; verifiedBy?: "GLOWITH" | "EMPLOYER" | null;
   mobile: boolean; studio: boolean; providerType: string;
@@ -362,7 +362,23 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
                 <button onClick={toggleFollow} disabled={followBusy} className={cn("rounded-xl px-5 py-3 text-sm font-black transition disabled:opacity-60", following ? "bg-[var(--brand)]/10 text-[var(--brand)]" : "bg-[var(--ink)] text-white")}>
                   {following ? "Following" : "Follow"}
                 </button>
-                <button onClick={requireSignIn} aria-label="Message" className="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--background)] text-[var(--ink)]">
+                <button
+                  onClick={async () => {
+                    if (!profile.userId) return;
+                    const res = await fetch("/api/conversations", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ recipientId: profile.userId, body: `Hi ${profile.businessName}! I'd like to get in touch.` })
+                    });
+                    if (res.status === 401) { requireSignIn(); return; }
+                    if (res.ok) {
+                      const data = await res.json();
+                      window.location.href = `/dashboard/inbox?conversation=${data.conversationId}`;
+                    }
+                  }}
+                  aria-label="Message"
+                  className="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--background)] text-[var(--ink)] hover:bg-[var(--brand)]/10 hover:text-[var(--brand)] transition-colors"
+                >
                   <MessageCircle className="h-5 w-5" />
                 </button>
               </div>

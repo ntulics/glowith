@@ -58,6 +58,7 @@ export default async function Page({ params }: { params: Promise<{ handle: strin
     <ProviderProfilePage
       profile={{
         id: profile.id,
+        userId: profile.userId,
         handle: profile.handle,
         businessName: profile.businessName,
         name: profile.user.name,
