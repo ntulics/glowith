@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type WheelEvent } from "react";
 import Image, { type ImageProps } from "next/image";
 import Link from "next/link";
 import { format } from "date-fns";
-import { ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, Clock3, Heart, Layers, Loader2, MapPin, Menu, Share2, Star, UserCheck, UserPlus, X } from "lucide-react";
+import { ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, Clock3, Grid3X3, Heart, Layers, Loader2, MapPin, Menu, MessageCircle, Share2, Star, UserCheck, UserPlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VerifiedBadge } from "@/components/verified-badge";
 import { BookingFlow } from "@/components/marketplace/booking-flow";
@@ -38,6 +38,8 @@ const formatDuration = (minutes: number) => {
 export function ProviderProfilePage({ profile, embed = false }: { profile: Profile; embed?: boolean }) {
   const team = profile.team ?? [];
   const isAgent = !!profile.parentBusinessName;
+  const isFreelancer = profile.providerType === "FREELANCER";
+  const isIndividualProfile = isAgent || isFreelancer;
 
   const [book, setBook] = useState<BookTarget | null>(null);
   const [agentPopup, setAgentPopup] = useState<TeamMember | null>(null);
@@ -98,6 +100,7 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
   // Photos section excludes featured (shown in the slider) to avoid duplicates
   const gridPhotos = featuredPhotos.length ? profile.posts.filter((p) => !p.featured) : profile.posts;
   const serviceById = new Map(profile.services.map((s) => [s.id, s]));
+  const postByServiceId = new Map(profile.posts.filter((p) => p.serviceId).map((p) => [p.serviceId!, p]));
   const [heroIndex, setHeroIndex] = useState(0);
   const heroService = heroItems[heroIndex]?.post.serviceId ? serviceById.get(heroItems[heroIndex].post.serviceId!) : undefined;
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null);
@@ -173,6 +176,255 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
     } finally {
       setFollowBusy(false);
     }
+  }
+
+  const renderCommonOverlays = () => (
+    <>
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-[68] flex touch-none flex-col overscroll-none bg-black/95"
+          onClick={() => setLightbox(null)}
+          onWheel={handleLightboxWheel}
+          onTouchStart={(e) => { lightboxTouchStartX.current = e.touches[0].clientX; }}
+          onTouchMove={(e) => {
+            const dx = e.touches[0].clientX - lightboxTouchStartX.current;
+            if (Math.abs(dx) > 8) e.preventDefault();
+          }}
+          onTouchEnd={(e) => {
+            const dx = e.changedTouches[0].clientX - lightboxTouchStartX.current;
+            if (dx > 50) stepLightbox(-1);
+            else if (dx < -50) stepLightbox(1);
+          }}
+        >
+          <div className="flex items-center justify-between px-4 py-3" onClick={(e) => e.stopPropagation()}>
+            <span className="text-sm font-bold text-white/80">{Math.min(lightbox.index + 1, lightbox.images.length)} / {lightbox.images.length}</span>
+            <button onClick={() => setLightbox(null)} aria-label="Close" className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white"><X className="h-5 w-5" /></button>
+          </div>
+          <div onClick={(e) => e.stopPropagation()} className="relative flex flex-1 items-center justify-center overflow-hidden">
+            <LightboxPhoto key={`${lightbox.index}-${lightbox.images[lightbox.index]}`} src={lightbox.images[lightbox.index]} alt={`Photo ${lightbox.index + 1}`} />
+          </div>
+          {lightbox.images.length > 1 && (
+            <>
+              <button
+                onClick={(e) => { e.stopPropagation(); stepLightbox(-1); }}
+                disabled={lightbox.index === 0}
+                aria-label="Previous photo"
+                className="absolute left-3 top-1/2 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-white/25 disabled:opacity-35 sm:flex"
+              >
+                <ChevronLeft className="h-6 w-6" />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); stepLightbox(1); }}
+                disabled={lightbox.index === lightbox.images.length - 1}
+                aria-label="Next photo"
+                className="absolute right-3 top-1/2 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-white/25 disabled:opacity-35 sm:flex"
+              >
+                <ChevronRight className="h-6 w-6" />
+              </button>
+            </>
+          )}
+          {lightbox.images.length > 1 && (
+            <div className="flex justify-center gap-1.5 py-4" onClick={(e) => e.stopPropagation()}>
+              {lightbox.images.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setLightbox((lb) => lb ? { ...lb, index: i } : lb)}
+                  aria-label={`Show photo ${i + 1}`}
+                  className={`h-1.5 rounded-full transition-all ${i === lightbox.index ? "w-4 bg-white" : "w-1.5 bg-white/40"}`}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <BookingFlow
+        open={!!book}
+        onClose={() => setBook(null)}
+        providerProfileId={book?.id ?? profile.id}
+        providerName={book?.name ?? profile.businessName}
+        services={book?.services ?? profile.services}
+        preselectedServiceId={book?.preselect ?? null}
+      />
+
+      {rateOpen && (
+        <RateModal
+          providerProfileId={profile.id}
+          providerName={profile.businessName}
+          isAgent={isAgent}
+          businessName={profile.parentBusinessName ?? null}
+          initial={myRating}
+          onClose={() => setRateOpen(false)}
+          onSaved={() => { setRateOpen(false); loadSocial(); }}
+          onNeedSignIn={requireSignIn}
+        />
+      )}
+    </>
+  );
+
+  if (isIndividualProfile) {
+    const displayHandle = profile.handle.startsWith("@") ? profile.handle.slice(1) : profile.handle;
+    const serviceTiles = profile.services.map((service) => {
+      const post = postByServiceId.get(service.id);
+      const fallbackPost = profile.posts[0];
+      return {
+        service,
+        post,
+        image: post?.imageUrl ?? fallbackPost?.imageUrl ?? profile.avatarUrl ?? IMAGE_FALLBACK_SRC,
+        images: post?.images?.length ? post.images : post ? [post.imageUrl] : []
+      };
+    });
+    const serviceCategories = Array.from(new Set(profile.services.map((s) => s.category).filter(Boolean))).slice(0, 8);
+
+    return (
+      <div className="min-h-screen bg-white">
+        {!embed && (
+          <header className="sticky top-0 z-40 border-b border-[var(--line)]/70 bg-white/95 backdrop-blur-md">
+            <div className="mx-auto flex h-[4.25rem] max-w-5xl items-center gap-3 px-4 sm:px-6">
+              <button onClick={backToGlowith} aria-label="Back" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--ink)] hover:bg-[var(--background)]">
+                <ArrowLeft className="h-5 w-5" />
+              </button>
+              <p className="min-w-0 truncate text-lg font-black">@{displayHandle}</p>
+              <div className="ml-auto flex items-center gap-2">
+                <button className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-[var(--background)]" aria-label="Share">
+                  <Share2 className="h-5 w-5 text-[var(--muted)]" />
+                </button>
+                <button onClick={() => setMenuOpen(true)} className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-[var(--background)]" aria-label="Menu">
+                  <Menu className="h-5 w-5 text-[var(--ink)]" />
+                </button>
+              </div>
+            </div>
+          </header>
+        )}
+
+        {menuOpen && (
+          <>
+            <div className="fixed inset-0 z-50 bg-black/40" onClick={() => setMenuOpen(false)} />
+            <div className="fixed inset-y-0 right-0 z-50 flex w-72 flex-col gap-1 bg-white p-5 shadow-2xl">
+              <div className="mb-3 flex items-center justify-between">
+                <p className="truncate text-sm font-black">@{displayHandle}</p>
+                <button onClick={() => setMenuOpen(false)} aria-label="Close"><X className="h-5 w-5 text-[var(--muted)]" /></button>
+              </div>
+              <button onClick={() => { setMenuOpen(false); openBooking(); }} className="rounded-xl px-3 py-2.5 text-left text-sm font-bold hover:bg-[var(--background)]">Book a service</button>
+              <button onClick={() => { setMenuOpen(false); setRateOpen(true); }} className="rounded-xl px-3 py-2.5 text-left text-sm font-bold hover:bg-[var(--background)]">Write a review</button>
+              <Link href="/" className="rounded-xl px-3 py-2.5 text-sm font-semibold text-[var(--muted)] hover:bg-[var(--background)]">Discover on Glowith</Link>
+              <a href="/login" className="rounded-xl px-3 py-2.5 text-sm font-semibold text-[var(--muted)] hover:bg-[var(--background)]">Log in</a>
+            </div>
+          </>
+        )}
+
+        <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-10">
+          <section className="grid gap-6 sm:grid-cols-[12rem_minmax(0,1fr)] sm:items-start">
+            <div className="flex justify-center sm:block">
+              <div className="rounded-full bg-gradient-to-tr from-[#f9b233] via-[var(--brand)] to-[#8f38ff] p-1.5">
+                <div className="relative h-32 w-32 overflow-hidden rounded-full border-4 border-white bg-gradient-to-br from-[#fce8f0] to-[#fde8dc] sm:h-40 sm:w-40">
+                  {profile.avatarUrl ? (
+                    <PortfolioImage src={profile.avatarUrl} alt={profile.businessName} fill sizes="160px" className="object-cover" />
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center text-5xl font-black text-[var(--brand)]">{profile.businessName[0]}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="truncate text-2xl font-black sm:text-3xl">{profile.businessName}</h1>
+                {profile.verified && <VerifiedBadge verifiedBy={profile.verifiedBy ?? "GLOWITH"} employerName={profile.parentBusinessName} />}
+              </div>
+
+              <div className="mt-5 grid max-w-xl grid-cols-3 gap-4 text-center sm:text-left">
+                <div>
+                  <p className="text-2xl font-black">{profile.services.length}</p>
+                  <p className="text-sm text-[var(--muted)]">services</p>
+                </div>
+                <div>
+                  <p className="text-2xl font-black">{followers}</p>
+                  <p className="text-sm text-[var(--muted)]">followers</p>
+                </div>
+                <button onClick={() => setRateOpen(true)} className="text-center sm:text-left">
+                  <p className="text-2xl font-black">{ratingCount}</p>
+                  <p className="text-sm text-[var(--muted)]">reviews</p>
+                </button>
+              </div>
+
+              <div className="mt-5 space-y-1">
+                <p className="font-black">{profile.name || profile.businessName}</p>
+                <p className="text-sm font-semibold text-[var(--muted)]">{isAgent && profile.parentBusinessName ? `${profile.category} at ${profile.parentBusinessName}` : profile.category}</p>
+                {profile.bio && <p className="max-w-2xl whitespace-pre-line text-sm leading-6 text-[var(--ink)]">{profile.bio}</p>}
+                <p className="flex items-center gap-1 text-sm text-[var(--muted)]"><MapPin className="h-3.5 w-3.5" />{profile.city}</p>
+              </div>
+
+              <div className="mt-5 grid grid-cols-[1fr_1fr_auto] gap-2">
+                <button onClick={() => openBooking()} className="rounded-xl bg-[var(--brand)] px-5 py-3 text-sm font-black text-white shadow-sm hover:bg-[var(--brand-dark)]">
+                  Book
+                </button>
+                <button onClick={toggleFollow} disabled={followBusy} className={cn("rounded-xl px-5 py-3 text-sm font-black transition disabled:opacity-60", following ? "bg-[var(--brand)]/10 text-[var(--brand)]" : "bg-[var(--ink)] text-white")}>
+                  {following ? "Following" : "Follow"}
+                </button>
+                <button onClick={requireSignIn} aria-label="Message" className="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--background)] text-[var(--ink)]">
+                  <MessageCircle className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+          </section>
+
+          {serviceCategories.length > 0 && (
+            <section className="mt-8 overflow-x-auto pb-2">
+              <div className="flex gap-4">
+                {serviceCategories.map((category) => (
+                  <button key={category} onClick={() => scrollTo("individual-services")} className="w-24 shrink-0 text-center">
+                    <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border-[6px] border-[#68717c] bg-[var(--background)] text-lg font-black text-[var(--brand)]">
+                      {category[0]}
+                    </div>
+                    <p className="mt-2 truncate text-sm font-semibold">{category}</p>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <nav className="mt-6 grid grid-cols-3 border-t border-[var(--line)] text-center">
+            <button onClick={() => scrollTo("individual-services")} className="flex items-center justify-center gap-2 border-t-2 border-[var(--ink)] py-4 text-sm font-black">
+              <Grid3X3 className="h-4 w-4" /> Services
+            </button>
+            <button onClick={() => setRateOpen(true)} className="py-4 text-sm font-bold text-[var(--muted)]">Reviews</button>
+            <button onClick={() => openBooking()} className="py-4 text-sm font-bold text-[var(--muted)]">Book</button>
+          </nav>
+
+          <section id="individual-services" className="scroll-mt-24">
+            {serviceTiles.length > 0 ? (
+              <div className="grid grid-cols-3 gap-1 sm:gap-2">
+                {serviceTiles.map(({ service, post, image, images }) => (
+                  <div key={service.id} className="group relative aspect-square overflow-hidden bg-[#f3e8e4]">
+                    <button
+                      onClick={() => images.length ? setLightbox({ images, index: 0 }) : openBooking(service.id)}
+                      className="absolute inset-0"
+                      aria-label={service.name}
+                    >
+                      <PortfolioImage src={image} alt={service.name} fill sizes="33vw" className="object-cover transition duration-300 group-hover:scale-105" />
+                      {post?.images?.length ? (
+                        <Layers className="absolute right-2 top-2 h-5 w-5 text-white drop-shadow" />
+                      ) : null}
+                    </button>
+                    <button onClick={() => openBooking(service.id)} className="absolute bottom-2 right-2 rounded-full bg-[var(--brand)] px-3 py-1.5 text-[11px] font-black text-white shadow hover:bg-[var(--brand-dark)]">
+                      {formatZAR(service.priceCents)}
+                    </button>
+                    <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/65 to-transparent p-2 pr-20">
+                      <p className="line-clamp-2 text-xs font-black text-white">{service.name}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-[var(--line)] py-14 text-center text-sm text-[var(--muted)]">No services listed yet</div>
+            )}
+          </section>
+        </main>
+
+        {renderCommonOverlays()}
+      </div>
+    );
   }
 
   return (
