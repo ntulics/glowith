@@ -15,6 +15,16 @@ export async function GET(request: Request) {
       services: { where: { active: true }, orderBy: { createdAt: "asc" } },
       posts: { orderBy: { createdAt: "desc" } },
       parentBusiness: { select: { businessName: true, city: true } },
+      agents: {
+        select: {
+          id: true,
+          businessName: true,
+          category: true,
+          avatarUrl: true,
+          handle: true,
+          services: { where: { active: true }, orderBy: { createdAt: "asc" } }
+        }
+      },
       _count: { select: { bookings: true } }
     }
   });
@@ -48,7 +58,21 @@ export async function GET(request: Request) {
         images: (post.images?.length ? post.images : [post.imageUrl]).map((u) => mediaUrl(u) ?? u),
         tags: post.tags, likes: post.likes, saves: post.saves, featured: post.featured, serviceId: post.serviceId
       })),
-      team: []
+      team: p.agents.map((agent) => ({
+        id: agent.id,
+        name: agent.businessName,
+        role: agent.category,
+        avatarUrl: mediaUrl(agent.avatarUrl),
+        handle: agent.handle.replace("@", ""),
+        services: agent.services.map((s) => ({
+          id: s.id,
+          name: s.name,
+          category: s.category,
+          durationMinutes: s.durationMinutes,
+          priceCents: s.priceCents,
+          depositCents: s.depositCents
+        }))
+      }))
     }
   });
 }
