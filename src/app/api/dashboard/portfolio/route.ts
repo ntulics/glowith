@@ -75,9 +75,21 @@ export async function POST(request: Request) {
   try {
     post = await prisma.portfolioPost.create({ data: { ...baseData, sizeBytes: bytes } });
   } catch {
-    // sizeBytes/images column may not exist yet — create with the basics
-    const { images: _img, ...minimal } = baseData;
-    post = await prisma.portfolioPost.create({ data: minimal });
+    try {
+      // images/sizeBytes columns may not be migrated yet — try without them
+      const { images: _img, ...withoutImages } = baseData;
+      post = await prisma.portfolioPost.create({ data: withoutImages });
+    } catch {
+      // serviceId/authorProfileId/authorName also missing — fall back to absolute minimum
+      post = await prisma.portfolioPost.create({
+        data: {
+          providerProfileId,
+          imageUrl: cover,
+          caption: (baseData.caption ?? "").toString().slice(0, 280),
+          tags: baseData.tags ?? []
+        }
+      });
+    }
   }
   // Count storage against the portfolio that holds the post (best-effort).
   if (bytes > 0) {

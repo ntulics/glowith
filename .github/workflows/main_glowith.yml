@@ -39,6 +39,11 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate --schema=prisma/schema.prisma
 
+      - name: Run database migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npx prisma migrate deploy --schema=prisma/schema.prisma
+
       - name: Typecheck
         run: npm run typecheck
 
