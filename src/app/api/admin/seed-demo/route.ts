@@ -9,14 +9,14 @@ const PORTFOLIO_IMAGES: Record<string, string[]> = {
   Hair: [
     "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=900&q=80",
     "https://images.unsplash.com/photo-1521590832167-7bcbfaa6381f?w=900&q=80",
-    "https://images.unsplash.com/photo-1560869713-7d0b29430803?w=900&q=80",
+    "/images/glowith-hero.png",
     "https://images.unsplash.com/photo-1519699047748-de8e457a634e?w=900&q=80"
   ],
   Makeup: [
     "https://images.unsplash.com/photo-1487412947147-5cebf100ffc2?w=900&q=80",
-    "https://images.unsplash.com/photo-1619451683970-4afba15ea614?w=900&q=80",
+    "/images/glowith-hero.png",
     "https://images.unsplash.com/photo-1604654894610-df63bc536371?w=900&q=80",
-    "https://images.unsplash.com/photo-1633681122049-8e7ead5da9f6?w=900&q=80"
+    "/images/glowith-hero.png"
   ],
   Nails: [
     "https://images.unsplash.com/photo-1604654894610-df63bc536371?w=900&q=80",

@@ -6,9 +6,9 @@ const img = [
   "https://images.unsplash.com/photo-1604654894610-df63bc536371?auto=format&fit=crop&w=900&q=80",
   "https://images.unsplash.com/photo-1521590832167-7bcbfaa6381f?auto=format&fit=crop&w=900&q=80",
   "https://images.unsplash.com/photo-1487412947147-5cebf100ffc2?auto=format&fit=crop&w=900&q=80",
-  "https://images.unsplash.com/photo-1560869713-7d0b29430803?auto=format&fit=crop&w=900&q=80",
-  "https://images.unsplash.com/photo-1619451683970-4afba15ea614?auto=format&fit=crop&w=900&q=80",
-  "https://images.unsplash.com/photo-1633681122049-8e7ead5da9f6?auto=format&fit=crop&w=900&q=80"
+  "/images/glowith-hero.png",
+  "/images/glowith-hero.png",
+  "/images/glowith-hero.png"
 ];
 
 export const providers: Provider[] = [

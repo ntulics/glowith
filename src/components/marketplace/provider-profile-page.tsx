@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Image from "next/image";
+import Image, { type ImageProps } from "next/image";
 import Link from "next/link";
 import { format } from "date-fns";
 import { ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, Clock3, Heart, Layers, Loader2, MapPin, Menu, Share2, Star, UserCheck, UserPlus, X } from "lucide-react";
@@ -26,6 +26,8 @@ type Profile = {
 
 const formatZAR = (cents: number) =>
   new Intl.NumberFormat("en-ZA", { style: "currency", currency: "ZAR", maximumFractionDigits: 0 }).format(cents / 100);
+
+const IMAGE_FALLBACK_SRC = "/images/glowith-hero.png";
 
 const formatDuration = (minutes: number) => {
   if (minutes < 60) return `${minutes} mins`;
@@ -243,7 +245,7 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
           >
             {heroItems.map((item, i) => (
               <button key={item.post.id} onClick={() => setLightbox({ images: item.images, index: 0 })} className="relative block aspect-[4/3] w-full shrink-0 snap-center bg-[#f3e8e4]">
-                <Image src={item.src} alt={`${profile.businessName} ${i + 1}`} fill sizes="100vw" className="object-cover" priority={i === 0} />
+                <PortfolioImage src={item.src} alt={`${profile.businessName} ${i + 1}`} fill sizes="100vw" className="object-cover" priority={i === 0} />
                 {item.images.length > 1 && (
                   <span className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-black/55 px-2 py-1 text-[11px] font-bold text-white">
                     <Layers className="h-3.5 w-3.5" /> {item.images.length}
@@ -279,7 +281,7 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
         <div className="hidden gap-2 sm:grid sm:grid-cols-3 sm:grid-rows-2">
           <button onClick={() => openHeroLightbox(0)} className="relative aspect-[16/10] overflow-hidden rounded-2xl bg-[#f3e8e4] text-left sm:col-span-2 sm:row-span-2 sm:aspect-auto">
             {galleryImages[0] ? (
-              <Image src={galleryImages[0]} alt={profile.businessName} fill sizes="(max-width:640px) 100vw, 66vw" className="object-cover" />
+              <PortfolioImage src={galleryImages[0]} alt={profile.businessName} fill sizes="(max-width:640px) 100vw, 66vw" className="object-cover" />
             ) : <GalleryPlaceholder name={profile.businessName} />}
             {(heroItems[0]?.images.length ?? 0) > 1 && (
               <span className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-black/55 px-2.5 py-1 text-xs font-bold text-white">
@@ -290,7 +292,7 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
           {[1, 2].map((i) => (
             <button key={i} onClick={() => openHeroLightbox(i)} className="relative hidden aspect-[16/10] overflow-hidden rounded-2xl bg-[#f3e8e4] text-left sm:block">
               {galleryImages[i] ? (
-                <Image src={galleryImages[i]} alt={`${profile.businessName} ${i}`} fill sizes="33vw" className="object-cover" />
+                <PortfolioImage src={galleryImages[i]} alt={`${profile.businessName} ${i}`} fill sizes="33vw" className="object-cover" />
               ) : <GalleryPlaceholder name={profile.businessName} />}
               {(heroItems[i]?.images.length ?? 0) > 1 && (
                 <span className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-black/55 px-2 py-1 text-[11px] font-bold text-white">
@@ -354,7 +356,7 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
                     return (
                     <div key={post.id} className="group overflow-hidden rounded-2xl border border-[var(--line)] bg-white shadow-sm">
                       <button onClick={() => setLightbox({ images: imgs, index: 0 })} className="relative block aspect-square w-full bg-[#f3e8e4]">
-                        <Image src={post.imageUrl} alt={post.caption} fill sizes="300px" className="object-cover" />
+                        <PortfolioImage src={post.imageUrl} alt={post.caption} fill sizes="300px" className="object-cover" />
                         {imgs.length > 1 && (
                           <span className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-black/55 px-1.5 py-0.5 text-[10px] font-bold text-white">
                             <Layers className="h-3 w-3" /> {imgs.length}
@@ -544,7 +546,7 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
           >
             {lightbox.images.map((src, i) => (
               <div key={i} className="relative h-full w-full shrink-0 snap-center">
-                <Image src={src} alt={`Photo ${i + 1}`} fill sizes="100vw" className="object-contain" />
+                <PortfolioImage src={src} alt={`Photo ${i + 1}`} fill sizes="100vw" className="object-contain" />
               </div>
             ))}
           </div>
@@ -622,6 +624,29 @@ function GalleryPlaceholder({ name }: { name: string }) {
     <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[#fce8f0] to-[#fde8dc] text-5xl font-black text-[var(--brand)]">
       {name[0]}
     </div>
+  );
+}
+
+function PortfolioImage({ src, unoptimized, onError, ...props }: ImageProps) {
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const srcValue = typeof src === "string" ? src : "";
+  const resolvedSrc = failedSrc === srcValue ? IMAGE_FALLBACK_SRC : src;
+  const shouldBypassOptimizer = unoptimized ?? (srcValue.includes("images.unsplash.com") && failedSrc !== srcValue);
+
+  useEffect(() => {
+    setFailedSrc(null);
+  }, [srcValue]);
+
+  return (
+    <Image
+      {...props}
+      src={resolvedSrc}
+      unoptimized={shouldBypassOptimizer}
+      onError={(event) => {
+        if (srcValue) setFailedSrc(srcValue);
+        onError?.(event);
+      }}
+    />
   );
 }
 
