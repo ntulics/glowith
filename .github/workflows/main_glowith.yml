@@ -39,16 +39,6 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate --schema=prisma/schema.prisma
 
-      - name: Run database migrations
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: |
-          if [ -z "$DATABASE_URL" ]; then
-            echo "::warning::DATABASE_URL secret not set — skipping migrate deploy. Add it to run migrations from CI."
-          else
-            npx prisma migrate deploy --schema=prisma/schema.prisma
-          fi
-
       - name: Typecheck
         run: npm run typecheck
 
@@ -170,35 +160,26 @@ jobs:
 
           echo "=== .prisma/client present: $(ls /tmp/deploy/node_modules/.prisma/client/ | wc -l) files ==="
 
-          # Startup: migrate (once) → seed (once) → start
+          # Startup: migrate → seed (once) → start
           printf '%s\n' \
             '#!/bin/sh' \
             'SENTINEL=/home/site/wwwroot/.glowith_seeded' \
             '' \
-            '# Run migrations only if migration files are newer than last run' \
-            'MIGRATION_SENTINEL=/home/site/wwwroot/.glowith_migrated' \
-            'SCHEMA_HASH=$(find migrations -name "*.sql" 2>/dev/null | sort | xargs md5sum 2>/dev/null | md5sum | cut -d" " -f1)' \
-            'LAST_HASH=$(cat "$MIGRATION_SENTINEL" 2>/dev/null || echo "")' \
-            '' \
-            'if [ "$SCHEMA_HASH" != "$LAST_HASH" ]; then' \
-            '  echo "Glowith startup — running database migrations..."' \
-            '  node node_modules/prisma/build/index.js migrate deploy --schema=schema.prisma 2>/tmp/migrate_err' \
-            '  MIGRATE_EXIT=$?' \
-            '  if [ "$MIGRATE_EXIT" != "0" ]; then' \
-            '    if grep -q "P3005" /tmp/migrate_err; then' \
-            '      echo "Non-empty DB without migration history — baselining..."' \
-            '      node node_modules/prisma/build/index.js migrate resolve --applied "20260520000000_baseline" --schema=schema.prisma || { echo "Baseline failed"; exit 1; }' \
-            '      node node_modules/prisma/build/index.js migrate deploy --schema=schema.prisma || { echo "Post-baseline migration failed"; exit 1; }' \
-            '    else' \
-            '      cat /tmp/migrate_err >&2' \
-            '      exit 1' \
-            '    fi' \
+            '# Always run migrate deploy — it is idempotent and fast when up-to-date' \
+            'echo "Glowith startup — running database migrations..."' \
+            'node node_modules/prisma/build/index.js migrate deploy --schema=schema.prisma 2>/tmp/migrate_err' \
+            'MIGRATE_EXIT=$?' \
+            'if [ "$MIGRATE_EXIT" != "0" ]; then' \
+            '  if grep -q "P3005" /tmp/migrate_err; then' \
+            '    echo "Non-empty DB without migration history — baselining..."' \
+            '    node node_modules/prisma/build/index.js migrate resolve --applied "20260520000000_baseline" --schema=schema.prisma || { echo "Baseline failed"; exit 1; }' \
+            '    node node_modules/prisma/build/index.js migrate deploy --schema=schema.prisma || { echo "Post-baseline migration failed"; exit 1; }' \
+            '  else' \
+            '    cat /tmp/migrate_err >&2' \
+            '    exit 1' \
             '  fi' \
-            '  echo "$SCHEMA_HASH" > "$MIGRATION_SENTINEL"' \
-            '  echo "Migrations complete."' \
-            'else' \
-            '  echo "No migration changes — skipping migrate deploy."' \
             'fi' \
+            'echo "Migrations complete."' \
             '' \
             '# Seed admin only once' \
             'if [ ! -f "$SENTINEL" ]; then' \
