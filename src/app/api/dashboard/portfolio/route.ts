@@ -30,8 +30,11 @@ export async function POST(request: Request) {
   });
   if (!profile) return NextResponse.json({ error: "No provider profile" }, { status: 404 });
 
-  const { imageUrl, caption, tags, target, sizeBytes, serviceId } = await request.json();
-  if (!imageUrl) return NextResponse.json({ error: "imageUrl is required" }, { status: 400 });
+  const { imageUrl, images, caption, tags, target, sizeBytes, serviceId } = await request.json();
+  // images is the full carousel; imageUrl is the cover (first). Support both.
+  const imageList: string[] = Array.isArray(images) && images.length ? images.filter((x) => typeof x === "string").slice(0, 10) : (imageUrl ? [imageUrl] : []);
+  if (!imageList.length) return NextResponse.json({ error: "At least one image is required" }, { status: 400 });
+  const cover = imageList[0];
   const bytes = Number.isFinite(sizeBytes) ? Math.max(0, Math.round(sizeBytes)) : 0;
 
   // Resolve which portfolio this post lands in.
@@ -60,7 +63,8 @@ export async function POST(request: Request) {
 
   const baseData = {
     providerProfileId,
-    imageUrl,
+    imageUrl: cover,
+    images: imageList,
     caption: (caption ?? "").toString().slice(0, 280),
     tags: Array.isArray(tags) ? tags.slice(0, 10).map((t: string) => t.toString().slice(0, 30)) : [],
     serviceId: linkedServiceId,
@@ -71,8 +75,9 @@ export async function POST(request: Request) {
   try {
     post = await prisma.portfolioPost.create({ data: { ...baseData, sizeBytes: bytes } });
   } catch {
-    // sizeBytes column may not exist yet — create without it
-    post = await prisma.portfolioPost.create({ data: baseData });
+    // sizeBytes/images column may not exist yet — create with the basics
+    const { images: _img, ...minimal } = baseData;
+    post = await prisma.portfolioPost.create({ data: minimal });
   }
   // Count storage against the portfolio that holds the post (best-effort).
   if (bytes > 0) {

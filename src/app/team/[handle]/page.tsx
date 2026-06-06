@@ -84,6 +84,7 @@ export default async function Page({ params, searchParams }: { params: Promise<{
           id: p.id,
           caption: p.caption,
           imageUrl: mediaUrl(p.imageUrl) ?? p.imageUrl,
+          images: (p.images?.length ? p.images : [p.imageUrl]).map((u) => mediaUrl(u) ?? u),
           tags: p.tags,
           likes: p.likes,
           saves: p.saves,

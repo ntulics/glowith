@@ -77,6 +77,7 @@ export default async function Page({ params }: { params: Promise<{ handle: strin
           id: p.id,
           caption: p.caption,
           imageUrl: mediaUrl(p.imageUrl) ?? p.imageUrl,
+          images: (p.images?.length ? p.images : [p.imageUrl]).map((u) => mediaUrl(u) ?? u),
           tags: p.tags,
           likes: p.likes,
           saves: p.saves,

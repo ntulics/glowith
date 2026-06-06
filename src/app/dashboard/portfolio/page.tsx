@@ -40,6 +40,7 @@ export default async function PortfolioPage() {
       posts={posts.map((p) => ({
         id: p.id,
         imageUrl: mediaUrl(p.imageUrl) ?? p.imageUrl,
+        images: (p.images?.length ? p.images : [p.imageUrl]).map((u) => mediaUrl(u) ?? u),
         caption: p.caption,
         tags: p.tags,
         likes: p.likes,

@@ -4,13 +4,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { format } from "date-fns";
-import { ArrowLeft, CalendarDays, Clock3, Heart, Loader2, MapPin, Menu, Share2, Star, UserCheck, UserPlus, X } from "lucide-react";
+import { ArrowLeft, CalendarDays, Clock3, Heart, Layers, Loader2, MapPin, Menu, Share2, Star, UserCheck, UserPlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VerifiedBadge } from "@/components/verified-badge";
 import { BookingFlow } from "@/components/marketplace/booking-flow";
 
 type Service = { id: string; name: string; category: string; durationMinutes: number; priceCents: number; depositCents: number; performer?: string | null };
-type Post = { id: string; caption: string; imageUrl: string; tags: string[]; likes: number; saves: number; featured?: boolean; serviceId?: string | null };
+type Post = { id: string; caption: string; imageUrl: string; images?: string[]; tags: string[]; likes: number; saves: number; featured?: boolean; serviceId?: string | null };
 type TeamMember = { id: string; name: string; role: string; avatarUrl: string | null; handle: string; services?: Service[] };
 type BookTarget = { id: string; name: string; services: Service[]; preselect: string | null };
 
@@ -94,6 +94,7 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
   const serviceById = new Map(profile.services.map((s) => [s.id, s]));
   const [heroIndex, setHeroIndex] = useState(0);
   const heroService = heroPosts[heroIndex]?.serviceId ? serviceById.get(heroPosts[heroIndex].serviceId!) : undefined;
+  const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null);
 
   const sections = [
     gridPhotos.length > 0 ? { id: "photos", label: "Photos" } : null,
@@ -218,11 +219,19 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
             }}
             className="flex snap-x snap-mandatory overflow-x-auto scroll-x"
           >
-            {heroPhotos.map((src, i) => (
-              <div key={i} className="relative aspect-[4/3] w-full shrink-0 snap-center bg-[#f3e8e4]">
-                <Image src={src} alt={`${profile.businessName} ${i + 1}`} fill sizes="100vw" className="object-cover" priority={i === 0} />
-              </div>
-            ))}
+            {heroPosts.map((p, i) => {
+              const imgs = p.images?.length ? p.images : [p.imageUrl];
+              return (
+                <button key={i} onClick={() => setLightbox({ images: imgs, index: 0 })} className="relative block aspect-[4/3] w-full shrink-0 snap-center bg-[#f3e8e4]">
+                  <Image src={p.imageUrl} alt={`${profile.businessName} ${i + 1}`} fill sizes="100vw" className="object-cover" priority={i === 0} />
+                  {imgs.length > 1 && (
+                    <span className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-black/55 px-2 py-1 text-[11px] font-bold text-white">
+                      <Layers className="h-3.5 w-3.5" /> {imgs.length}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
           {/* counter */}
           <div className="pointer-events-none absolute bottom-3 right-3 rounded-full bg-black/55 px-2.5 py-1 text-xs font-bold text-white">
@@ -312,17 +321,23 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                   {gridPhotos.map((post) => {
                     const svc = post.serviceId ? serviceById.get(post.serviceId) : undefined;
+                    const imgs = post.images?.length ? post.images : [post.imageUrl];
                     return (
                     <div key={post.id} className="group overflow-hidden rounded-2xl border border-[var(--line)] bg-white shadow-sm">
-                      <div className="relative aspect-square bg-[#f3e8e4]">
+                      <button onClick={() => setLightbox({ images: imgs, index: 0 })} className="relative block aspect-square w-full bg-[#f3e8e4]">
                         <Image src={post.imageUrl} alt={post.caption} fill sizes="300px" className="object-cover" />
-                        {svc && (
-                          <button onClick={() => openBooking(svc.id)}
-                            className="absolute bottom-2 right-2 rounded-full bg-[var(--brand)] px-3 py-1.5 text-xs font-black text-white shadow-md transition hover:bg-[var(--brand-dark)]">
-                            Book · {formatZAR(svc.priceCents)}
-                          </button>
+                        {imgs.length > 1 && (
+                          <span className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-black/55 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                            <Layers className="h-3 w-3" /> {imgs.length}
+                          </span>
                         )}
-                      </div>
+                        {svc && (
+                          <span onClick={(e) => { e.stopPropagation(); openBooking(svc.id); }}
+                            className="absolute bottom-2 right-2 cursor-pointer rounded-full bg-[var(--brand)] px-3 py-1.5 text-xs font-black text-white shadow-md transition hover:bg-[var(--brand-dark)]">
+                            Book · {formatZAR(svc.priceCents)}
+                          </span>
+                        )}
+                      </button>
                       <div className="p-3">
                         <p className="line-clamp-1 text-xs font-semibold">{post.caption}</p>
                         {svc ? (
@@ -484,6 +499,27 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
           </aside>
         </div>
       </div>
+
+      {/* Carousel lightbox */}
+      {lightbox && (
+        <div className="fixed inset-0 z-[68] flex flex-col bg-black/95" onClick={() => setLightbox(null)}>
+          <div className="flex items-center justify-between px-4 py-3">
+            <span className="text-sm font-bold text-white/80">{Math.min(lightbox.index + 1, lightbox.images.length)} / {lightbox.images.length}</span>
+            <button onClick={() => setLightbox(null)} aria-label="Close" className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white"><X className="h-5 w-5" /></button>
+          </div>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            onScroll={(e) => setLightbox((lb) => lb ? { ...lb, index: Math.round(e.currentTarget.scrollLeft / e.currentTarget.clientWidth) } : lb)}
+            className="flex flex-1 snap-x snap-mandatory items-center overflow-x-auto scroll-x"
+          >
+            {lightbox.images.map((src, i) => (
+              <div key={i} className="relative h-full w-full shrink-0 snap-center">
+                <Image src={src} alt={`Photo ${i + 1}`} fill sizes="100vw" className="object-contain" />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <BookingFlow
         open={!!book}

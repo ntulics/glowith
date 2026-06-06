@@ -204,6 +204,7 @@ model PortfolioPost {
   id                String   @id @default(cuid())
   providerProfileId String
   imageUrl          String
+  images            String[] @default([])
   caption           String
   tags              String[]
   likes             Int      @default(0)

@@ -2,10 +2,10 @@
 
 import { useRef, useState } from "react";
 import Image from "next/image";
-import { Heart, Bookmark, ImagePlus, Loader2, Trash2, Images, Star } from "lucide-react";
+import { Heart, Bookmark, ImagePlus, Loader2, Trash2, Images, Star, Layers } from "lucide-react";
 
 type Post = {
-  id: string; imageUrl: string; caption: string; tags: string[];
+  id: string; imageUrl: string; images?: string[]; caption: string; tags: string[];
   likes: number; saves: number; featured: boolean; serviceId: string | null;
   providerProfileId: string; authorName: string | null;
 };
@@ -51,10 +51,11 @@ export function PortfolioView({
     if (!res.ok) throw new Error(data.error ?? "Upload failed");
     return { url: data.url, sizeBytes: data.sizeBytes ?? 0 };
   }
-  async function createPost(imageUrl: string, cap: string, tags: string[], sizeBytes: number): Promise<Post> {
+  // Create one post from one or more images (an Instagram-style carousel)
+  async function createPost(images: string[], cap: string, tags: string[], sizeBytes: number): Promise<Post> {
     const res = await fetch("/api/dashboard/portfolio", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ imageUrl, caption: cap, tags, target: isBusiness ? "company" : target, sizeBytes, serviceId: linkServiceId || null })
+      body: JSON.stringify({ imageUrl: images[0], images, caption: cap, tags, target: isBusiness ? "company" : target, sizeBytes, serviceId: linkServiceId || null })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? "Failed to save");
@@ -92,9 +93,9 @@ export function PortfolioView({
     setError("");
     try {
       const tags = tagsInput.split(",").map((t) => t.trim()).filter(Boolean);
-      const created: Post[] = [];
-      for (const p of pending) created.push(await createPost(p.url, caption, tags, p.sizeBytes));
-      setPosts((prev) => [...created, ...prev]);
+      const totalSize = pending.reduce((s, p) => s + p.sizeBytes, 0);
+      const post = await createPost(pending.map((p) => p.url), caption, tags, totalSize);
+      setPosts((prev) => [post, ...prev]);
       setPending([]);
       setCaption("");
       setTagsInput("");
@@ -144,14 +145,16 @@ export function PortfolioView({
           ) : (
             <div className="flex flex-col gap-4 sm:flex-row">
               <div className="shrink-0">
-                <div className="grid w-full grid-cols-3 gap-2 sm:w-44 sm:grid-cols-2">
-                  {pending.map((p, i) => (
-                    <div key={i} className="relative aspect-square overflow-hidden rounded-xl bg-gray-100">
-                      <Image src={p.url} alt={`Photo ${i + 1}`} fill sizes="80px" className="object-cover" />
-                    </div>
-                  ))}
+                {/* Instagram-style single thumbnail with a stack indicator */}
+                <div className="relative h-44 w-full overflow-hidden rounded-xl bg-gray-100 sm:w-44">
+                  <Image src={pending[0].url} alt="New post" fill sizes="176px" className="object-cover" />
+                  {pending.length > 1 && (
+                    <span className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-[11px] font-bold text-white">
+                      <Layers className="h-3.5 w-3.5" /> {pending.length}
+                    </span>
+                  )}
                 </div>
-                <p className="mt-1.5 text-center text-[11px] text-gray-400">{pending.length} photo{pending.length !== 1 ? "s" : ""}</p>
+                <p className="mt-1.5 text-center text-[11px] text-gray-400">{pending.length > 1 ? `${pending.length} photos · one post` : "1 photo"}</p>
               </div>
               <div className="flex flex-1 flex-col gap-3">
                 {showTargetToggle && (
@@ -217,6 +220,11 @@ export function PortfolioView({
               <div key={post.id} className="group overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
                 <div className="relative aspect-square bg-gray-100">
                   <Image src={post.imageUrl} alt={post.caption || "Portfolio photo"} fill sizes="(max-width:640px) 100vw, 25vw" className="object-cover" />
+                  {(post.images?.length ?? 0) > 1 && (
+                    <span className="absolute right-2 top-9 flex items-center gap-1 rounded-full bg-black/55 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                      <Layers className="h-3 w-3" /> {post.images!.length}
+                    </span>
+                  )}
                   <button type="button" onClick={() => toggleFeatured(post.id, !post.featured)}
                     aria-label={post.featured ? "Unfeature" : "Feature"} title={post.featured ? "Featured in your slider" : "Feature in your slider"}
                     className={`absolute left-2 top-2 flex h-8 w-8 items-center justify-center rounded-lg shadow transition ${post.featured ? "bg-[#D94472] text-white" : "bg-white/90 text-gray-400 opacity-0 hover:text-[#D94472] group-hover:opacity-100"}`}>

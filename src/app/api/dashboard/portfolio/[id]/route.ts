@@ -44,9 +44,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  // Remove the blob and reclaim the storage from the owning portfolio.
-  const m = post.imageUrl.match(/\/api\/media\/(.+)$/);
-  if (m) { try { await deleteBlob(decodeURIComponent(m[1])); } catch { /* ignore */ } }
+  // Remove all carousel blobs and reclaim the storage from the owning portfolio.
+  const urls = (post.images?.length ? post.images : [post.imageUrl]);
+  for (const u of urls) {
+    const m = u.match(/\/api\/media\/(.+)$/);
+    if (m) { try { await deleteBlob(decodeURIComponent(m[1])); } catch { /* ignore */ } }
+  }
   await prisma.portfolioPost.delete({ where: { id } });
   if (post.sizeBytes > 0) {
     try { await prisma.providerProfile.update({ where: { id: post.providerProfileId }, data: { storageBytes: { decrement: post.sizeBytes } } }); } catch { /* ignore */ }

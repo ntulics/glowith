@@ -45,6 +45,7 @@ export async function GET(request: Request) {
       })),
       posts: p.posts.map((post) => ({
         id: post.id, caption: post.caption, imageUrl: mediaUrl(post.imageUrl) ?? post.imageUrl,
+        images: (post.images?.length ? post.images : [post.imageUrl]).map((u) => mediaUrl(u) ?? u),
         tags: post.tags, likes: post.likes, saves: post.saves, featured: post.featured, serviceId: post.serviceId
       })),
       team: []
