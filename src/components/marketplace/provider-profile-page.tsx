@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { format } from "date-fns";
-import { ArrowLeft, CalendarDays, Clock3, Heart, Layers, Loader2, MapPin, Menu, Share2, Star, UserCheck, UserPlus, X } from "lucide-react";
+import { ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, Clock3, Heart, Layers, Loader2, MapPin, Menu, Share2, Star, UserCheck, UserPlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VerifiedBadge } from "@/components/verified-badge";
 import { BookingFlow } from "@/components/marketplace/booking-flow";
@@ -84,13 +84,14 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
     return showAllServices ? filtered : filtered.slice(0, 4);
   }, [profile.services, serviceCat, showAllServices]);
 
-  // Hero/slider: featured photos (up to 10), or the 10 most recent if none featured
+  // Hero/slider: featured posts (up to 10), or the 10 most recent if none featured.
+  // Each post appears once in the page hero; tapping it opens that post's carousel.
   const featuredPhotos = profile.posts.filter((p) => p.featured);
   const heroPosts = (featuredPhotos.length ? featuredPhotos : profile.posts).slice(0, 10);
-  const heroItems = heroPosts.flatMap((post) => {
+  const heroItems = heroPosts.map((post) => {
     const images = post.images?.length ? post.images : [post.imageUrl];
-    return images.map((src, imageIndex) => ({ post, images, src, imageIndex }));
-  }).slice(0, 10);
+    return { post, images, src: post.imageUrl || images[0] };
+  });
   const galleryImages = heroItems.map((item) => item.src);
   // Photos section excludes featured (shown in the slider) to avoid duplicates
   const gridPhotos = featuredPhotos.length ? profile.posts.filter((p) => !p.featured) : profile.posts;
@@ -99,6 +100,17 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
   const heroService = heroItems[heroIndex]?.post.serviceId ? serviceById.get(heroItems[heroIndex].post.serviceId!) : undefined;
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null);
   const lightboxScroller = useRef<HTMLDivElement>(null);
+  const openHeroLightbox = (index: number) => {
+    const item = heroItems[index];
+    if (item) setLightbox({ images: item.images, index: 0 });
+  };
+  const stepLightbox = (direction: -1 | 1) => {
+    setLightbox((lb) => {
+      if (!lb) return lb;
+      const index = Math.min(Math.max(lb.index + direction, 0), lb.images.length - 1);
+      return { ...lb, index };
+    });
+  };
 
   useEffect(() => {
     const el = lightboxScroller.current;
@@ -230,11 +242,11 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
             className="flex snap-x snap-mandatory overflow-x-auto scroll-x"
           >
             {heroItems.map((item, i) => (
-              <button key={`${item.post.id}-${item.imageIndex}`} onClick={() => setLightbox({ images: item.images, index: item.imageIndex })} className="relative block aspect-[4/3] w-full shrink-0 snap-center bg-[#f3e8e4]">
+              <button key={item.post.id} onClick={() => setLightbox({ images: item.images, index: 0 })} className="relative block aspect-[4/3] w-full shrink-0 snap-center bg-[#f3e8e4]">
                 <Image src={item.src} alt={`${profile.businessName} ${i + 1}`} fill sizes="100vw" className="object-cover" priority={i === 0} />
                 {item.images.length > 1 && (
                   <span className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-black/55 px-2 py-1 text-[11px] font-bold text-white">
-                    <Layers className="h-3.5 w-3.5" /> {item.imageIndex + 1}/{item.images.length}
+                    <Layers className="h-3.5 w-3.5" /> {item.images.length}
                   </span>
                 )}
               </button>
@@ -265,23 +277,33 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
       <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
         {/* ── Hero gallery (portfolio) — desktop only ── */}
         <div className="hidden gap-2 sm:grid sm:grid-cols-3 sm:grid-rows-2">
-          <div className="relative aspect-[16/10] overflow-hidden rounded-2xl bg-[#f3e8e4] sm:col-span-2 sm:row-span-2 sm:aspect-auto">
+          <button onClick={() => openHeroLightbox(0)} className="relative aspect-[16/10] overflow-hidden rounded-2xl bg-[#f3e8e4] text-left sm:col-span-2 sm:row-span-2 sm:aspect-auto">
             {galleryImages[0] ? (
               <Image src={galleryImages[0]} alt={profile.businessName} fill sizes="(max-width:640px) 100vw, 66vw" className="object-cover" />
             ) : <GalleryPlaceholder name={profile.businessName} />}
-          </div>
+            {(heroItems[0]?.images.length ?? 0) > 1 && (
+              <span className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-black/55 px-2.5 py-1 text-xs font-bold text-white">
+                <Layers className="h-3.5 w-3.5" /> {heroItems[0].images.length}
+              </span>
+            )}
+          </button>
           {[1, 2].map((i) => (
-            <div key={i} className="relative hidden aspect-[16/10] overflow-hidden rounded-2xl bg-[#f3e8e4] sm:block">
+            <button key={i} onClick={() => openHeroLightbox(i)} className="relative hidden aspect-[16/10] overflow-hidden rounded-2xl bg-[#f3e8e4] text-left sm:block">
               {galleryImages[i] ? (
                 <Image src={galleryImages[i]} alt={`${profile.businessName} ${i}`} fill sizes="33vw" className="object-cover" />
               ) : <GalleryPlaceholder name={profile.businessName} />}
+              {(heroItems[i]?.images.length ?? 0) > 1 && (
+                <span className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-black/55 px-2 py-1 text-[11px] font-bold text-white">
+                  <Layers className="h-3.5 w-3.5" /> {heroItems[i].images.length}
+                </span>
+              )}
               {i === 2 && gridPhotos.length > 0 && (
-                <button onClick={() => scrollTo("photos")}
+                <span onClick={(e) => { e.stopPropagation(); scrollTo("photos"); }}
                   className="absolute bottom-3 right-3 rounded-full bg-white/95 px-4 py-2 text-xs font-bold shadow hover:bg-white">
                   See all photos
-                </button>
+                </span>
               )}
-            </div>
+            </button>
           ))}
         </div>
 
@@ -526,6 +548,26 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
               </div>
             ))}
           </div>
+          {lightbox.images.length > 1 && (
+            <>
+              <button
+                onClick={(e) => { e.stopPropagation(); stepLightbox(-1); }}
+                disabled={lightbox.index === 0}
+                aria-label="Previous photo"
+                className="absolute left-3 top-1/2 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-white/25 disabled:opacity-35 sm:flex"
+              >
+                <ChevronLeft className="h-6 w-6" />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); stepLightbox(1); }}
+                disabled={lightbox.index === lightbox.images.length - 1}
+                aria-label="Next photo"
+                className="absolute right-3 top-1/2 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-white/25 disabled:opacity-35 sm:flex"
+              >
+                <ChevronRight className="h-6 w-6" />
+              </button>
+            </>
+          )}
         </div>
       )}
 
