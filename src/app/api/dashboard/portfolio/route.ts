@@ -76,24 +76,35 @@ export async function POST(request: Request) {
     post = await prisma.portfolioPost.create({ data: { ...baseData, sizeBytes: bytes } });
   } catch {
     try {
-      // images/sizeBytes columns may not be migrated yet — try without them
-      const { images: _img, ...withoutImages } = baseData;
-      post = await prisma.portfolioPost.create({ data: withoutImages });
+      // Older deployments may not have sizeBytes yet, but still keep carousel images.
+      post = await prisma.portfolioPost.create({ data: baseData });
     } catch {
-      // serviceId/authorProfileId/authorName also missing — fall back to absolute minimum
-      post = await prisma.portfolioPost.create({
-        data: {
-          providerProfileId,
-          imageUrl: cover,
-          caption: (baseData.caption ?? "").toString().slice(0, 280),
-          tags: baseData.tags ?? []
-        }
-      });
+      try {
+        // serviceId/authorProfileId/authorName also missing — keep the carousel if possible.
+        const { serviceId: _serviceId, authorProfileId: _authorProfileId, authorName: _authorName, ...withoutServiceFields } = baseData;
+        post = await prisma.portfolioPost.create({ data: withoutServiceFields });
+      } catch {
+        // images column also missing — fall back to the legacy single-cover shape.
+        post = await prisma.portfolioPost.create({
+          data: {
+            providerProfileId,
+            imageUrl: cover,
+            caption: (baseData.caption ?? "").toString().slice(0, 280),
+            tags: baseData.tags ?? []
+          }
+        });
+      }
     }
   }
   // Count storage against the portfolio that holds the post (best-effort).
   if (bytes > 0) {
     try { await prisma.providerProfile.update({ where: { id: providerProfileId }, data: { storageBytes: { increment: bytes } } }); } catch { /* ignore */ }
   }
-  return NextResponse.json({ post });
+  return NextResponse.json({
+    post: {
+      ...post,
+      imageUrl: cover,
+      images: Array.isArray(post.images) && post.images.length ? post.images : imageList
+    }
+  });
 }
