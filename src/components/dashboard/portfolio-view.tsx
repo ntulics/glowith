@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useCallback } from "react";
 import Image from "next/image";
-import { Heart, Bookmark, ImagePlus, Loader2, Trash2, Images, Star, Layers } from "lucide-react";
+import { Heart, Bookmark, ImagePlus, Loader2, Trash2, Images, Star, Layers, ChevronLeft, ChevronRight, X } from "lucide-react";
 
 type Post = {
   id: string; imageUrl: string; images?: string[]; caption: string; tags: string[];
@@ -36,6 +36,10 @@ export function PortfolioView({
   const [tagsInput, setTagsInput] = useState("");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null);
+  const touchStartX = useRef<number>(0);
+  const lbNext = useCallback(() => setLightbox((l) => l && l.index < l.images.length - 1 ? { ...l, index: l.index + 1 } : l), []);
+  const lbPrev = useCallback(() => setLightbox((l) => l && l.index > 0 ? { ...l, index: l.index - 1 } : l), []);
   // Where a new post goes: own profile, or the company portfolio (if allowed & not the owner)
   const [target, setTarget] = useState<"self" | "company">(isBusiness ? "company" : "self");
   const [linkServiceId, setLinkServiceId] = useState("");
@@ -219,10 +223,23 @@ export function PortfolioView({
             {posts.map((post) => (
               <div key={post.id} className="group overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
                 <div className="relative aspect-square bg-gray-100">
-                  <Image src={post.imageUrl} alt={post.caption || "Portfolio photo"} fill sizes="(max-width:640px) 100vw, 25vw" className="object-cover" />
+                  {/* Clickable image — opens lightbox for carousels */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const imgs = post.images?.length ? post.images : [post.imageUrl];
+                      if (imgs.length > 1) setLightbox({ images: imgs, index: 0 });
+                    }}
+                    className="absolute inset-0 w-full h-full"
+                    aria-label={post.images && post.images.length > 1 ? `View ${post.images.length} photos` : undefined}
+                    style={{ cursor: post.images && post.images.length > 1 ? "pointer" : "default" }}
+                  >
+                    <Image src={post.imageUrl} alt={post.caption || "Portfolio photo"} fill sizes="(max-width:640px) 100vw, 25vw" className="object-cover" />
+                  </button>
+                  {/* Carousel badge — bottom-left, always visible */}
                   {(post.images?.length ?? 0) > 1 && (
-                    <span className="absolute right-2 top-9 flex items-center gap-1 rounded-full bg-black/55 px-1.5 py-0.5 text-[10px] font-bold text-white">
-                      <Layers className="h-3 w-3" /> {post.images!.length}
+                    <span className="pointer-events-none absolute bottom-2 left-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-bold text-white">
+                      <Layers className="h-3.5 w-3.5" /> {post.images!.length}
                     </span>
                   )}
                   <button type="button" onClick={() => toggleFeatured(post.id, !post.featured)}
@@ -267,6 +284,54 @@ export function PortfolioView({
           </div>
         )}
       </div>
+
+      {/* Carousel lightbox */}
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-[68] flex flex-col bg-black/95"
+          onClick={() => setLightbox(null)}
+          onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX; }}
+          onTouchEnd={(e) => {
+            const dx = e.changedTouches[0].clientX - touchStartX.current;
+            if (dx > 50) lbPrev();
+            else if (dx < -50) lbNext();
+          }}
+        >
+          <div className="flex items-center justify-between px-4 py-3" onClick={(e) => e.stopPropagation()}>
+            <span className="text-sm font-bold text-white/80">{lightbox.index + 1} / {lightbox.images.length}</span>
+            <button onClick={() => setLightbox(null)} aria-label="Close" className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="relative flex flex-1 items-center justify-center overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <Image
+              key={lightbox.index}
+              src={lightbox.images[lightbox.index]}
+              alt={`Photo ${lightbox.index + 1}`}
+              fill
+              sizes="100vw"
+              className="object-contain"
+            />
+            {lightbox.index > 0 && (
+              <button onClick={lbPrev} className="absolute left-3 flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60">
+                <ChevronLeft className="h-6 w-6" />
+              </button>
+            )}
+            {lightbox.index < lightbox.images.length - 1 && (
+              <button onClick={lbNext} className="absolute right-3 flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60">
+                <ChevronRight className="h-6 w-6" />
+              </button>
+            )}
+          </div>
+          {/* Dot indicators */}
+          <div className="flex justify-center gap-1.5 py-4" onClick={(e) => e.stopPropagation()}>
+            {lightbox.images.map((_, i) => (
+              <button key={i} onClick={() => setLightbox((l) => l ? { ...l, index: i } : l)}
+                className={`h-1.5 rounded-full transition-all ${i === lightbox.index ? "w-4 bg-white" : "w-1.5 bg-white/40"}`} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
