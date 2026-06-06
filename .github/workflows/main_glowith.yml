@@ -42,7 +42,12 @@ jobs:
       - name: Run database migrations
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: npx prisma migrate deploy --schema=prisma/schema.prisma
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::warning::DATABASE_URL secret not set — skipping migrate deploy. Add it to run migrations from CI."
+          else
+            npx prisma migrate deploy --schema=prisma/schema.prisma
+          fi
 
       - name: Typecheck
         run: npm run typecheck
