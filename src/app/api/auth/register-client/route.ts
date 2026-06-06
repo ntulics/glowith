@@ -24,7 +24,14 @@ export async function POST(request: Request) {
 
   const passwordHash = await bcrypt.hash(password, 12);
   await prisma.user.create({
-    data: { name, email: email.toLowerCase(), passwordHash, role: "CLIENT" }
+    data: {
+      name,
+      email: email.toLowerCase(),
+      passwordHash,
+      role: "CLIENT",
+      // Mark email as verified since they completed the OTP flow before reaching here
+      emailVerified: new Date()
+    }
   });
   return NextResponse.json({ ok: true }, { status: 201 });
 }

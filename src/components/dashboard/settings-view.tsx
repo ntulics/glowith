@@ -6,10 +6,11 @@ import {
   Loader2, Building2, CreditCard, Bell, CalendarDays, Puzzle,
   ChevronRight, ChevronDown, Clock, Globe, CheckCircle2, Zap, User,
   Plus, X, Mail, MessageSquare, Phone, Info, ExternalLink, Copy,
-  CheckCheck, BookOpen, Inbox, Camera
+  CheckCheck, BookOpen, Inbox, Camera, ShieldCheck
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LocationPicker } from "@/components/dashboard/location-picker";
+import { SecuritySection } from "@/components/dashboard/security-section";
 
 type Profile = {
   id: string; businessName: string; handle: string;
@@ -202,7 +203,8 @@ const sections = [
   { id: "payments", label: "Payments", icon: CreditCard },
   { id: "bookings", label: "Bookings", icon: CalendarDays },
   { id: "notifications", label: "Notifications", icon: Bell },
-  { id: "integrations", label: "Integrations", icon: Puzzle }
+  { id: "integrations", label: "Integrations", icon: Puzzle },
+  { id: "security", label: "Security", icon: ShieldCheck }
 ];
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -864,6 +866,10 @@ export function SettingsView({
     );
   }
 
+  function renderSecurity() {
+    return <SecuritySection />;
+  }
+
   const contentMap: Record<string, () => React.ReactElement> = {
     profile: renderProfile,
     company: renderCompany,
@@ -871,7 +877,8 @@ export function SettingsView({
     payments: renderPayments,
     bookings: renderBookings,
     notifications: renderNotifications,
-    integrations: renderIntegrations
+    integrations: renderIntegrations,
+    security: renderSecurity
   };
 
   const sectionAllowed = availableSections.some((s) => s.id === activeSection);
