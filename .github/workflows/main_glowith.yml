@@ -59,6 +59,11 @@ jobs:
           NEXT_PUBLIC_FEATURE_MARKETPLACE: 'true'
           NEXT_PUBLIC_FEATURE_PAYMENTS: 'true'
           NEXT_PUBLIC_FEATURE_CALENDAR_SYNC: 'true'
+          SMTP2GO_API_KEY: ${{ secrets.SMTP2GO_API_KEY }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          WEBAUTHN_RP_ID: ${{ secrets.WEBAUTHN_RP_ID }}
+          WEBAUTHN_RP_NAME: ${{ secrets.WEBAUTHN_RP_NAME }}
+          WEBAUTHN_ORIGIN: ${{ secrets.WEBAUTHN_ORIGIN }}
         run: npm run build
 
       - name: Assemble deployment package
