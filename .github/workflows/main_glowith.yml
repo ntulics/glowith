@@ -165,6 +165,11 @@ jobs:
             '#!/bin/sh' \
             'SENTINEL=/home/site/wwwroot/.glowith_seeded' \
             '' \
+            '# Regenerate Prisma Client from the deployed schema before the server starts.' \
+            '# This prevents stale packaged clients from missing newly-added fields.' \
+            'echo "Glowith startup — generating Prisma client..."' \
+            'node node_modules/prisma/build/index.js generate --schema=schema.prisma || { echo "Prisma generate failed"; exit 1; }' \
+            '' \
             '# Always run migrate deploy — it is idempotent and fast when up-to-date' \
             'echo "Glowith startup — running database migrations..."' \
             'node node_modules/prisma/build/index.js migrate deploy --schema=schema.prisma 2>/tmp/migrate_err' \
