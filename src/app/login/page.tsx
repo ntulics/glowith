@@ -22,6 +22,11 @@ type MFAState = {
   method: "email" | "totp";
 };
 
+type ForgotState = {
+  email: string;
+  resetToken?: string;
+};
+
 function tenantHost(tenantSlug: string) {
   const host = window.location.hostname;
   if (host === "localhost" || host === "127.0.0.1") return "";
@@ -33,12 +38,16 @@ function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const [mode, setMode] = useState<"login" | "register">("login");
-  const [step, setStep] = useState<"email" | "password" | "mfa">("email");
+  const [step, setStep] = useState<"email" | "password" | "mfa" | "forgot" | "forgot-otp" | "forgot-new-pw">("email");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mfaCode, setMfaCode] = useState("");
   const [mfa, setMfa] = useState<MFAState | null>(null);
+  const [forgot, setForgot] = useState<ForgotState | null>(null);
+  const [forgotOtp, setForgotOtp] = useState("");
+  const [forgotNewPw, setForgotNewPw] = useState("");
+  const [showForgotPw, setShowForgotPw] = useState(false);
   const [lookup, setLookup] = useState<LookupResult | null>(null);
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -128,8 +137,16 @@ function LoginForm() {
         return;
       }
 
-      // Parse MFA_REQUIRED|email|ticket|method from the error URL
-      const errorParam = result.error;
+      // NextAuth v5 wraps thrown errors as CallbackRouteError; the real message
+      // is in result.url as ?error=MFA_REQUIRED%7C...
+      let errorParam = result.error ?? "";
+      if (result.url) {
+        try {
+          const u = new URL(result.url, window.location.origin);
+          errorParam = u.searchParams.get("error") ?? errorParam;
+        } catch { /* ignore malformed URL */ }
+      }
+
       if (errorParam?.startsWith("MFA_REQUIRED")) {
         const parts = errorParam.split("|");
         if (parts.length === 4) {
@@ -177,6 +194,84 @@ function LoginForm() {
       });
       startCooldown(60);
     } catch { /* ignore */ }
+  }
+
+  /* ── Forgot password ─────────────────────────────────────────── */
+  async function handleForgotSend(e: FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      await fetch("/api/auth/forgot-password-otp", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "send", email })
+      });
+      // Always advance — don't leak account existence
+      setForgot({ email });
+      setStep("forgot-otp");
+      startCooldown(60);
+    } catch {
+      setError("Could not send code. Try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleForgotVerifyOtp(e: FormEvent) {
+    e.preventDefault();
+    if (!forgot) return;
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/auth/forgot-password-otp", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "verify", email: forgot.email, otp: forgotOtp })
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error ?? "Incorrect code."); return; }
+      setForgot({ email: forgot.email, resetToken: data.resetToken });
+      setStep("forgot-new-pw");
+    } catch {
+      setError("Verification failed. Try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleForgotSetPassword(e: FormEvent) {
+    e.preventDefault();
+    if (!forgot?.resetToken) return;
+    if (forgotNewPw.length < 8) { setError("Password must be at least 8 characters."); return; }
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/auth/reset-password", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: forgot.email, token: forgot.resetToken, password: forgotNewPw })
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error ?? "Could not reset password."); return; }
+      // Success — go back to password step with the new password pre-filled
+      setStep("password");
+      setPassword(forgotNewPw);
+      setForgot(null);
+      setForgotOtp("");
+      setForgotNewPw("");
+      setError("");
+    } catch {
+      setError("Could not reset password. Try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleForgotResend() {
+    if (!forgot || resendCooldown > 0) return;
+    await fetch("/api/auth/forgot-password-otp", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "send", email: forgot.email })
+    });
+    startCooldown(60);
   }
 
   /* ── Passkey sign-in ──────────────────────────────────────────── */
@@ -230,11 +325,14 @@ function LoginForm() {
         <section className="grid flex-1 items-center gap-10 py-10 md:grid-cols-[1fr_420px]">
           <div className="text-left">
             <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#D94472]">
-              {step === "mfa" ? "Verification" : step === "email" ? "Login" : isPrivileged ? "Studio access" : "Welcome back"}
+              {step === "mfa" ? "Verification" : step.startsWith("forgot") ? "Password reset" : step === "email" ? "Login" : isPrivileged ? "Studio access" : "Welcome back"}
             </p>
             <h1 className="mt-4 max-w-2xl text-5xl font-black leading-[1.05] text-[#1F1B1C] sm:text-6xl">
               {step === "mfa"
                 ? mfa?.method === "totp" ? "Open your authenticator app" : "Check your email"
+                : step === "forgot" ? "Forgot your password?"
+                : step === "forgot-otp" ? "Check your email"
+                : step === "forgot-new-pw" ? "Choose a new password"
                 : step === "email" ? "First, what is your email?"
                 : `Welcome ${firstName}`}
             </h1>
@@ -243,6 +341,12 @@ function LoginForm() {
                 ? mfa?.method === "totp"
                   ? "Enter the 6-digit code from your authenticator app."
                   : `We sent a verification code to ${mfa?.email}. Enter it below.`
+                : step === "forgot"
+                  ? "Enter your email and we will send a one-time code to verify it's you."
+                : step === "forgot-otp"
+                  ? `We sent a 6-digit code to ${forgot?.email}. Enter it below.`
+                : step === "forgot-new-pw"
+                  ? "Almost there — choose a strong new password."
                 : step === "email"
                   ? "We will check your account and send you to the right Glowith experience."
                   : isPrivileged
@@ -252,7 +356,10 @@ function LoginForm() {
           </div>
 
           <div className="rounded-[2rem] border border-[#E8E0DC] bg-white p-6 shadow-xl shadow-black/5">
-            <ProgressBar steps={step === "mfa" ? 3 : step === "password" ? 2 : 1} total={step === "mfa" ? 3 : 2} />
+            <ProgressBar
+              steps={step === "mfa" || step === "forgot-new-pw" ? 3 : step === "password" || step === "forgot-otp" ? 2 : 1}
+              total={step.startsWith("forgot") ? 3 : step === "mfa" ? 3 : 2}
+            />
 
             {params.get("registered") && (
               <div className="mb-4 rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
@@ -265,8 +372,71 @@ function LoginForm() {
               </div>
             )}
 
-            {/* ── MFA step ─────────────────────────────────────────────── */}
-            {step === "mfa" && mfa ? (
+            {/* ── Forgot: enter email ──────────────────────────────────── */}
+            {step === "forgot" ? (
+              <form onSubmit={handleForgotSend} className="space-y-5">
+                <button type="button" onClick={() => { setStep("password"); setError(""); }}
+                  className="inline-flex items-center gap-2 text-sm font-bold text-[#7A6C6E]">
+                  <ArrowLeft className="h-4 w-4" /> Back to sign in
+                </button>
+                <label className="block">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#7A6C6E]">Email address</span>
+                  <span className="mt-2 flex items-center gap-3 rounded-2xl border border-[#E8E0DC] bg-[#F9F5F3] px-4 py-4">
+                    <Mail className="h-5 w-5 text-[#7A6C6E]" />
+                    <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus
+                      placeholder="your@email.com"
+                      className="min-w-0 flex-1 bg-transparent text-base font-bold outline-none placeholder:font-medium placeholder:text-[#B2A6A8]" />
+                  </span>
+                </label>
+                <SubmitButton loading={loading}>Send code</SubmitButton>
+              </form>
+
+            ) : step === "forgot-otp" && forgot ? (
+              /* ── Forgot: verify OTP ─────────────────────────────────── */
+              <form onSubmit={handleForgotVerifyOtp} className="space-y-5">
+                <button type="button" onClick={() => { setStep("forgot"); setForgotOtp(""); setError(""); }}
+                  className="inline-flex items-center gap-2 text-sm font-bold text-[#7A6C6E]">
+                  <ArrowLeft className="h-4 w-4" /> Change email
+                </button>
+                <div className="flex items-center gap-2 rounded-2xl bg-[#FFF5F8] px-4 py-3">
+                  <ShieldCheck className="h-4 w-4 text-[#D94472]" />
+                  <span className="text-sm font-semibold text-[#7A6C6E]">Code sent to {forgot.email}</span>
+                </div>
+                <OTPInput value={forgotOtp} onChange={setForgotOtp} />
+                <button type="submit" disabled={loading || forgotOtp.length < 6}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#1a1a1a] py-4 text-sm font-black text-white transition hover:bg-[#1a1a1a]/90 disabled:opacity-60">
+                  {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Verify code
+                </button>
+                <button type="button" onClick={handleForgotResend} disabled={resendCooldown > 0}
+                  className={cn("w-full text-center text-sm font-semibold transition", resendCooldown > 0 ? "text-gray-400" : "text-[#D94472] hover:underline")}>
+                  {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : "Resend code"}
+                </button>
+              </form>
+
+            ) : step === "forgot-new-pw" && forgot ? (
+              /* ── Forgot: set new password ───────────────────────────── */
+              <form onSubmit={handleForgotSetPassword} className="space-y-5">
+                <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+                  Identity verified — set your new password below.
+                </div>
+                <label className="block">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#7A6C6E]">New password</span>
+                  <span className="mt-2 flex items-center gap-3 rounded-2xl border border-[#E8E0DC] bg-[#F9F5F3] px-4 py-4">
+                    <input type={showForgotPw ? "text" : "password"} value={forgotNewPw}
+                      onChange={(e) => setForgotNewPw(e.target.value)} required autoFocus minLength={8}
+                      placeholder="At least 8 characters"
+                      className="min-w-0 flex-1 bg-transparent text-base font-bold outline-none placeholder:font-medium placeholder:text-[#B2A6A8]" />
+                    <button type="button" onClick={() => setShowForgotPw(!showForgotPw)} className="text-[#7A6C6E]">
+                      {showForgotPw ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    </button>
+                  </span>
+                </label>
+                <SubmitButton loading={loading}>Set new password</SubmitButton>
+              </form>
+
+            ) : /* ── MFA step ─────────────────────────────────────────────── */
+            step === "mfa" && mfa ? (
               <form onSubmit={handleMFASubmit} className="space-y-5">
                 <button
                   type="button"
@@ -389,10 +559,11 @@ function LoginForm() {
 
                 <SubmitButton loading={loading}>Log in</SubmitButton>
 
-                <Link href={`/reset-password?email=${encodeURIComponent(email)}`}
-                  className="block text-center text-xs font-semibold text-[#7A6C6E] hover:text-[#D94472]">
+                <button type="button"
+                  onClick={() => { setStep("forgot"); setError(""); }}
+                  className="block w-full text-center text-xs font-semibold text-[#7A6C6E] hover:text-[#D94472] transition-colors">
                   Forgot password?
-                </Link>
+                </button>
               </form>
             )}
           </div>
