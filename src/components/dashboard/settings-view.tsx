@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Loader2, Building2, CreditCard, Bell, CalendarDays, Puzzle,
   ChevronRight, ChevronDown, Clock, Globe, CheckCircle2, Zap, User,
@@ -218,6 +219,7 @@ export function SettingsView({
   parentBusinessName?: string | null;
   parentBusinessHandle?: string | null;
 }) {
+  const searchParams = useSearchParams();
   // An agent belongs to a business — company-level settings are managed there.
   const isAgent = !!parentBusinessName;
   const parentSlug = (parentBusinessHandle ?? "").replace("@", "");
@@ -318,6 +320,13 @@ export function SettingsView({
   const availableSections = isAgent ? sections.filter((s) => s.id === "profile") : sections;
   const navSections = availableSections.filter((s) => !s.parent);
   const subSections = availableSections.filter((s) => s.parent === "company");
+
+  useEffect(() => {
+    const requested = searchParams.get("section");
+    if (requested && requested !== activeSection && availableSections.some((section) => section.id === requested)) {
+      setActiveSection(requested);
+    }
+  }, [activeSection, availableSections, searchParams]);
 
   function handleNavClick(id: string) {
     setActiveSection(id);
