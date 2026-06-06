@@ -87,14 +87,24 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
   // Hero/slider: featured photos (up to 10), or the 10 most recent if none featured
   const featuredPhotos = profile.posts.filter((p) => p.featured);
   const heroPosts = (featuredPhotos.length ? featuredPhotos : profile.posts).slice(0, 10);
-  const heroPhotos = heroPosts.map((p) => p.imageUrl);
-  const galleryImages = heroPhotos;
+  const heroItems = heroPosts.flatMap((post) => {
+    const images = post.images?.length ? post.images : [post.imageUrl];
+    return images.map((src, imageIndex) => ({ post, images, src, imageIndex }));
+  }).slice(0, 10);
+  const galleryImages = heroItems.map((item) => item.src);
   // Photos section excludes featured (shown in the slider) to avoid duplicates
   const gridPhotos = featuredPhotos.length ? profile.posts.filter((p) => !p.featured) : profile.posts;
   const serviceById = new Map(profile.services.map((s) => [s.id, s]));
   const [heroIndex, setHeroIndex] = useState(0);
-  const heroService = heroPosts[heroIndex]?.serviceId ? serviceById.get(heroPosts[heroIndex].serviceId!) : undefined;
+  const heroService = heroItems[heroIndex]?.post.serviceId ? serviceById.get(heroItems[heroIndex].post.serviceId!) : undefined;
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null);
+  const lightboxScroller = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = lightboxScroller.current;
+    if (!el || !lightbox) return;
+    el.scrollTo({ left: lightbox.index * el.clientWidth, behavior: "instant" });
+  }, [lightbox?.images, lightbox?.index]);
 
   const sections = [
     gridPhotos.length > 0 ? { id: "photos", label: "Photos" } : null,
@@ -210,7 +220,7 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
       )}
 
       {/* ── Mobile hero photo slider (featured, or 5 most recent) ── */}
-      {heroPhotos.length > 0 && (
+      {heroItems.length > 0 && (
         <div className="relative sm:hidden">
           <div
             onScroll={(e) => {
@@ -219,23 +229,20 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
             }}
             className="flex snap-x snap-mandatory overflow-x-auto scroll-x"
           >
-            {heroPosts.map((p, i) => {
-              const imgs = p.images?.length ? p.images : [p.imageUrl];
-              return (
-                <button key={i} onClick={() => setLightbox({ images: imgs, index: 0 })} className="relative block aspect-[4/3] w-full shrink-0 snap-center bg-[#f3e8e4]">
-                  <Image src={p.imageUrl} alt={`${profile.businessName} ${i + 1}`} fill sizes="100vw" className="object-cover" priority={i === 0} />
-                  {imgs.length > 1 && (
-                    <span className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-black/55 px-2 py-1 text-[11px] font-bold text-white">
-                      <Layers className="h-3.5 w-3.5" /> {imgs.length}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+            {heroItems.map((item, i) => (
+              <button key={`${item.post.id}-${item.imageIndex}`} onClick={() => setLightbox({ images: item.images, index: item.imageIndex })} className="relative block aspect-[4/3] w-full shrink-0 snap-center bg-[#f3e8e4]">
+                <Image src={item.src} alt={`${profile.businessName} ${i + 1}`} fill sizes="100vw" className="object-cover" priority={i === 0} />
+                {item.images.length > 1 && (
+                  <span className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-black/55 px-2 py-1 text-[11px] font-bold text-white">
+                    <Layers className="h-3.5 w-3.5" /> {item.imageIndex + 1}/{item.images.length}
+                  </span>
+                )}
+              </button>
+            ))}
           </div>
           {/* counter */}
           <div className="pointer-events-none absolute bottom-3 right-3 rounded-full bg-black/55 px-2.5 py-1 text-xs font-bold text-white">
-            {Math.min(heroIndex + 1, heroPhotos.length)}/{heroPhotos.length}
+            {Math.min(heroIndex + 1, heroItems.length)}/{heroItems.length}
           </div>
           {/* Book the linked service for the current photo */}
           {heroService && (
@@ -245,9 +252,9 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
             </button>
           )}
           {/* dots */}
-          {heroPhotos.length > 1 && (
+          {heroItems.length > 1 && (
             <div className="pointer-events-none absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-1.5">
-              {heroPhotos.map((_, i) => (
+              {heroItems.map((_, i) => (
                 <span key={i} className={`h-1.5 rounded-full transition-all ${i === heroIndex ? "w-4 bg-white" : "w-1.5 bg-white/60"}`} />
               ))}
             </div>
@@ -508,6 +515,7 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
             <button onClick={() => setLightbox(null)} aria-label="Close" className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white"><X className="h-5 w-5" /></button>
           </div>
           <div
+            ref={lightboxScroller}
             onClick={(e) => e.stopPropagation()}
             onScroll={(e) => setLightbox((lb) => lb ? { ...lb, index: Math.round(e.currentTarget.scrollLeft / e.currentTarget.clientWidth) } : lb)}
             className="flex flex-1 snap-x snap-mandatory items-center overflow-x-auto scroll-x"

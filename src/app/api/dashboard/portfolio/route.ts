@@ -72,18 +72,28 @@ export async function POST(request: Request) {
     authorName
   };
   let post;
+  let lastCreateError: unknown = null;
   try {
     post = await prisma.portfolioPost.create({ data: { ...baseData, sizeBytes: bytes } });
-  } catch {
+  } catch (error) {
+    lastCreateError = error;
     try {
       // Older deployments may not have sizeBytes yet, but still keep carousel images.
       post = await prisma.portfolioPost.create({ data: baseData });
-    } catch {
+    } catch (error) {
+      lastCreateError = error;
       try {
         // serviceId/authorProfileId/authorName also missing — keep the carousel if possible.
         const { serviceId: _serviceId, authorProfileId: _authorProfileId, authorName: _authorName, ...withoutServiceFields } = baseData;
         post = await prisma.portfolioPost.create({ data: withoutServiceFields });
-      } catch {
+      } catch (error) {
+        lastCreateError = error;
+        if (imageList.length > 1) {
+          console.error("[portfolio] carousel persistence failed:", error);
+          return NextResponse.json({
+            error: "Could not save all selected photos. Please wait a moment and try again."
+          }, { status: 500 });
+        }
         // images column also missing — fall back to the legacy single-cover shape.
         post = await prisma.portfolioPost.create({
           data: {
@@ -95,6 +105,16 @@ export async function POST(request: Request) {
         });
       }
     }
+  }
+  if (imageList.length > 1 && (!Array.isArray(post.images) || post.images.length !== imageList.length)) {
+    console.error("[portfolio] carousel image count mismatch after save:", {
+      expected: imageList.length,
+      actual: Array.isArray(post.images) ? post.images.length : null,
+      lastCreateError
+    });
+    return NextResponse.json({
+      error: "Could not confirm all selected photos were saved. Please try again."
+    }, { status: 500 });
   }
   // Count storage against the portfolio that holds the post (best-effort).
   if (bytes > 0) {
