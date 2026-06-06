@@ -80,7 +80,8 @@ export default async function Page({ params }: { params: Promise<{ handle: strin
           tags: p.tags,
           likes: p.likes,
           saves: p.saves,
-          featured: p.featured
+          featured: p.featured,
+          serviceId: p.serviceId
         })),
         team: profile.agents.map((a) => ({
           id: a.id,

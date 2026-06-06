@@ -30,7 +30,7 @@ export async function POST(request: Request) {
   });
   if (!profile) return NextResponse.json({ error: "No provider profile" }, { status: 404 });
 
-  const { imageUrl, caption, tags, target, sizeBytes } = await request.json();
+  const { imageUrl, caption, tags, target, sizeBytes, serviceId } = await request.json();
   if (!imageUrl) return NextResponse.json({ error: "imageUrl is required" }, { status: 400 });
   const bytes = Number.isFinite(sizeBytes) ? Math.max(0, Math.round(sizeBytes)) : 0;
 
@@ -51,11 +51,19 @@ export async function POST(request: Request) {
     }
   }
 
+  // Validate the linked service belongs to the post's owner (best-effort)
+  let linkedServiceId: string | null = null;
+  if (serviceId) {
+    const svc = await prisma.service.findUnique({ where: { id: serviceId }, select: { providerProfileId: true } }).catch(() => null);
+    if (svc && (svc.providerProfileId === providerProfileId || svc.providerProfileId === profile.id)) linkedServiceId = serviceId;
+  }
+
   const baseData = {
     providerProfileId,
     imageUrl,
     caption: (caption ?? "").toString().slice(0, 280),
     tags: Array.isArray(tags) ? tags.slice(0, 10).map((t: string) => t.toString().slice(0, 30)) : [],
+    serviceId: linkedServiceId,
     authorProfileId,
     authorName
   };

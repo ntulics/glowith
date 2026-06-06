@@ -10,7 +10,7 @@ import { VerifiedBadge } from "@/components/verified-badge";
 import { BookingFlow } from "@/components/marketplace/booking-flow";
 
 type Service = { id: string; name: string; category: string; durationMinutes: number; priceCents: number; depositCents: number; performer?: string | null };
-type Post = { id: string; caption: string; imageUrl: string; tags: string[]; likes: number; saves: number; featured?: boolean };
+type Post = { id: string; caption: string; imageUrl: string; tags: string[]; likes: number; saves: number; featured?: boolean; serviceId?: string | null };
 type TeamMember = { id: string; name: string; role: string; avatarUrl: string | null; handle: string; services?: Service[] };
 type BookTarget = { id: string; name: string; services: Service[]; preselect: string | null };
 
@@ -91,7 +91,9 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
   const galleryImages = heroPhotos;
   // Photos section excludes featured (shown in the slider) to avoid duplicates
   const gridPhotos = featuredPhotos.length ? profile.posts.filter((p) => !p.featured) : profile.posts;
+  const serviceById = new Map(profile.services.map((s) => [s.id, s]));
   const [heroIndex, setHeroIndex] = useState(0);
+  const heroService = heroPosts[heroIndex]?.serviceId ? serviceById.get(heroPosts[heroIndex].serviceId!) : undefined;
 
   const sections = [
     gridPhotos.length > 0 ? { id: "photos", label: "Photos" } : null,
@@ -226,6 +228,13 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
           <div className="pointer-events-none absolute bottom-3 right-3 rounded-full bg-black/55 px-2.5 py-1 text-xs font-bold text-white">
             {Math.min(heroIndex + 1, heroPhotos.length)}/{heroPhotos.length}
           </div>
+          {/* Book the linked service for the current photo */}
+          {heroService && (
+            <button onClick={() => openBooking(heroService.id)}
+              className="absolute bottom-3 left-3 rounded-full bg-[var(--brand)] px-4 py-2 text-xs font-black text-white shadow-lg">
+              Book · {formatZAR(heroService.priceCents)}
+            </button>
+          )}
           {/* dots */}
           {heroPhotos.length > 1 && (
             <div className="pointer-events-none absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-1.5">
@@ -301,17 +310,30 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
               <section id="photos" className="scroll-mt-28">
                 <h2 className="mb-4 text-xl font-black">Photos</h2>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  {gridPhotos.map((post) => (
-                    <div key={post.id} className="overflow-hidden rounded-2xl border border-[var(--line)] bg-white shadow-sm">
+                  {gridPhotos.map((post) => {
+                    const svc = post.serviceId ? serviceById.get(post.serviceId) : undefined;
+                    return (
+                    <div key={post.id} className="group overflow-hidden rounded-2xl border border-[var(--line)] bg-white shadow-sm">
                       <div className="relative aspect-square bg-[#f3e8e4]">
                         <Image src={post.imageUrl} alt={post.caption} fill sizes="300px" className="object-cover" />
+                        {svc && (
+                          <button onClick={() => openBooking(svc.id)}
+                            className="absolute bottom-2 right-2 rounded-full bg-[var(--brand)] px-3 py-1.5 text-xs font-black text-white shadow-md transition hover:bg-[var(--brand-dark)]">
+                            Book · {formatZAR(svc.priceCents)}
+                          </button>
+                        )}
                       </div>
                       <div className="p-3">
                         <p className="line-clamp-1 text-xs font-semibold">{post.caption}</p>
-                        <p className="mt-1 text-[10px] text-[var(--muted)]">♥ {post.likes} · ⊕ {post.saves}</p>
+                        {svc ? (
+                          <p className="mt-1 text-[10px] font-semibold text-[var(--brand)]">{svc.name}</p>
+                        ) : (
+                          <p className="mt-1 text-[10px] text-[var(--muted)]">♥ {post.likes} · ⊕ {post.saves}</p>
+                        )}
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </section>
             )}

@@ -210,6 +210,7 @@ model PortfolioPost {
   saves             Int      @default(0)
   featured          Boolean  @default(false)
   sizeBytes         Int      @default(0)
+  serviceId         String?
   authorProfileId   String?
   authorName        String?
   createdAt         DateTime @default(now())

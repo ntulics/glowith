@@ -20,6 +20,12 @@ export default async function PortfolioPage() {
     orderBy: { createdAt: "desc" }
   });
 
+  // Services the provider can link photos to (own services)
+  const services = await prisma.service.findMany({
+    where: { providerProfileId: profile.id, active: true }, orderBy: { createdAt: "asc" },
+    select: { id: true, name: true, priceCents: true }
+  });
+
   const isBusiness = profile.providerType === "BUSINESS";
   const canPostToCompany = isBusiness || (!!profile.parentBusinessId && profile.canPostToCompany);
 
@@ -30,6 +36,7 @@ export default async function PortfolioPage() {
       companyName={isBusiness ? profile.businessName : profile.parentBusiness?.businessName ?? null}
       companyProfileId={isBusiness ? profile.id : profile.parentBusiness?.id ?? null}
       ownProfileId={profile.id}
+      services={services}
       posts={posts.map((p) => ({
         id: p.id,
         imageUrl: mediaUrl(p.imageUrl) ?? p.imageUrl,
@@ -38,6 +45,7 @@ export default async function PortfolioPage() {
         likes: p.likes,
         saves: p.saves,
         featured: p.featured,
+        serviceId: p.serviceId,
         providerProfileId: p.providerProfileId,
         authorName: p.authorName
       }))}

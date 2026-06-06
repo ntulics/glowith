@@ -6,9 +6,10 @@ import { Heart, Bookmark, ImagePlus, Loader2, Trash2, Images, Star } from "lucid
 
 type Post = {
   id: string; imageUrl: string; caption: string; tags: string[];
-  likes: number; saves: number; featured: boolean;
+  likes: number; saves: number; featured: boolean; serviceId: string | null;
   providerProfileId: string; authorName: string | null;
 };
+type Svc = { id: string; name: string; priceCents: number };
 
 export function PortfolioView({
   posts: initial,
@@ -16,7 +17,8 @@ export function PortfolioView({
   canPostToCompany,
   companyName,
   companyProfileId,
-  ownProfileId
+  ownProfileId,
+  services = []
 }: {
   posts: Post[];
   isBusiness: boolean;
@@ -24,6 +26,7 @@ export function PortfolioView({
   companyName: string | null;
   companyProfileId: string | null;
   ownProfileId: string;
+  services?: Svc[];
 }) {
   const [posts, setPosts] = useState<Post[]>(initial);
   const [uploading, setUploading] = useState(false);
@@ -35,6 +38,7 @@ export function PortfolioView({
   const [deleting, setDeleting] = useState<string | null>(null);
   // Where a new post goes: own profile, or the company portfolio (if allowed & not the owner)
   const [target, setTarget] = useState<"self" | "company">(isBusiness ? "company" : "self");
+  const [linkServiceId, setLinkServiceId] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const showTargetToggle = canPostToCompany && !isBusiness;
 
@@ -50,7 +54,7 @@ export function PortfolioView({
   async function createPost(imageUrl: string, cap: string, tags: string[], sizeBytes: number): Promise<Post> {
     const res = await fetch("/api/dashboard/portfolio", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ imageUrl, caption: cap, tags, target: isBusiness ? "company" : target, sizeBytes })
+      body: JSON.stringify({ imageUrl, caption: cap, tags, target: isBusiness ? "company" : target, sizeBytes, serviceId: linkServiceId || null })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? "Failed to save");
@@ -177,12 +181,23 @@ export function PortfolioView({
                     placeholder="acrylics, ombre, nailart"
                     className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-[#D94472] focus:bg-white" />
                 </div>
+                {services.length > 0 && (
+                  <div>
+                    <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-gray-500">Link a service (optional)</label>
+                    <select value={linkServiceId} onChange={(e) => setLinkServiceId(e.target.value)}
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-[#D94472] focus:bg-white">
+                      <option value="">No service — photo only</option>
+                      {services.map((s) => <option key={s.id} value={s.id}>{s.name} · R{Math.round(s.priceCents / 100)}</option>)}
+                    </select>
+                    <p className="mt-1 text-[11px] text-gray-400">Clients can book this service straight from the photo.</p>
+                  </div>
+                )}
                 <div className="mt-auto flex gap-2">
                   <button type="button" onClick={publish} disabled={saving}
                     className="inline-flex items-center gap-2 rounded-xl bg-[#D94472] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#9f2852] disabled:opacity-60">
                     {saving && <Loader2 className="h-4 w-4 animate-spin" />} Publish {pending.length > 1 ? `${pending.length} photos` : ""}
                   </button>
-                  <button type="button" onClick={() => { setPending([]); setCaption(""); setTagsInput(""); }}
+                  <button type="button" onClick={() => { setPending([]); setCaption(""); setTagsInput(""); setLinkServiceId(""); }}
                     className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-bold text-gray-600 hover:bg-gray-50">
                     Cancel
                   </button>
