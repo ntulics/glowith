@@ -130,35 +130,24 @@ function LoginForm() {
     setError("");
 
     try {
-      const result = await signIn("credentials", { email, password, redirect: false });
+      // Use the custom initiate-login endpoint to avoid NextAuth swallowing
+      // the MFA state inside CallbackRouteError (NextAuth v5 behaviour).
+      const res = await fetch("/api/auth/initiate-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password })
+      });
 
-      if (!result?.error) {
-        await redirectAfterLogin();
+      if (res.status === 401 || !res.ok) {
+        setError("Invalid email or password");
         return;
       }
 
-      // NextAuth v5 wraps thrown errors as CallbackRouteError; the real message
-      // is in result.url as ?error=MFA_REQUIRED%7C...
-      let errorParam = result.error ?? "";
-      if (result.url) {
-        try {
-          const u = new URL(result.url, window.location.origin);
-          errorParam = u.searchParams.get("error") ?? errorParam;
-        } catch { /* ignore malformed URL */ }
-      }
-
-      if (errorParam?.startsWith("MFA_REQUIRED")) {
-        const parts = errorParam.split("|");
-        if (parts.length === 4) {
-          const state: MFAState = { email: parts[1], ticket: parts[2], method: parts[3] as "email" | "totp" };
-          setMfa(state);
-          setStep("mfa");
-          if (state.method === "email") startCooldown(60);
-          return;
-        }
-      }
-
-      setError("Invalid email or password");
+      const data = await res.json();
+      const state: MFAState = { email: data.email, ticket: data.ticket, method: data.method };
+      setMfa(state);
+      setStep("mfa");
+      if (state.method === "email") startCooldown(60);
     } finally {
       setLoading(false);
     }
