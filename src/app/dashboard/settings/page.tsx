@@ -25,6 +25,7 @@ export default async function SettingsPage() {
         bio: profile.bio,
         city: profile.city,
         category: profile.category,
+        avatarUrl: profile.avatarUrl,
         mobile: profile.mobile,
         studio: profile.studio,
         latitude: profile.latitude,

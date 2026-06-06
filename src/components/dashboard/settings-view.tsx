@@ -5,7 +5,7 @@ import {
   Loader2, Building2, CreditCard, Bell, CalendarDays, Puzzle,
   ChevronRight, ChevronDown, Clock, Globe, CheckCircle2, Zap, User,
   Plus, X, Mail, MessageSquare, Phone, Info, ExternalLink, Copy,
-  CheckCheck, BookOpen, Inbox
+  CheckCheck, BookOpen, Inbox, Camera
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LocationPicker } from "@/components/dashboard/location-picker";
@@ -13,6 +13,7 @@ import { LocationPicker } from "@/components/dashboard/location-picker";
 type Profile = {
   id: string; businessName: string; handle: string;
   bio: string; city: string; category: string; mobile: boolean; studio: boolean;
+  avatarUrl?: string | null;
   latitude?: number; longitude?: number;
 };
 
@@ -223,6 +224,7 @@ export function SettingsView({
   const [activeSection, setActiveSection] = useState("profile");
   const [form, setForm] = useState(initial);
   const [loading, setLoading] = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [integrationStates, setIntegrationStates] = useState<Record<string, boolean>>({});
   const [expandedHowTo, setExpandedHowTo] = useState<string | null>(null);
@@ -259,6 +261,31 @@ export function SettingsView({
     setLoading(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
+  }
+
+  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setAvatarUploading(true);
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("folder", "profile");
+
+    try {
+      const res = await fetch("/api/upload", { method: "POST", body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? "Could not upload avatar.");
+      setForm((f) => ({ ...f, avatarUrl: data.url }));
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (error) {
+      console.error("[settings] avatar upload failed", error);
+      alert(error instanceof Error ? error.message : "Could not upload avatar.");
+    } finally {
+      setAvatarUploading(false);
+      e.target.value = "";
+    }
   }
 
   function toggleIntegration(id: string) {
@@ -315,6 +342,26 @@ export function SettingsView({
         )}
         <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm space-y-4">
           <h2 className="font-black text-base">{isAgent ? "Your profile" : "Studio profile"}</h2>
+          <div>
+            <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">Profile photo</label>
+            <div className="flex items-center gap-4">
+              <div className="relative h-20 w-20 overflow-hidden rounded-2xl border border-gray-200 bg-gray-50">
+                {form.avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={form.avatarUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center bg-[#D94472]/10 text-xl font-black text-[#D94472]">
+                    {form.businessName.charAt(0).toUpperCase()}
+                  </div>
+                )}
+              </div>
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50">
+                {avatarUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+                {avatarUploading ? "Uploading" : "Change photo"}
+                <input type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} disabled={avatarUploading} />
+              </label>
+            </div>
+          </div>
           {isAgent && (
             <div>
               <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-gray-500">Business</label>
