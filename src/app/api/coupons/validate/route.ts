@@ -10,14 +10,21 @@ export async function POST(request: Request) {
   }
 
   const service = await prisma.service.findUnique({ where: { id: serviceId }, select: { priceCents: true, providerProfileId: true } });
-  if (!service || service.providerProfileId !== providerProfileId) {
+  if (!service) return NextResponse.json({ valid: false, error: "Service not found" }, { status: 404 });
+
+  // Agents can also redeem their parent business's coupons
+  const profile = await prisma.providerProfile.findUnique({
+    where: { id: providerProfileId }, select: { parentBusinessId: true }
+  });
+  const providerIds = [providerProfileId, profile?.parentBusinessId].filter(Boolean) as string[];
+  if (!providerIds.includes(service.providerProfileId)) {
     return NextResponse.json({ valid: false, error: "Service not found" }, { status: 404 });
   }
 
-  const coupon = await prisma.coupon.findUnique({
-    where: { providerProfileId_code: { providerProfileId, code: code.toString().trim().toUpperCase() } }
+  const coupon = await prisma.coupon.findFirst({
+    where: { code: code.toString().trim().toUpperCase(), providerProfileId: { in: providerIds }, active: true }
   });
-  if (!coupon || !coupon.active) return NextResponse.json({ valid: false, error: "Invalid code" });
+  if (!coupon) return NextResponse.json({ valid: false, error: "Invalid code" });
   if (coupon.expiresAt && coupon.expiresAt.getTime() < Date.now()) return NextResponse.json({ valid: false, error: "This coupon has expired" });
   if (coupon.maxRedemptions != null && coupon.redemptions >= coupon.maxRedemptions) {
     return NextResponse.json({ valid: false, error: "This coupon has been fully redeemed" });

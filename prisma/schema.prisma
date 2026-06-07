@@ -152,6 +152,12 @@ model ProviderProfile {
   isDemo           Boolean  @default(false)
   mobile           Boolean  @default(false)
   studio           Boolean  @default(true)
+  // Cancellation & reschedule policy (agents inherit from parent business)
+  cancelNoticeHours     Int?
+  cancelFeePercent      Int?
+  rescheduleNoticeHours Int?
+  rescheduleFeePercent  Int?
+  policyText            String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -217,6 +223,21 @@ model Service {
 
   providerProfile ProviderProfile @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
   bookings        Booking[]
+  extras          ServiceExtra[]
+}
+
+model ServiceExtra {
+  id              String   @id @default(cuid())
+  serviceId       String
+  name            String
+  description     String?
+  priceCents      Int      @default(0)
+  durationMinutes Int      @default(0)
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  service       Service        @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  bookingExtras BookingExtra[]
 }
 
 model PortfolioPost {
@@ -259,6 +280,19 @@ model Booking {
   providerProfile ProviderProfile @relation(fields: [providerProfileId], references: [id])
   service         Service         @relation(fields: [serviceId], references: [id])
   items           BookingItem[]
+  extras          BookingExtra[]
+}
+
+model BookingExtra {
+  id              String @id @default(cuid())
+  bookingId       String
+  serviceExtraId  String
+  name            String
+  priceCents      Int
+  durationMinutes Int    @default(0)
+
+  booking      Booking      @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  serviceExtra ServiceExtra @relation(fields: [serviceExtraId], references: [id])
 }
 
 model BookingItem {

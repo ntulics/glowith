@@ -111,6 +111,11 @@ export function AccountPortal({
   const [cancelConfirm, setCancelConfirm] = useState<string | null>(null);
   const [providerDrawer, setProviderDrawer] = useState<{ handle: string; name: string } | null>(null);
   const [payingDeposit, setPayingDeposit] = useState<string | null>(null);
+  const [rescheduleBooking, setRescheduleBooking] = useState<Booking | null>(null);
+  const [rescheduleDate, setRescheduleDate] = useState("");
+  const [rescheduleTime, setRescheduleTime] = useState("");
+  const [rescheduling, setRescheduling] = useState(false);
+  const [rescheduleError, setRescheduleError] = useState("");
 
   const firstName = userName.split(" ")[0] || "there";
 
@@ -132,6 +137,26 @@ export function AccountPortal({
       }
     } finally {
       setPayingDeposit(null);
+    }
+  }
+
+  async function handleReschedule() {
+    if (!rescheduleBooking || !rescheduleDate || !rescheduleTime) return;
+    setRescheduling(true);
+    setRescheduleError("");
+    try {
+      const startsAt = new Date(`${rescheduleDate}T${rescheduleTime}:00`).toISOString();
+      const res = await fetch(`/api/bookings/${rescheduleBooking.id}/reschedule`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ startsAt })
+      });
+      const data = await res.json();
+      if (!res.ok) { setRescheduleError(data.error ?? "Could not reschedule"); return; }
+      setBookings((prev) => prev.map((b) => b.id === rescheduleBooking.id ? { ...b, startsAt: data.startsAt } : b));
+      setRescheduleBooking(null);
+    } finally {
+      setRescheduling(false);
     }
   }
 
@@ -307,6 +332,14 @@ export function AccountPortal({
                             Pay deposit
                           </button>
                         )}
+                        {booking.status === "CONFIRMED" && !isPast && (
+                          <button
+                            onClick={() => { setRescheduleBooking(booking); setRescheduleDate(""); setRescheduleTime(""); setRescheduleError(""); }}
+                            className="rounded-xl border border-[var(--line)] px-3 py-2 text-xs font-bold text-[var(--ink)] hover:bg-[var(--background)] transition"
+                          >
+                            Reschedule
+                          </button>
+                        )}
                         {cancelConfirm === booking.id ? (
                           <div className="flex flex-1 gap-2">
                             <button
@@ -348,6 +381,59 @@ export function AccountPortal({
           name={providerDrawer.name}
           onClose={() => setProviderDrawer(null)}
         />
+      )}
+
+      {/* Reschedule modal */}
+      {rescheduleBooking && (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={() => setRescheduleBooking(null)} />
+          <div className="fixed inset-x-4 top-1/2 z-50 -translate-y-1/2 rounded-3xl bg-white p-6 shadow-2xl sm:inset-x-auto sm:left-1/2 sm:w-full sm:max-w-md sm:-translate-x-1/2">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-black">Reschedule appointment</h3>
+              <button onClick={() => setRescheduleBooking(null)} className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--line)]">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <p className="mb-4 text-sm text-[var(--muted)]">
+              Moving: <strong>{rescheduleBooking.service}</strong> with {rescheduleBooking.provider.name}
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-[var(--muted)] mb-1.5">New date</label>
+                <input
+                  type="date"
+                  value={rescheduleDate}
+                  min={new Date().toISOString().slice(0, 10)}
+                  onChange={(e) => setRescheduleDate(e.target.value)}
+                  className="w-full rounded-xl border border-[var(--line)] px-4 py-3 text-sm outline-none focus:border-[var(--brand)]"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-[var(--muted)] mb-1.5">New time</label>
+                <input
+                  type="time"
+                  value={rescheduleTime}
+                  onChange={(e) => setRescheduleTime(e.target.value)}
+                  className="w-full rounded-xl border border-[var(--line)] px-4 py-3 text-sm outline-none focus:border-[var(--brand)]"
+                />
+              </div>
+            </div>
+            {rescheduleError && <p className="mt-2 text-sm font-semibold text-red-500">{rescheduleError}</p>}
+            <div className="mt-5 flex gap-2">
+              <button
+                onClick={handleReschedule}
+                disabled={rescheduling || !rescheduleDate || !rescheduleTime}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-[var(--brand)] py-2.5 text-sm font-bold text-white hover:bg-[var(--brand-dark)] disabled:opacity-60 transition"
+              >
+                {rescheduling && <Loader2 className="h-4 w-4 animate-spin" />}
+                Confirm reschedule
+              </button>
+              <button onClick={() => setRescheduleBooking(null)} className="rounded-xl border border-[var(--line)] px-4 py-2.5 text-sm font-semibold text-[var(--muted)] hover:bg-[var(--background)]">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

@@ -14,7 +14,7 @@ export async function GET() {
       posts: { some: {} }
     },
     include: {
-      services: { where: { active: true }, orderBy: { createdAt: "asc" } },
+      services: { where: { active: true }, orderBy: { createdAt: "asc" }, include: { extras: { where: { active: true } } } },
       posts: { orderBy: { createdAt: "desc" }, take: 6 },
       ratings: { select: { stars: true } }
     },
@@ -64,7 +64,8 @@ export async function GET() {
       bio: p.bio,
       services: p.services.map((s) => ({
         id: s.id, name: s.name, category: s.category,
-        durationMinutes: s.durationMinutes, priceCents: s.priceCents, depositCents: s.depositCents
+        durationMinutes: s.durationMinutes, priceCents: s.priceCents, depositCents: s.depositCents,
+        extras: (s as any).extras?.map((e: any) => ({ id: e.id, name: e.name, description: e.description, priceCents: e.priceCents, durationMinutes: e.durationMinutes })) ?? []
       })),
       portfolio: p.posts.map((post) => ({
         id: post.id, caption: post.caption, image: mediaUrl(post.imageUrl) ?? post.imageUrl,

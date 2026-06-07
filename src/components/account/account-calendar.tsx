@@ -383,10 +383,11 @@ export function AccountCalendar({ initialBookings }: { initialBookings: Calendar
         </div>
       </div>
 
-      {/* BookingFlow overlay — date + slot pre-filled so user skips straight to review */}
+      {/* Drawer booking — calendar stays visible, flow slides in from right */}
       {bookingSlot && selectedProvider && bookingDate && (
         <BookingFlow
           open
+          drawer
           onClose={() => { setBookingSlot(null); setBookingDate(null); }}
           providerProfileId={selectedProvider.id}
           providerName={selectedProvider.name}

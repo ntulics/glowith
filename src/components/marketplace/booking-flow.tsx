@@ -3,27 +3,27 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { signIn } from "next-auth/react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, ArrowRight, Check, Clock3, Loader2, Plus, Star, UserCheck, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Loader2, Minus, Plus, Star, UserCheck, X } from "lucide-react";
 
 /* ── Types ──────────────────────────────────────────────────────── */
-type Service = { id: string; name: string; category?: string; durationMinutes: number; priceCents: number; depositCents: number; performer?: string | null };
+type ServiceExtra = { id: string; name: string; description?: string | null; priceCents: number; durationMinutes: number };
+type Service = { id: string; name: string; category?: string; durationMinutes: number; priceCents: number; depositCents: number; performer?: string | null; extras?: ServiceExtra[] };
 type Busy = { start: string; durationMinutes: number };
 type Agent = { id: string; name: string; avatarUrl: string | null; category: string; serviceCategories: string[] };
 
 const ZAR = (c: number) => new Intl.NumberFormat("en-ZA", { style: "currency", currency: "ZAR", maximumFractionDigits: 0 }).format(c / 100);
-const fmtDur = (m: number) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ""}`);
+const fmtDur = (m: number) => m <= 0 ? "" : (m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ""}`);
 
-/** Role label shown in the "preferred artist" step header. */
 function roleLabel(categories: string[]): string {
-  const joined = categories.join(" ").toLowerCase();
-  if (/hair/.test(joined)) return "Hair Stylist";
-  if (/nail/.test(joined)) return "Nail Technician";
-  if (/makeup|beauty|make.up/.test(joined)) return "Makeup Artist";
-  if (/braid|loc|twist/.test(joined)) return "Braiding Specialist";
-  if (/lash|lashes/.test(joined)) return "Lash Technician";
-  if (/skin|facial|wax/.test(joined)) return "Beauty Therapist";
-  if (/massage|body/.test(joined)) return "Massage Therapist";
-  if (/barber|beard|shave/.test(joined)) return "Barber";
+  const j = categories.join(" ").toLowerCase();
+  if (/hair/.test(j)) return "Hair Stylist";
+  if (/nail/.test(j)) return "Nail Technician";
+  if (/makeup|beauty|make.up/.test(j)) return "Makeup Artist";
+  if (/braid|loc|twist/.test(j)) return "Braiding Specialist";
+  if (/lash/.test(j)) return "Lash Technician";
+  if (/skin|facial|wax/.test(j)) return "Beauty Therapist";
+  if (/massage|body/.test(j)) return "Massage Therapist";
+  if (/barber|beard|shave/.test(j)) return "Barber";
   return "Artist";
 }
 
@@ -46,22 +46,25 @@ export function BookingFlow({
   open, onClose,
   providerProfileId, providerName, services, preselectedServiceId,
   preselectedDate, preselectedSlot,
-  providerRating, providerReviewCount, providerAvatarUrl
+  providerRating, providerReviewCount, providerAvatarUrl,
+  drawer = false
 }: {
   open: boolean; onClose: () => void;
   providerProfileId: string; providerName: string;
   services: Service[]; preselectedServiceId?: string | null;
-  /** Pre-fill date + time (e.g. from calendar) — skips date & time steps */
   preselectedDate?: Date | null;
   preselectedSlot?: string | null;
   providerRating?: number;
   providerReviewCount?: number;
   providerAvatarUrl?: string | null;
+  /** Render as a right-side drawer instead of full-screen (used from calendar etc.) */
+  drawer?: boolean;
 }) {
   const hasPreselectedDateTime = !!(preselectedDate && preselectedSlot);
 
   const [step, setStep] = useState<Step>("service");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selectedExtras, setSelectedExtras] = useState<ServiceExtra[]>([]);
   const [serviceCat, setServiceCat] = useState("All");
   const [date, setDate] = useState<Date | null>(preselectedDate ?? null);
   const [slot, setSlot] = useState<string | null>(preselectedSlot ?? null);
@@ -84,14 +87,19 @@ export function BookingFlow({
   const payMountedRef = useRef(false);
   const popupRef = useRef<any>(null);
 
-  // Artist / staff selection
+  // Artist selection
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
-  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null); // null = no preference
+  const [selectedAgent, setSelectedAgent] = useState<Agent | null | undefined>(undefined); // undefined = not yet resolved
+  const [assignedAgent, setAssignedAgent] = useState<Agent | null>(null); // randomly assigned
 
   const selectedServices = useMemo(() => services.filter((s) => selectedIds.includes(s.id)), [services, selectedIds]);
-  const totalDuration = selectedServices.reduce((a, s) => a + s.durationMinutes, 0);
-  const totalPrice = selectedServices.reduce((a, s) => a + s.priceCents, 0);
+  const allExtras = useMemo(() => {
+    const seen = new Set<string>();
+    return selectedServices.flatMap((s) => (s.extras ?? []).filter((e) => { if (seen.has(e.id)) return false; seen.add(e.id); return true; }));
+  }, [selectedServices]);
+  const totalDuration = selectedServices.reduce((a, s) => a + s.durationMinutes, 0) + selectedExtras.reduce((a, e) => a + e.durationMinutes, 0);
+  const totalPrice = selectedServices.reduce((a, s) => a + s.priceCents, 0) + selectedExtras.reduce((a, e) => a + e.priceCents, 0);
   const totalDeposit = selectedServices.reduce((a, s) => a + (s.depositCents ?? 0), 0);
   const categories = useMemo(() => {
     const set = new Set(services.map((s) => s.category).filter(Boolean) as string[]);
@@ -100,12 +108,24 @@ export function BookingFlow({
   const catServices = serviceCat === "All" ? services : services.filter((s) => s.category === serviceCat);
   const selectedCategories = useMemo(() => [...new Set(selectedServices.map((s) => s.category).filter(Boolean) as string[])], [selectedServices]);
 
-  // The provider ID actually used for the booking (may be an agent's ID)
-  const activeProviderId = selectedAgent?.id ?? providerProfileId;
-  const activeProviderName = selectedAgent?.name ?? providerName;
+  // The provider actually used for booking
+  const displayAgent = assignedAgent ?? (selectedAgent ?? null);
+  const activeProviderId = displayAgent?.id ?? providerProfileId;
+  const activeProviderName = displayAgent?.name ?? providerName;
 
   function toggleService(id: string) {
     setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+    setSelectedExtras((prev) => {
+      // Remove extras belonging to deselected service
+      const svc = services.find((s) => s.id === id);
+      if (!svc?.extras) return prev;
+      const extraIds = new Set(svc.extras.map((e) => e.id));
+      if (selectedIds.includes(id)) return prev.filter((e) => !extraIds.has(e.id));
+      return prev;
+    });
+  }
+  function toggleExtra(extra: ServiceExtra) {
+    setSelectedExtras((prev) => prev.some((e) => e.id === extra.id) ? prev.filter((e) => e.id !== extra.id) : [...prev, extra]);
   }
 
   // Reset on open
@@ -113,24 +133,18 @@ export function BookingFlow({
     if (!open) return;
     setError("");
     setSelectedIds(preselectedServiceId ? [preselectedServiceId] : []);
+    setSelectedExtras([]);
     setDate(preselectedDate ?? null);
     setSlot(preselectedSlot ?? null);
     setNotes(""); setServiceCat("All");
-    setSelectedAgent(null);
+    setSelectedAgent(undefined); setAssignedAgent(null);
     setAgents([]);
-    // Choose initial step
-    if (preselectedServiceId && hasPreselectedDateTime) {
-      setStep("service"); // still need to confirm service; will auto-advance after agent check
-    } else if (preselectedServiceId) {
-      setStep("date");
-    } else {
-      setStep("service");
-    }
+    setStep(preselectedServiceId ? "date" : "service");
     fetch("/api/auth/session").then((r) => r.json()).then((s) => setAuthed(!!s?.user)).catch(() => setAuthed(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Fetch agents when provider is known (once per open)
+  // Fetch agents once per open
   useEffect(() => {
     if (!open || agents.length > 0 || agentsLoading) return;
     setAgentsLoading(true);
@@ -153,6 +167,20 @@ export function BookingFlow({
       .finally(() => setBusyLoading(false));
   }, [date, activeProviderId]);
 
+  // When "No preference" is chosen and we have date+time, pick a random available agent
+  async function resolveRandomAgent(): Promise<Agent | null> {
+    if (agents.length === 0) return null;
+    if (!date || !slot) return null;
+    const ds = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    try {
+      const r = await fetch(`/api/providers/agents?providerProfileId=${providerProfileId}&date=${ds}&slot=${slot}&duration=${totalDuration || 60}`);
+      const d = await r.json();
+      const available: Agent[] = d.agents ?? [];
+      if (available.length === 0) return null;
+      return available[Math.floor(Math.random() * available.length)];
+    } catch { return null; }
+  }
+
   function afterServiceStep() {
     if (agents.length > 1) {
       setStep("artist");
@@ -163,12 +191,31 @@ export function BookingFlow({
     }
   }
 
-  function afterArtistStep() {
+  async function afterArtistStep(agent: Agent | null) {
+    setSelectedAgent(agent);
+    if (agent === null && agents.length > 0) {
+      // Resolve a random available agent (if date+slot already known)
+      if (date && slot) {
+        const picked = await resolveRandomAgent();
+        setAssignedAgent(picked);
+      }
+    } else {
+      setAssignedAgent(null);
+    }
     if (hasPreselectedDateTime) {
       setStep(authed === false ? "auth" : "review");
     } else {
       setStep("date");
     }
+  }
+
+  // When arriving at review and date+slot just got set (from date/time steps), resolve random agent
+  async function goAfterTime() {
+    if (selectedAgent === undefined || selectedAgent === null) {
+      const picked = await resolveRandomAgent();
+      setAssignedAgent(picked);
+    }
+    setStep(authed === false ? "auth" : "review");
   }
 
   async function onPaid() {
@@ -269,7 +316,9 @@ export function BookingFlow({
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           providerProfileId: activeProviderId,
-          serviceIds: selectedIds, startsAt, notes, couponCode: appliedCode
+          serviceIds: selectedIds,
+          extraIds: selectedExtras.map((e) => e.id),
+          startsAt, notes, couponCode: appliedCode
         })
       });
       const d = await res.json();
@@ -324,8 +373,6 @@ export function BookingFlow({
     }
   }
 
-  function goAfterTime() { setStep(authed === false ? "auth" : "review"); }
-
   const stepsOrder: Step[] = [
     ...(preselectedServiceId ? [] : ["service" as Step]),
     ...(agents.length > 1 ? ["artist" as Step] : []),
@@ -335,171 +382,241 @@ export function BookingFlow({
   ];
   const progress = (stepsOrder.indexOf(step) + 1) / Math.max(stepsOrder.length, 1);
 
-  // ── Render ──────────────────────────────────────────────────────
-  return (
+  // ── Provider card shared ──
+  const ProviderCard = ({ showChange = false }: { showChange?: boolean }) => (
+    <div className="flex items-center justify-between rounded-2xl border border-[var(--line)] bg-[var(--background)] p-3">
+      <div className="flex items-center gap-3">
+        {(displayAgent?.avatarUrl ?? providerAvatarUrl) ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={(displayAgent?.avatarUrl ?? providerAvatarUrl)!} alt={activeProviderName} className="h-10 w-10 rounded-xl object-cover" />
+        ) : (
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--brand)] text-white text-sm font-bold">{activeProviderName[0]}</div>
+        )}
+        <div>
+          <p className="text-sm font-black text-[var(--ink)]">{activeProviderName}</p>
+          {displayAgent && <p className="text-xs text-[var(--muted)]">at {providerName}</p>}
+          {!displayAgent && assignedAgent === null && selectedAgent === null && agents.length > 0 && (
+            <p className="text-xs text-[var(--muted)]">Artist auto-assigned</p>
+          )}
+          {providerRating !== undefined && !displayAgent && (
+            <div className="flex items-center gap-0.5 mt-0.5">
+              {[1,2,3,4,5].map((n) => (
+                <Star key={n} className={`h-3 w-3 ${n <= Math.round(providerRating) ? "fill-amber-400 text-amber-400" : "text-gray-200"}`} />
+              ))}
+              <span className="ml-1 text-xs text-[var(--muted)]">{providerRating.toFixed(1)}</span>
+            </div>
+          )}
+        </div>
+      </div>
+      {showChange && agents.length > 1 && (
+        <button onClick={() => setStep("artist")}
+          className="rounded-xl border border-[var(--line)] px-3 py-1.5 text-xs font-bold text-[var(--muted)] hover:border-[var(--brand)] hover:text-[var(--brand)] transition">
+          Change
+        </button>
+      )}
+    </div>
+  );
+
+  // ── Wrapper ──────────────────────────────────────────────────────
+  const drawerWrapper = (children: React.ReactNode) => drawer ? (
+    <>
+      <div className="fixed inset-0 z-[58] bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-y-0 right-0 z-[59] flex w-full max-w-[520px] flex-col bg-white shadow-2xl overflow-hidden">
+        {children}
+      </div>
+    </>
+  ) : (
     <div className="fixed inset-0 z-[60] flex flex-col bg-[var(--background)]">
+      {children}
+    </div>
+  );
+
+  return drawerWrapper(
+    <>
       {/* Top bar */}
-      <div className="flex items-center gap-4 border-b border-[var(--line)] bg-white px-4 py-3 sm:px-8">
+      <div className="flex shrink-0 items-center gap-4 border-b border-[var(--line)] bg-white px-4 py-3">
         {step === "service" ? (
-          <button onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--line)] hover:bg-[var(--background)]">
-            <ArrowLeft className="h-4 w-4" />
-          </button>
+          <button onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--line)] hover:bg-[var(--background)]"><ArrowLeft className="h-4 w-4" /></button>
         ) : (
           <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--line)]">
             <motion.div className="h-full rounded-full bg-[var(--brand)]" animate={{ width: `${progress * 100}%` }} transition={{ duration: 0.3 }} />
           </div>
         )}
-        <h2 className="text-lg font-black">{step === "service" ? "Select services" : providerName}</h2>
-        <button onClick={onClose} aria-label="Close" className="ml-auto flex h-9 w-9 items-center justify-center rounded-full border border-[var(--line)] hover:bg-[var(--background)]">
-          <X className="h-4 w-4" />
-        </button>
+        <h2 className="truncate text-base font-black">{step === "service" ? "Select services" : providerName}</h2>
+        <button onClick={onClose} aria-label="Close" className="ml-auto shrink-0 flex h-9 w-9 items-center justify-center rounded-full border border-[var(--line)] hover:bg-[var(--background)]"><X className="h-4 w-4" /></button>
       </div>
 
       {/* ── Service selection ── */}
       {step === "service" ? (
-        <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 overflow-y-auto px-4 py-6 sm:px-8 lg:flex-row">
+        <div className={`flex flex-1 flex-col overflow-y-auto gap-6 px-4 py-5 ${!drawer ? "sm:px-8 lg:flex-row mx-auto w-full max-w-6xl" : ""}`}>
           <div className="min-w-0 flex-1">
-            <h3 className="mb-1 text-2xl font-black">{providerName}</h3>
+            {!drawer && <h3 className="mb-1 text-2xl font-black">{providerName}</h3>}
             {categories.length > 1 && (
-              <div className="mb-5 mt-3 flex gap-2 overflow-x-auto">
+              <div className={`${drawer ? "mb-3" : "mb-5 mt-3"} flex gap-2 overflow-x-auto`}>
                 {categories.map((c) => (
                   <button key={c} onClick={() => setServiceCat(c)}
-                    className={`shrink-0 rounded-full border px-4 py-2 text-sm font-bold transition ${serviceCat === c ? "border-[var(--ink)] bg-[var(--ink)] text-white" : "border-[var(--line)] bg-white text-[var(--muted)] hover:border-[var(--ink)]"}`}>
+                    className={`shrink-0 rounded-full border px-3 py-1.5 text-sm font-bold transition ${serviceCat === c ? "border-[var(--ink)] bg-[var(--ink)] text-white" : "border-[var(--line)] bg-white text-[var(--muted)] hover:border-[var(--ink)]"}`}>
                     {c}
                   </button>
                 ))}
               </div>
             )}
-            <div className="space-y-3">
+            <div className="space-y-2">
               {catServices.map((s) => {
                 const sel = selectedIds.includes(s.id);
+                const hasExtras = (s.extras?.length ?? 0) > 0;
                 return (
-                  <button key={s.id} onClick={() => toggleService(s.id)}
-                    className={`flex w-full items-center justify-between gap-3 rounded-2xl border bg-white p-4 text-left transition ${sel ? "border-[var(--brand)] ring-1 ring-[var(--brand)]" : "border-[var(--line)] hover:border-[var(--ink)]"}`}>
-                    <div className="min-w-0">
-                      <p className="font-bold">{s.name}</p>
-                      <p className="mt-0.5 text-xs text-[var(--muted)]">{fmtDur(s.durationMinutes)}{s.performer ? ` · with ${s.performer}` : ""}</p>
-                      <p className="mt-1 text-sm font-black">{ZAR(s.priceCents)}</p>
-                    </div>
-                    <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${sel ? "bg-[var(--brand)] text-white" : "border border-[var(--line)] text-[var(--muted)]"}`}>
-                      {sel ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                    </span>
-                  </button>
+                  <div key={s.id}>
+                    <button onClick={() => toggleService(s.id)}
+                      className={`flex w-full items-center justify-between gap-3 rounded-2xl border bg-white p-4 text-left transition ${sel ? "border-[var(--brand)] ring-1 ring-[var(--brand)]" : "border-[var(--line)] hover:border-[var(--ink)]"}`}>
+                      <div className="min-w-0">
+                        <p className="font-bold text-sm">{s.name}</p>
+                        <p className="mt-0.5 text-xs text-[var(--muted)]">{fmtDur(s.durationMinutes)}{s.performer ? ` · with ${s.performer}` : ""}</p>
+                        <p className="mt-1 text-sm font-black">{ZAR(s.priceCents)}</p>
+                      </div>
+                      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${sel ? "bg-[var(--brand)] text-white" : "border border-[var(--line)] text-[var(--muted)]"}`}>
+                        {sel ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                      </span>
+                    </button>
+                    {/* Inline extras when service is selected */}
+                    {sel && hasExtras && (
+                      <div className="ml-4 mt-1 space-y-1 border-l-2 border-[var(--brand)]/30 pl-3">
+                        <p className="text-xs font-bold text-[var(--brand)] uppercase tracking-wider">Optional extras</p>
+                        {s.extras!.map((e) => {
+                          const checked = selectedExtras.some((x) => x.id === e.id);
+                          return (
+                            <button key={e.id} onClick={() => toggleExtra(e)}
+                              className={`flex w-full items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left transition ${checked ? "border-[var(--brand)]/50 bg-[var(--brand)]/5" : "border-[var(--line)] bg-white hover:border-[var(--brand)]/40"}`}>
+                              <div className="min-w-0">
+                                <p className="text-xs font-bold text-[var(--ink)]">{e.name}</p>
+                                {e.description && <p className="text-xs text-[var(--muted)]">{e.description}</p>}
+                                <p className="text-xs font-semibold text-[var(--muted)]">
+                                  {e.priceCents > 0 ? `+${ZAR(e.priceCents)}` : "Free"}
+                                  {e.durationMinutes > 0 ? ` · +${e.durationMinutes} min` : ""}
+                                </p>
+                              </div>
+                              <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${checked ? "bg-[var(--brand)] text-white" : "border border-[var(--line)] text-[var(--muted)]"}`}>
+                                {checked ? <Check className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
-              {catServices.length === 0 && <p className="py-12 text-center text-sm text-[var(--muted)]">No services in this category.</p>}
+              {catServices.length === 0 && <p className="py-8 text-center text-sm text-[var(--muted)]">No services in this category.</p>}
             </div>
           </div>
 
-          {/* Summary sidebar */}
-          <aside className="lg:w-80 lg:shrink-0">
-            <div className="rounded-2xl border border-[var(--line)] bg-white p-5 shadow-sm lg:sticky lg:top-4">
-              {/* Provider card */}
-              <div className="mb-4 flex items-center gap-3 border-b border-[var(--line)] pb-4">
-                {providerAvatarUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={providerAvatarUrl} alt={providerName} className="h-10 w-10 rounded-xl object-cover" />
+          {/* Summary sidebar (full-screen only) */}
+          {!drawer && (
+            <aside className="lg:w-80 lg:shrink-0">
+              <div className="rounded-2xl border border-[var(--line)] bg-white p-5 shadow-sm lg:sticky lg:top-4">
+                {/* Provider */}
+                <div className="mb-4 border-b border-[var(--line)] pb-4">
+                  <div className="flex items-center gap-3">
+                    {providerAvatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={providerAvatarUrl} alt={providerName} className="h-10 w-10 rounded-xl object-cover" />
+                    ) : (
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--brand)] text-white text-sm font-bold">{providerName[0]}</div>
+                    )}
+                    <div>
+                      <p className="font-black text-sm">{providerName}</p>
+                      {providerRating !== undefined && (
+                        <div className="flex items-center gap-0.5">
+                          {[1,2,3,4,5].map((n) => <Star key={n} className={`h-3 w-3 ${n <= Math.round(providerRating) ? "fill-amber-400 text-amber-400" : "text-gray-200"}`} />)}
+                          <span className="ml-1 text-xs text-[var(--muted)]">{providerRating.toFixed(1)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                {selectedServices.length === 0 ? (
+                  <p className="text-sm text-[var(--muted)]">No services selected yet.</p>
                 ) : (
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--brand)] text-white text-sm font-bold">
-                    {providerName[0]}
+                  <div className="space-y-2">
+                    {selectedServices.map((s) => (
+                      <div key={s.id} className="flex items-start justify-between gap-2 text-sm">
+                        <span><span className="block font-semibold">{s.name}</span><span className="text-xs text-[var(--muted)]">{fmtDur(s.durationMinutes)}</span></span>
+                        <span className="font-bold">{ZAR(s.priceCents)}</span>
+                      </div>
+                    ))}
+                    {selectedExtras.map((e) => (
+                      <div key={e.id} className="flex items-start justify-between gap-2 text-sm text-[var(--brand)]">
+                        <span className="font-semibold text-xs">+ {e.name}</span>
+                        <span className="font-bold text-xs">{e.priceCents > 0 ? `+${ZAR(e.priceCents)}` : "Free"}</span>
+                      </div>
+                    ))}
                   </div>
                 )}
-                <div>
-                  <p className="font-black text-sm">{providerName}</p>
-                  {providerRating !== undefined && (
-                    <div className="flex items-center gap-1">
-                      {[1,2,3,4,5].map((n) => (
-                        <Star key={n} className={`h-3 w-3 ${n <= Math.round(providerRating) ? "fill-amber-400 text-amber-400" : "text-gray-200"}`} />
-                      ))}
-                      <span className="text-xs text-[var(--muted)]">{providerRating.toFixed(1)}{providerReviewCount ? ` (${providerReviewCount})` : ""}</span>
-                    </div>
-                  )}
+                <div className="mt-4 flex items-center justify-between border-t border-[var(--line)] pt-3">
+                  <span className="font-black">Total</span>
+                  <span className="font-black">{ZAR(totalPrice)}</span>
                 </div>
+                <button onClick={afterServiceStep} disabled={!selectedServices.length}
+                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--ink)] py-3.5 text-sm font-bold text-white hover:bg-[var(--ink)]/90 disabled:opacity-40 transition">
+                  Continue <ArrowRight className="h-4 w-4" />
+                </button>
               </div>
+            </aside>
+          )}
 
-              <p className="font-black">{selectedAgent ? `With ${selectedAgent.name}` : "Your booking"}</p>
-              {selectedServices.length === 0 ? (
-                <p className="mt-3 text-sm text-[var(--muted)]">No services selected yet. Tap a service to add it.</p>
-              ) : (
-                <div className="mt-3 space-y-2 border-t border-[var(--line)] pt-3">
-                  {selectedServices.map((s) => (
-                    <div key={s.id} className="flex items-start justify-between gap-2 text-sm">
-                      <span><span className="block font-semibold">{s.name}</span><span className="text-xs text-[var(--muted)]">{fmtDur(s.durationMinutes)}</span></span>
-                      <span className="font-bold">{ZAR(s.priceCents)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div className="mt-4 flex items-center justify-between border-t border-[var(--line)] pt-3">
-                <span className="font-black">Total</span>
+          {/* Sticky bottom bar in drawer mode */}
+          {drawer && (
+            <div className="sticky bottom-0 border-t border-[var(--line)] bg-white px-4 py-3">
+              <div className="mb-2 flex items-center justify-between text-sm">
+                <span className="text-[var(--muted)]">{selectedServices.length} service{selectedServices.length !== 1 ? "s" : ""}</span>
                 <span className="font-black">{ZAR(totalPrice)}</span>
               </div>
               <button onClick={afterServiceStep} disabled={!selectedServices.length}
-                className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--ink)] py-3.5 text-sm font-bold text-white transition hover:bg-[var(--ink)]/90 disabled:opacity-40">
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--ink)] py-3 text-sm font-bold text-white hover:bg-[var(--ink)]/90 disabled:opacity-40 transition">
                 Continue <ArrowRight className="h-4 w-4" />
               </button>
             </div>
-          </aside>
+          )}
         </div>
       ) : (
-        /* ── Other steps: centered ── */
-        <div className="flex flex-1 items-start justify-center overflow-y-auto px-4 py-8 sm:items-center">
-          <div className="w-full max-w-lg">
+        /* ── Other steps ── */
+        <div className="flex flex-1 flex-col overflow-y-auto px-4 py-5">
+          <div className="w-full max-w-lg mx-auto">
             <AnimatePresence mode="wait">
-              <motion.div key={step} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.25 }}>
+              <motion.div key={step} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.2 }}>
 
-                {/* ── Artist selection ── */}
+                {/* ── Artist ── */}
                 {step === "artist" && (
                   <Section title={`Preferred ${roleLabel(selectedCategories)}?`} onBack={() => setStep("service")}>
-                    <p className="mb-4 text-sm text-[var(--muted)]">
-                      Choose a specific team member or leave it as no preference.
-                    </p>
+                    <p className="mb-4 text-sm text-[var(--muted)]">Choose a team member or leave as no preference and we&apos;ll assign someone available.</p>
                     <div className="space-y-2">
-                      {/* No preference option */}
-                      <button
-                        onClick={() => { setSelectedAgent(null); afterArtistStep(); }}
-                        className={`flex w-full items-center gap-3 rounded-2xl border p-4 text-left transition ${selectedAgent === null ? "border-[var(--brand)] ring-1 ring-[var(--brand)]" : "border-[var(--line)] bg-white hover:border-[var(--ink)]"}`}
-                      >
+                      <button onClick={() => afterArtistStep(null)}
+                        className="flex w-full items-center gap-3 rounded-2xl border border-[var(--line)] bg-white p-4 text-left hover:border-[var(--ink)] transition">
                         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--background)] text-[var(--muted)]">
                           <UserCheck className="h-5 w-5" />
                         </span>
                         <div>
                           <p className="font-bold text-[var(--ink)]">No preference</p>
-                          <p className="text-xs text-[var(--muted)]">We&apos;ll assign the best available artist</p>
+                          <p className="text-xs text-[var(--muted)]">Best available artist auto-assigned</p>
                         </div>
                       </button>
-
                       {agentsLoading ? (
                         <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-[var(--brand)]" /></div>
-                      ) : (
-                        agents.map((agent) => (
-                          <button
-                            key={agent.id}
-                            onClick={() => { setSelectedAgent(agent); afterArtistStep(); }}
-                            className={`flex w-full items-center gap-3 rounded-2xl border p-4 text-left transition ${selectedAgent?.id === agent.id ? "border-[var(--brand)] ring-1 ring-[var(--brand)]" : "border-[var(--line)] bg-white hover:border-[var(--ink)]"}`}
-                          >
-                            {agent.avatarUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={agent.avatarUrl} alt={agent.name} className="h-10 w-10 shrink-0 rounded-xl object-cover" />
-                            ) : (
-                              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--brand)] text-white text-sm font-bold">
-                                {agent.name[0]}
-                              </span>
-                            )}
-                            <div className="min-w-0">
-                              <p className="font-bold text-[var(--ink)]">{agent.name}</p>
-                              {agent.serviceCategories.length > 0 && (
-                                <p className="text-xs text-[var(--muted)]">{agent.serviceCategories.join(", ")}</p>
-                              )}
-                            </div>
-                            {selectedAgent?.id === agent.id && (
-                              <span className="ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--brand)] text-white">
-                                <Check className="h-3.5 w-3.5" />
-                              </span>
-                            )}
-                          </button>
-                        ))
-                      )}
+                      ) : agents.map((agent) => (
+                        <button key={agent.id} onClick={() => afterArtistStep(agent)}
+                          className="flex w-full items-center gap-3 rounded-2xl border border-[var(--line)] bg-white p-4 text-left hover:border-[var(--ink)] transition">
+                          {agent.avatarUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={agent.avatarUrl} alt={agent.name} className="h-10 w-10 shrink-0 rounded-xl object-cover" />
+                          ) : (
+                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--brand)] text-white text-sm font-bold">{agent.name[0]}</span>
+                          )}
+                          <div className="min-w-0">
+                            <p className="font-bold text-[var(--ink)]">{agent.name}</p>
+                            {agent.serviceCategories.length > 0 && <p className="text-xs text-[var(--muted)]">{agent.serviceCategories.join(", ")}</p>}
+                          </div>
+                        </button>
+                      ))}
                     </div>
                   </Section>
                 )}
@@ -542,7 +659,7 @@ export function BookingFlow({
                         })}
                       </div>
                     )}
-                    <p className="mt-3 text-center text-xs text-[var(--muted)]">Total time: {fmtDur(totalDuration)}</p>
+                    <p className="mt-3 text-center text-xs text-[var(--muted)]">Duration: {fmtDur(totalDuration)}</p>
                     <NextButton disabled={!slot} onClick={goAfterTime} />
                   </Section>
                 )}
@@ -555,14 +672,9 @@ export function BookingFlow({
                       <button onClick={() => setAuthMode("register")} className={`flex-1 rounded-xl border py-2 text-sm font-bold ${authMode === "register" ? "border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]" : "border-[var(--line)]"}`}>Create account</button>
                     </div>
                     <div className="space-y-3">
-                      {authMode === "register" && (
-                        <input value={authName} onChange={(e) => setAuthName(e.target.value)} placeholder="Your name"
-                          className="w-full rounded-xl border border-[var(--line)] bg-white px-4 py-3 text-sm outline-none focus:border-[var(--brand)]" />
-                      )}
-                      <input value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} type="email" placeholder="Email"
-                        className="w-full rounded-xl border border-[var(--line)] bg-white px-4 py-3 text-sm outline-none focus:border-[var(--brand)]" />
-                      <input value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} type="password" placeholder="Password"
-                        className="w-full rounded-xl border border-[var(--line)] bg-white px-4 py-3 text-sm outline-none focus:border-[var(--brand)]" />
+                      {authMode === "register" && <input value={authName} onChange={(e) => setAuthName(e.target.value)} placeholder="Your name" className="w-full rounded-xl border border-[var(--line)] bg-white px-4 py-3 text-sm outline-none focus:border-[var(--brand)]" />}
+                      <input value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} type="email" placeholder="Email" className="w-full rounded-xl border border-[var(--line)] bg-white px-4 py-3 text-sm outline-none focus:border-[var(--brand)]" />
+                      <input value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} type="password" placeholder="Password" className="w-full rounded-xl border border-[var(--line)] bg-white px-4 py-3 text-sm outline-none focus:border-[var(--brand)]" />
                     </div>
                     <button onClick={doAuth} disabled={submitting || !authEmail || !authPassword || (authMode === "register" && !authName)}
                       className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] py-3 text-sm font-bold text-white hover:bg-[var(--brand-dark)] disabled:opacity-50">
@@ -574,48 +686,10 @@ export function BookingFlow({
                 {/* ── Review ── */}
                 {step === "review" && selectedServices.length > 0 && date && slot && (
                   <Section title="Review & confirm" onBack={() => setStep(authed === false ? "auth" : (hasPreselectedDateTime ? (agents.length > 1 ? "artist" : "service") : "time"))}>
-
-                    {/* Provider card */}
-                    <div className="mb-4 flex items-center justify-between rounded-2xl border border-[var(--line)] bg-white p-4">
-                      <div className="flex items-center gap-3">
-                        {(selectedAgent?.avatarUrl ?? providerAvatarUrl) ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={(selectedAgent?.avatarUrl ?? providerAvatarUrl)!} alt={activeProviderName} className="h-12 w-12 rounded-xl object-cover" />
-                        ) : (
-                          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--brand)] text-white font-bold">
-                            {activeProviderName[0]}
-                          </div>
-                        )}
-                        <div>
-                          <p className="font-black text-[var(--ink)]">{activeProviderName}</p>
-                          {selectedAgent && (
-                            <p className="text-xs text-[var(--muted)]">at {providerName}</p>
-                          )}
-                          {providerRating !== undefined && !selectedAgent && (
-                            <div className="flex items-center gap-1 mt-0.5">
-                              {[1,2,3,4,5].map((n) => (
-                                <Star key={n} className={`h-3 w-3 ${n <= Math.round(providerRating) ? "fill-amber-400 text-amber-400" : "text-gray-200"}`} />
-                              ))}
-                              <span className="text-xs text-[var(--muted)]">{providerRating.toFixed(1)}</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      {agents.length > 1 && (
-                        <button
-                          onClick={() => setStep("artist")}
-                          className="rounded-xl border border-[var(--line)] px-3 py-1.5 text-xs font-bold text-[var(--muted)] hover:border-[var(--brand)] hover:text-[var(--brand)] transition"
-                        >
-                          Change
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Booking details */}
-                    <div className="space-y-3 rounded-2xl border border-[var(--line)] bg-white p-5">
-                      {selectedServices.map((s) => (
-                        <Row key={s.id} label={s.name} value={ZAR(s.priceCents)} sub={fmtDur(s.durationMinutes)} />
-                      ))}
+                    <ProviderCard showChange />
+                    <div className="mt-4 space-y-3 rounded-2xl border border-[var(--line)] bg-white p-4">
+                      {selectedServices.map((s) => <Row key={s.id} label={s.name} value={ZAR(s.priceCents)} sub={fmtDur(s.durationMinutes)} />)}
+                      {selectedExtras.map((e) => <Row key={e.id} label={`+ ${e.name}`} value={e.priceCents > 0 ? `+${ZAR(e.priceCents)}` : "Free"} highlight />)}
                       <div className="border-t border-[var(--line)] pt-3">
                         <Row label="Date" value={date.toLocaleDateString("en-ZA", { weekday: "long", day: "numeric", month: "long" })} />
                         <Row label="Time" value={slot} />
@@ -624,11 +698,10 @@ export function BookingFlow({
                       {appliedCode && <Row label={`Coupon ${appliedCode} (${couponLabel})`} value={`– ${ZAR(discountCents)}`} highlight />}
                       <div className="border-t border-[var(--line)] pt-3">
                         <Row label="Total" value={ZAR(totalPrice - (appliedCode ? discountCents : 0))} bold />
-                        {totalDeposit > 0 && <Row label="Deposit required at checkout" value={ZAR(totalDeposit)} highlight />}
+                        {totalDeposit > 0 && <Row label="Deposit at checkout" value={ZAR(totalDeposit)} highlight />}
                       </div>
                     </div>
 
-                    {/* Coupon */}
                     <div className="mt-3">
                       {appliedCode ? (
                         <button onClick={() => { setAppliedCode(null); setDiscountCents(0); setCouponInput(""); }} className="text-xs font-bold text-[var(--brand)] hover:underline">Remove coupon</button>
@@ -642,10 +715,8 @@ export function BookingFlow({
                       )}
                       {couponError && <p className="mt-1 text-xs font-semibold text-red-500">{couponError}</p>}
                     </div>
-
                     <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Anything the provider should know? (optional)"
                       className="mt-3 w-full resize-none rounded-xl border border-[var(--line)] bg-white px-4 py-3 text-sm outline-none focus:border-[var(--brand)]" />
-
                     <button onClick={confirm} disabled={submitting}
                       className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] py-3.5 text-sm font-black text-white hover:bg-[var(--brand-dark)] disabled:opacity-50">
                       {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -656,26 +727,15 @@ export function BookingFlow({
 
                 {/* ── Pay ── */}
                 {step === "pay" && payInfo && (
-                  <Section title="Pay your deposit" onBack={releaseAndBack}>
-                    <div className="mb-4 space-y-2 rounded-2xl border border-[var(--line)] bg-white p-4">
-                      {/* Provider + artist */}
-                      <div className="flex items-center gap-3 pb-3 border-b border-[var(--line)]">
-                        {(selectedAgent?.avatarUrl ?? providerAvatarUrl) ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={(selectedAgent?.avatarUrl ?? providerAvatarUrl)!} alt={activeProviderName} className="h-10 w-10 rounded-xl object-cover" />
-                        ) : (
-                          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--brand)] text-white text-sm font-bold">{activeProviderName[0]}</div>
-                        )}
-                        <div>
-                          <p className="text-sm font-black">{activeProviderName}</p>
-                          {selectedAgent && <p className="text-xs text-[var(--muted)]">at {providerName}</p>}
-                        </div>
-                      </div>
+                  <Section title="Pay deposit" onBack={releaseAndBack}>
+                    <ProviderCard />
+                    <div className="mt-3 mb-4 space-y-2 rounded-2xl border border-[var(--line)] bg-white p-4">
                       {selectedServices.map((s) => <Row key={s.id} label={s.name} value={ZAR(s.priceCents)} />)}
+                      {selectedExtras.map((e) => <Row key={e.id} label={`+ ${e.name}`} value={e.priceCents > 0 ? `+${ZAR(e.priceCents)}` : "Free"} highlight />)}
                       {date && slot && <Row label="When" value={`${date.toLocaleDateString("en-ZA", { weekday: "short", day: "numeric", month: "short" })} at ${slot}`} />}
                       <div className="border-t border-[var(--line)] pt-2"><Row label="Deposit due now" value={ZAR(payInfo.amountCents)} highlight /></div>
                     </div>
-                    <p className="mb-3 text-xs text-[var(--muted)]">Your slot is confirmed once the deposit is paid. Apple Pay appears automatically on supported devices.</p>
+                    <p className="mb-3 text-xs text-[var(--muted)]">Your slot is confirmed once the deposit is paid.</p>
                     <div id="paystack-apple-pay" className="w-full [&>*]:!w-full empty:hidden" />
                     <button id="paystack-other-channels" type="button" onClick={openCheckout}
                       className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] py-3.5 text-sm font-black text-white hover:bg-[var(--brand-dark)]">
@@ -687,7 +747,7 @@ export function BookingFlow({
 
                 {/* ── Done ── */}
                 {step === "done" && (
-                  <div className="text-center">
+                  <div className="py-8 text-center">
                     <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
                       <Check className="h-8 w-8 text-emerald-600" />
                     </div>
@@ -706,7 +766,7 @@ export function BookingFlow({
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
 
@@ -719,7 +779,7 @@ function Section({ title, children, onBack }: { title: string; children: React.R
           <ArrowLeft className="h-4 w-4" /> Back
         </button>
       )}
-      <h2 className="mb-5 text-2xl font-black leading-tight">{title}</h2>
+      <h2 className="mb-4 text-xl font-black leading-tight">{title}</h2>
       {children}
     </div>
   );
@@ -736,7 +796,7 @@ function NextButton({ disabled, onClick }: { disabled: boolean; onClick: () => v
 
 function Row({ label, value, highlight, bold, sub }: { label: string; value: string; highlight?: boolean; bold?: boolean; sub?: string }) {
   return (
-    <div className="flex items-start justify-between gap-4">
+    <div className="flex items-start justify-between gap-4 py-0.5">
       <span className="text-sm text-[var(--muted)]">
         {label}
         {sub && <span className="block text-xs text-[var(--muted)]/70">{sub}</span>}
