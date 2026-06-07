@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Eye, EyeOff, Loader2, ShieldCheck, User } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SecuritySection } from "@/components/dashboard/security-section";
 
 export function AccountSettings({
   userId,
@@ -122,7 +123,7 @@ export function AccountSettings({
       <section className="rounded-2xl border border-[var(--line)] bg-white p-5">
         <div className="mb-4 flex items-center gap-2">
           <ShieldCheck className="h-5 w-5 text-[var(--brand)]" />
-          <h2 className="font-black">Security</h2>
+          <h2 className="font-black">Change password</h2>
         </div>
         <form onSubmit={changePassword} className="space-y-4">
           <div>
@@ -176,6 +177,15 @@ export function AccountSettings({
             Change password
           </button>
         </form>
+      </section>
+
+      {/* MFA + Passkeys */}
+      <section className="rounded-2xl border border-[var(--line)] bg-white p-5">
+        <div className="mb-4 flex items-center gap-2">
+          <ShieldCheck className="h-5 w-5 text-[var(--brand)]" />
+          <h2 className="font-black">Two-factor &amp; Passkeys</h2>
+        </div>
+        <SecuritySection />
       </section>
     </div>
   );

@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   ChevronRight,
   Clock,
+  Loader2,
   MapPin,
   MessageCircle,
   Settings,
@@ -109,8 +110,30 @@ export function AccountPortal({
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [cancelConfirm, setCancelConfirm] = useState<string | null>(null);
   const [providerDrawer, setProviderDrawer] = useState<{ handle: string; name: string } | null>(null);
+  const [payingDeposit, setPayingDeposit] = useState<string | null>(null);
 
   const firstName = userName.split(" ")[0] || "there";
+
+  async function handlePayDeposit(bookingId: string) {
+    setPayingDeposit(bookingId);
+    try {
+      const res = await fetch("/api/payments/paystack/init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookingId })
+      });
+      const data = await res.json();
+      if (data.simulated) {
+        setBookings((prev) => prev.map((b) => b.id === bookingId ? { ...b, status: "CONFIRMED" } : b));
+        return;
+      }
+      if (data.authorizationUrl) {
+        window.location.href = data.authorizationUrl;
+      }
+    } finally {
+      setPayingDeposit(null);
+    }
+  }
 
   async function handleCancel(bookingId: string) {
     setCancelling(bookingId);
@@ -267,13 +290,23 @@ export function AccountPortal({
                     </div>
 
                     {(canCancel && !isPast) && (
-                      <div className="mt-3 flex gap-2 border-t border-[var(--line)] pt-3">
+                      <div className="mt-3 flex gap-2 border-t border-[var(--line)] pt-3 flex-wrap">
                         <button
                           onClick={() => setProviderDrawer({ handle: booking.provider.handle, name: booking.provider.name })}
-                          className="flex-1 rounded-xl border border-[var(--line)] py-2 text-center text-xs font-bold text-[var(--ink)] hover:bg-[var(--background)] transition"
+                          className="rounded-xl border border-[var(--line)] px-3 py-2 text-center text-xs font-bold text-[var(--ink)] hover:bg-[var(--background)] transition"
                         >
                           View provider
                         </button>
+                        {booking.status === "PENDING_DEPOSIT" && (
+                          <button
+                            onClick={() => handlePayDeposit(booking.id)}
+                            disabled={payingDeposit === booking.id}
+                            className="flex items-center gap-1.5 rounded-xl bg-[var(--brand)] px-3 py-2 text-xs font-bold text-white hover:bg-[var(--brand-dark)] transition disabled:opacity-60"
+                          >
+                            {payingDeposit === booking.id && <Loader2 className="h-3 w-3 animate-spin" />}
+                            Pay deposit
+                          </button>
+                        )}
                         {cancelConfirm === booking.id ? (
                           <div className="flex flex-1 gap-2">
                             <button

@@ -6,11 +6,13 @@ import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import {
   Calendar,
+  CalendarDays,
+  Heart,
   LogOut,
+  MapPin,
   Menu,
   MessageCircle,
   Settings,
-  Sparkles,
   X,
   Home
 } from "lucide-react";
@@ -18,6 +20,9 @@ import { cn } from "@/lib/utils";
 
 const nav = [
   { href: "/account", label: "My appointments", icon: Calendar, exact: true },
+  { href: "/account/calendar", label: "Calendar", icon: CalendarDays, exact: false },
+  { href: "/account/providers", label: "Providers near me", icon: MapPin, exact: false },
+  { href: "/account/favourites", label: "Favourites", icon: Heart, exact: false },
   { href: "/account/messages", label: "Messages", icon: MessageCircle, exact: false },
   { href: "/account/settings", label: "Settings", icon: Settings, exact: false }
 ];

@@ -79,7 +79,7 @@ function LoginForm() {
       router.push("/dashboard");
       return;
     }
-    router.push("/");
+    router.push("/account");
   }
 
   /* ── Register ─────────────────────────────────────────────────── */
