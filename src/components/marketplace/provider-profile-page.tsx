@@ -4,10 +4,11 @@ import { useEffect, useMemo, useRef, useState, type WheelEvent } from "react";
 import Image, { type ImageProps } from "next/image";
 import Link from "next/link";
 import { format } from "date-fns";
-import { ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, Clock3, Grid3X3, Heart, Layers, Loader2, MapPin, Menu, MessageCircle, Share2, Star, UserCheck, UserPlus, X } from "lucide-react";
+import { Accessibility, ArrowLeft, ArrowUpDown, Award, Baby, Bath, BellRing, CalendarDays, Camera, Car, ChevronLeft, ChevronRight, Clock3, Coffee, Cookie, Droplets, Flame, Gift, GlassWater, Grid3X3, Heart, HeartPulse, Home, Lamp, Layers, Leaf, Loader2, Lock, MapPin, Menu, MessageCircle, Music, Package, PawPrint, Share2, ShieldCheck, ShowerHead, Sofa, Sparkles, Star, Sun, Thermometer, TreePine, Tv, UserCheck, UserPlus, Users, VolumeX, Wind, Wifi, X, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VerifiedBadge } from "@/components/verified-badge";
 import { BookingFlow } from "@/components/marketplace/booking-flow";
+import { AMENITY_CATEGORIES, AMENITY_MAP } from "@/lib/amenities";
 
 type Service = { id: string; name: string; category: string; durationMinutes: number; priceCents: number; depositCents: number; performer?: string | null };
 type Post = { id: string; caption: string; imageUrl: string; images?: string[]; tags: string[]; likes: number; saves: number; featured?: boolean; serviceId?: string | null };
@@ -22,7 +23,55 @@ type Profile = {
   parentBusinessName?: string | null; parentBusinessCity?: string | null;
   memberSince: string; appointmentsCompleted: number;
   services: Service[]; posts: Post[]; team?: TeamMember[];
+  amenities?: Array<{ key: string; value?: string }>;
 };
+
+// ── Amenity icon resolver ────────────────────────────────────────────────────
+const AMENITY_ICON_MAP: Record<string, React.ElementType> = {
+  Accessibility, ArrowUpDown, Award, Baby, Bath, BellRing, Camera,
+  Car, Coffee, Cookie, Droplets, Flame, Gift, GlassWater,
+  HeartPulse, Home, Lamp, Layers, Leaf, Lock, MapPin, Music,
+  Package, PawPrint, ShieldCheck, ShowerHead, Sofa, Sparkles,
+  Sun, Thermometer, TreePine, Tv, Users, VolumeX, Wind, Wifi, Zap
+};
+
+function AmenitiesDisplay({ amenities }: { amenities: Array<{ key: string; value?: string }> }) {
+  const byCategory = AMENITY_CATEGORIES.map((cat) => ({
+    ...cat,
+    items: cat.amenities.filter((a) => amenities.some((s) => s.key === a.key))
+  })).filter((c) => c.items.length > 0);
+
+  if (byCategory.length === 0) return null;
+
+  return (
+    <div className="space-y-6">
+      {byCategory.map((cat) => (
+        <div key={cat.key}>
+          <p className="mb-3 text-xs font-bold uppercase tracking-widest text-[var(--muted)]">{cat.label}</p>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {cat.items.map((a) => {
+              const Icon = AMENITY_ICON_MAP[a.icon] ?? Sparkles;
+              const saved = amenities.find((s) => s.key === a.key);
+              return (
+                <div key={a.key} className="flex items-center gap-2.5 rounded-2xl border border-[var(--line)] bg-white p-3 text-sm">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[var(--brand)]/10 text-[var(--brand)]">
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-semibold text-[var(--ink)]">{a.label}</p>
+                    {saved?.value && (
+                      <p className="text-xs text-[var(--muted)]">{saved.value}{a.valueSuffix ?? ""}</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 const formatZAR = (cents: number) =>
   new Intl.NumberFormat("en-ZA", { style: "currency", currency: "ZAR", maximumFractionDigits: 0 }).format(cents / 100);
@@ -127,11 +176,14 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
     window.setTimeout(() => { lightboxWheelLocked.current = false; }, 280);
   };
 
+  const amenities = profile.amenities ?? [];
+
   const sections = [
     gridPhotos.length > 0 ? { id: "photos", label: "Photos" } : null,
     { id: "services", label: "Services" },
     team.length > 0 ? { id: "team", label: "Team" } : null,
     { id: "reviews", label: "Reviews" },
+    amenities.length > 0 ? { id: "amenities", label: "Amenities" } : null,
     { id: "about", label: "About" }
   ].filter(Boolean) as { id: string; label: string }[];
 
@@ -745,6 +797,14 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
                 <p className="rounded-2xl border border-dashed border-[var(--line)] py-12 text-center text-sm text-[var(--muted)]">No reviews yet — be the first to rate {profile.businessName}.</p>
               )}
             </section>
+
+            {/* Amenities */}
+            {amenities.length > 0 && (
+              <section id="amenities" className="scroll-mt-28">
+                <h2 className="mb-4 text-xl font-black">What this studio offers</h2>
+                <AmenitiesDisplay amenities={amenities} />
+              </section>
+            )}
 
             {/* About */}
             <section id="about" className="scroll-mt-28">

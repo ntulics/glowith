@@ -164,13 +164,24 @@ model ProviderProfile {
   user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   parentBusiness  ProviderProfile? @relation("BusinessAgents", fields: [parentBusinessId], references: [id], onDelete: SetNull)
   agents          ProviderProfile[] @relation("BusinessAgents")
-  services  Service[]
-  posts     PortfolioPost[]
-  bookings  Booking[]
-  follows   Follow[]
-  saves     SavedProvider[]
-  ratings   Rating[]
-  coupons   Coupon[]
+  services   Service[]
+  posts      PortfolioPost[]
+  bookings   Booking[]
+  follows    Follow[]
+  saves      SavedProvider[]
+  ratings    Rating[]
+  coupons    Coupon[]
+  amenities  ProviderAmenity[]
+}
+
+model ProviderAmenity {
+  id                String          @id @default(cuid())
+  providerProfileId String
+  amenityKey        String          // e.g. "free_wifi", "first_aid_kit"
+  value             String?         // optional extra value, e.g. "22" for avg_temperature
+  providerProfile   ProviderProfile @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([providerProfileId, amenityKey])
 }
 
 enum DiscountType {

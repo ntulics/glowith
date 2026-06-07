@@ -32,7 +32,8 @@ export default async function Page({ params }: { params: Promise<{ handle: strin
           services: { where: { active: true }, orderBy: { createdAt: "asc" } }
         }
       },
-      _count: { select: { bookings: true } }
+      _count: { select: { bookings: true } },
+      amenities: { select: { amenityKey: true, value: true } }
     }
   });
 
@@ -85,6 +86,7 @@ export default async function Page({ params }: { params: Promise<{ handle: strin
           featured: p.featured,
           serviceId: p.serviceId
         })),
+        amenities: profile.amenities.map((a) => ({ key: a.amenityKey, value: a.value ?? undefined })),
         team: profile.agents.map((a) => ({
           id: a.id,
           name: a.businessName,
