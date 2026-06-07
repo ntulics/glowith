@@ -8,11 +8,28 @@ export async function GET() {
 
   const userId = (session.user as any).id as string;
 
+  // Auto-expire PENDING_DEPOSIT bookings older than 15 minutes
+  const expiryThreshold = new Date(Date.now() - 15 * 60 * 1000);
+  await prisma.booking.updateMany({
+    where: {
+      clientId: userId,
+      status: "PENDING_DEPOSIT",
+      createdAt: { lt: expiryThreshold }
+    },
+    data: { status: "CANCELLED" }
+  });
+
   const bookings = await prisma.booking.findMany({
     where: { clientId: userId },
     include: {
       service: { select: { name: true, durationMinutes: true } },
-      providerProfile: { select: { businessName: true, handle: true, avatarUrl: true, city: true } }
+      providerProfile: {
+        select: {
+          businessName: true, handle: true, avatarUrl: true, city: true,
+          cancelNoticeHours: true, cancelFeePercent: true,
+          rescheduleNoticeHours: true, rescheduleFeePercent: true, policyText: true
+        }
+      }
     },
     orderBy: { startsAt: "desc" }
   });
@@ -30,7 +47,12 @@ export async function GET() {
       provider: {
         name: b.providerProfile.businessName,
         handle: b.providerProfile.handle,
-        city: b.providerProfile.city
+        city: b.providerProfile.city,
+        cancelNoticeHours: b.providerProfile.cancelNoticeHours,
+        cancelFeePercent: b.providerProfile.cancelFeePercent,
+        rescheduleNoticeHours: b.providerProfile.rescheduleNoticeHours,
+        rescheduleFeePercent: b.providerProfile.rescheduleFeePercent,
+        policyText: b.providerProfile.policyText
       }
     }))
   });

@@ -14,7 +14,13 @@ export default async function AccountPage() {
     where: { clientId: userId },
     include: {
       service: { select: { name: true, durationMinutes: true } },
-      providerProfile: { select: { businessName: true, handle: true, city: true } }
+      providerProfile: {
+        select: {
+          businessName: true, handle: true, city: true,
+          cancelNoticeHours: true, cancelFeePercent: true,
+          rescheduleNoticeHours: true, rescheduleFeePercent: true, policyText: true
+        }
+      }
     },
     orderBy: { startsAt: "desc" }
   });
@@ -31,7 +37,12 @@ export default async function AccountPage() {
     provider: {
       name: b.providerProfile.businessName,
       handle: b.providerProfile.handle,
-      city: b.providerProfile.city ?? null
+      city: b.providerProfile.city ?? null,
+      cancelNoticeHours: b.providerProfile.cancelNoticeHours ?? null,
+      cancelFeePercent: b.providerProfile.cancelFeePercent ?? null,
+      rescheduleNoticeHours: b.providerProfile.rescheduleNoticeHours ?? null,
+      rescheduleFeePercent: b.providerProfile.rescheduleFeePercent ?? null,
+      policyText: b.providerProfile.policyText ?? null
     }
   }));
 

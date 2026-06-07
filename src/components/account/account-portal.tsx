@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
+  AlertTriangle,
   Calendar,
   CalendarCheck,
   CalendarClock,
@@ -16,11 +17,20 @@ import {
   Sparkles,
   X,
   XCircle,
-  ExternalLink
+  ExternalLink,
+  ShieldAlert
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type BookingStatus = "PENDING_DEPOSIT" | "CONFIRMED" | "COMPLETED" | "CANCELLED";
+
+type ProviderPolicy = {
+  cancelNoticeHours?: number | null;
+  cancelFeePercent?: number | null;
+  rescheduleNoticeHours?: number | null;
+  rescheduleFeePercent?: number | null;
+  policyText?: string | null;
+};
 
 type Booking = {
   id: string;
@@ -31,7 +41,7 @@ type Booking = {
   depositCents: number;
   durationMinutes: number;
   service: string;
-  provider: { name: string; handle: string; city?: string | null };
+  provider: { name: string; handle: string; city?: string | null } & ProviderPolicy;
 };
 
 const STATUS_CONFIG: Record<BookingStatus, { label: string; color: string; icon: React.ElementType }> = {
@@ -56,6 +66,30 @@ function isUpcoming(iso: string, status: BookingStatus) {
   return (status === "CONFIRMED" || status === "PENDING_DEPOSIT") && new Date(iso) > new Date();
 }
 
+/** Returns mm:ss remaining for a 15-min pending deposit window, or null if expired */
+function usePendingCountdown(createdAt: string, status: BookingStatus) {
+  const [remaining, setRemaining] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (status !== "PENDING_DEPOSIT") return;
+    const expiresAt = new Date(new Date(createdAt).getTime() + 15 * 60 * 1000);
+
+    function tick() {
+      const ms = expiresAt.getTime() - Date.now();
+      if (ms <= 0) { setRemaining(null); return; }
+      const m = Math.floor(ms / 60000);
+      const s = Math.floor((ms % 60000) / 1000);
+      setRemaining(`${m}:${s.toString().padStart(2, "0")}`);
+    }
+
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [createdAt, status]);
+
+  return remaining;
+}
+
 type Tab = "upcoming" | "history";
 
 // Provider detail drawer
@@ -78,21 +112,83 @@ function ProviderDrawer({ handle, name, onClose }: { handle: string; name: strin
               className="flex items-center gap-1.5 rounded-xl border border-[var(--line)] px-3 py-1.5 text-xs font-semibold text-[var(--muted)] hover:text-[var(--ink)] transition"
             >
               <ExternalLink className="h-3.5 w-3.5" />
-              Full page
+              Open profile
             </a>
             <button onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--line)]">
               <X className="h-4 w-4" />
             </button>
           </div>
         </div>
-        {/* Embed provider profile in iframe for in-place viewing */}
-        <iframe
-          src={`/provider/${slug}`}
-          className="h-[calc(100%-65px)] w-full border-0"
-          title={name}
-        />
+        <div className="p-5">
+          <iframe
+            src={`/provider/${slug}?embedded=1`}
+            className="h-[70vh] w-full rounded-2xl border border-[var(--line)]"
+            title={name}
+          />
+        </div>
       </div>
     </>
+  );
+}
+
+/** Countdown badge for PENDING_DEPOSIT bookings */
+function PendingCountdown({ createdAt, status }: { createdAt: string; status: BookingStatus }) {
+  const remaining = usePendingCountdown(createdAt, status);
+  if (!remaining) return null;
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-700">
+      <Clock className="h-3 w-3" />
+      Slot reserved {remaining}
+    </span>
+  );
+}
+
+/** Policy block used inside cancel / reschedule modals */
+function PolicyBlock({ policy, depositCents, mode }: {
+  policy: ProviderPolicy;
+  depositCents: number;
+  mode: "cancel" | "reschedule";
+}) {
+  const feePercent = mode === "cancel" ? policy.cancelFeePercent : policy.rescheduleFeePercent;
+  const noticeHours = mode === "cancel" ? policy.cancelNoticeHours : policy.rescheduleNoticeHours;
+  const feeAmount = feePercent && depositCents ? Math.round(depositCents * feePercent / 100) : 0;
+
+  const hasCancelPolicy = mode === "cancel" && (feePercent || noticeHours || policy.policyText);
+  const hasReschedulePolicy = mode === "reschedule" && (feePercent || noticeHours || policy.policyText);
+
+  if (!hasCancelPolicy && !hasReschedulePolicy && !policy.policyText) return null;
+
+  return (
+    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+      <div className="flex items-start gap-2">
+        <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+        <div className="space-y-1.5">
+          <p className="text-xs font-bold text-amber-800">
+            {mode === "cancel" ? "Cancellation policy" : "Reschedule policy"}
+          </p>
+          {noticeHours != null && noticeHours > 0 && (
+            <p className="text-xs text-amber-700">
+              Notice required: <strong>{noticeHours}h</strong> before appointment
+            </p>
+          )}
+          {feePercent != null && feePercent > 0 && (
+            <p className="text-xs text-amber-700">
+              {mode === "cancel" ? "Cancellation" : "Reschedule"} fee:{" "}
+              <strong>{feePercent}% of deposit</strong>
+              {feeAmount > 0 && <> ({formatCurrency(feeAmount)})</>}
+            </p>
+          )}
+          {depositCents > 0 && mode === "cancel" && (
+            <p className="text-xs font-semibold text-amber-800">
+              ⚠ Deposit of {formatCurrency(depositCents)} may be partially or fully forfeited based on policy above.
+            </p>
+          )}
+          {policy.policyText && (
+            <p className="text-xs text-amber-700 mt-1 whitespace-pre-line">{policy.policyText}</p>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -108,33 +204,85 @@ export function AccountPortal({
   const [bookings, setBookings] = useState<Booking[]>(initialBookings);
   const [tab, setTab] = useState<Tab>("upcoming");
   const [cancelling, setCancelling] = useState<string | null>(null);
-  const [cancelConfirm, setCancelConfirm] = useState<string | null>(null);
   const [providerDrawer, setProviderDrawer] = useState<{ handle: string; name: string } | null>(null);
   const [payingDeposit, setPayingDeposit] = useState<string | null>(null);
+
+  // Reschedule state
   const [rescheduleBooking, setRescheduleBooking] = useState<Booking | null>(null);
   const [rescheduleDate, setRescheduleDate] = useState("");
   const [rescheduleTime, setRescheduleTime] = useState("");
   const [rescheduling, setRescheduling] = useState(false);
   const [rescheduleError, setRescheduleError] = useState("");
+  const [rescheduleTermsAccepted, setRescheduleTermsAccepted] = useState(false);
+
+  // Cancel state — full modal
+  const [cancelBooking, setCancelBooking] = useState<Booking | null>(null);
+  const [cancelTermsAccepted, setCancelTermsAccepted] = useState(false);
+
+  // Paystack popup ref
+  const popupRef = useRef<any>(null);
 
   const firstName = userName.split(" ")[0] || "there";
+
+  // Load Paystack inline JS once
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (document.getElementById("paystack-portal-js")) return;
+    const s = document.createElement("script");
+    s.id = "paystack-portal-js";
+    s.src = "https://js.paystack.co/v2/inline.js";
+    s.async = true;
+    s.onload = () => {
+      const Pop = (window as any).PaystackPop;
+      if (Pop) popupRef.current = new Pop();
+    };
+    document.head.appendChild(s);
+  }, []);
 
   async function handlePayDeposit(bookingId: string) {
     setPayingDeposit(bookingId);
     try {
-      const res = await fetch("/api/payments/paystack/init", {
+      const res = await fetch("/api/payments/paystack/prepare", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ bookingId })
       });
-      const data = await res.json();
-      if (data.simulated) {
+      const d = await res.json();
+
+      if (d.simulated) {
         setBookings((prev) => prev.map((b) => b.id === bookingId ? { ...b, status: "CONFIRMED" } : b));
         return;
       }
-      if (data.authorizationUrl) {
-        window.location.href = data.authorizationUrl;
+
+      if (!d.enabled || !d.publicKey) return;
+
+      // Ensure popup is ready
+      if (!popupRef.current) {
+        const Pop = (window as any).PaystackPop;
+        if (Pop) popupRef.current = new Pop();
       }
+      const popup = popupRef.current;
+      if (!popup) return;
+
+      const opts = {
+        key: d.publicKey,
+        email: d.email,
+        amount: d.amountCents,
+        currency: "ZAR",
+        ref: d.reference,
+        onSuccess: async (txn: any) => {
+          await fetch("/api/payments/paystack/confirm", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ reference: txn.reference ?? d.reference, bookingId })
+          });
+          setBookings((prev) => prev.map((b) => b.id === bookingId ? { ...b, status: "CONFIRMED" } : b));
+        },
+        onCancel: () => {}
+      };
+
+      if (typeof popup.newTransaction === "function") popup.newTransaction(opts);
+      else if (typeof popup.checkout === "function") popup.checkout(opts);
     } finally {
       setPayingDeposit(null);
     }
@@ -173,7 +321,8 @@ export function AccountPortal({
       }
     } finally {
       setCancelling(null);
-      setCancelConfirm(null);
+      setCancelBooking(null);
+      setCancelTermsAccepted(false);
     }
   }
 
@@ -285,6 +434,7 @@ export function AccountPortal({
                             <StatusIcon className="h-3 w-3" />
                             {cfg.label}
                           </span>
+                          <PendingCountdown createdAt={booking.createdAt} status={booking.status} />
                         </div>
                         <button
                           onClick={() => setProviderDrawer({ handle: booking.provider.handle, name: booking.provider.name })}
@@ -334,36 +484,24 @@ export function AccountPortal({
                         )}
                         {booking.status === "CONFIRMED" && !isPast && (
                           <button
-                            onClick={() => { setRescheduleBooking(booking); setRescheduleDate(""); setRescheduleTime(""); setRescheduleError(""); }}
+                            onClick={() => {
+                              setRescheduleBooking(booking);
+                              setRescheduleDate("");
+                              setRescheduleTime("");
+                              setRescheduleError("");
+                              setRescheduleTermsAccepted(false);
+                            }}
                             className="rounded-xl border border-[var(--line)] px-3 py-2 text-xs font-bold text-[var(--ink)] hover:bg-[var(--background)] transition"
                           >
                             Reschedule
                           </button>
                         )}
-                        {cancelConfirm === booking.id ? (
-                          <div className="flex flex-1 gap-2">
-                            <button
-                              onClick={() => handleCancel(booking.id)}
-                              disabled={cancelling === booking.id}
-                              className="flex-1 rounded-xl bg-red-500 py-2 text-xs font-bold text-white hover:bg-red-600 transition disabled:opacity-60"
-                            >
-                              {cancelling === booking.id ? "Cancelling…" : "Yes, cancel"}
-                            </button>
-                            <button
-                              onClick={() => setCancelConfirm(null)}
-                              className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--line)] text-[var(--muted)]"
-                            >
-                              <X className="h-4 w-4" />
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => setCancelConfirm(booking.id)}
-                            className="flex-1 rounded-xl border border-red-200 py-2 text-xs font-bold text-red-600 hover:bg-red-50 transition"
-                          >
-                            Cancel booking
-                          </button>
-                        )}
+                        <button
+                          onClick={() => { setCancelBooking(booking); setCancelTermsAccepted(false); }}
+                          className="flex-1 rounded-xl border border-red-200 py-2 text-xs font-bold text-red-600 hover:bg-red-50 transition"
+                        >
+                          Cancel booking
+                        </button>
                       </div>
                     )}
                   </div>
@@ -383,21 +521,100 @@ export function AccountPortal({
         />
       )}
 
-      {/* Reschedule modal */}
+      {/* ── Cancel modal ── */}
+      {cancelBooking && (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" onClick={() => setCancelBooking(null)} />
+          <div className="fixed inset-x-4 top-1/2 z-50 -translate-y-1/2 rounded-3xl bg-white p-6 shadow-2xl sm:inset-x-auto sm:left-1/2 sm:w-full sm:max-w-md sm:-translate-x-1/2 max-h-[90vh] overflow-y-auto">
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-100">
+                  <AlertTriangle className="h-5 w-5 text-red-600" />
+                </div>
+                <h3 className="text-lg font-black">Cancel booking</h3>
+              </div>
+              <button onClick={() => setCancelBooking(null)} className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--line)]">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <p className="mb-4 text-sm text-[var(--muted)]">
+              You are about to cancel <strong>{cancelBooking.service}</strong> with{" "}
+              <strong>{cancelBooking.provider.name}</strong> on{" "}
+              {formatDate(cancelBooking.startsAt)} at {formatTime(cancelBooking.startsAt)}.
+            </p>
+
+            <PolicyBlock
+              policy={cancelBooking.provider}
+              depositCents={cancelBooking.depositCents}
+              mode="cancel"
+            />
+
+            {/* Generic deposit warning when no explicit policy */}
+            {!cancelBooking.provider.cancelFeePercent && !cancelBooking.provider.cancelNoticeHours && !cancelBooking.provider.policyText && cancelBooking.depositCents > 0 && (
+              <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-2">
+                <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                <p className="text-xs font-semibold text-amber-800">
+                  Your deposit of {formatCurrency(cancelBooking.depositCents)} may be forfeited depending on the provider&apos;s discretion.
+                </p>
+              </div>
+            )}
+
+            <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-2xl border border-[var(--line)] p-3 hover:bg-[var(--background)]">
+              <input
+                type="checkbox"
+                checked={cancelTermsAccepted}
+                onChange={(e) => setCancelTermsAccepted(e.target.checked)}
+                className="mt-0.5 h-4 w-4 accent-[var(--brand)] shrink-0"
+              />
+              <span className="text-xs text-[var(--muted)]">
+                I understand and accept the cancellation terms above, including any applicable deposit forfeiture.
+              </span>
+            </label>
+
+            <div className="mt-5 flex gap-2">
+              <button
+                onClick={() => handleCancel(cancelBooking.id)}
+                disabled={!cancelTermsAccepted || cancelling === cancelBooking.id}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-red-500 py-2.5 text-sm font-bold text-white hover:bg-red-600 disabled:opacity-50 transition"
+              >
+                {cancelling === cancelBooking.id && <Loader2 className="h-4 w-4 animate-spin" />}
+                Confirm cancellation
+              </button>
+              <button
+                onClick={() => { setCancelBooking(null); setCancelTermsAccepted(false); }}
+                className="rounded-xl border border-[var(--line)] px-4 py-2.5 text-sm font-semibold text-[var(--muted)] hover:bg-[var(--background)]"
+              >
+                Keep booking
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Reschedule modal ── */}
       {rescheduleBooking && (
         <>
-          <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={() => setRescheduleBooking(null)} />
-          <div className="fixed inset-x-4 top-1/2 z-50 -translate-y-1/2 rounded-3xl bg-white p-6 shadow-2xl sm:inset-x-auto sm:left-1/2 sm:w-full sm:max-w-md sm:-translate-x-1/2">
+          <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" onClick={() => setRescheduleBooking(null)} />
+          <div className="fixed inset-x-4 top-1/2 z-50 -translate-y-1/2 rounded-3xl bg-white p-6 shadow-2xl sm:inset-x-auto sm:left-1/2 sm:w-full sm:max-w-md sm:-translate-x-1/2 max-h-[90vh] overflow-y-auto">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-lg font-black">Reschedule appointment</h3>
               <button onClick={() => setRescheduleBooking(null)} className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--line)]">
                 <X className="h-4 w-4" />
               </button>
             </div>
+
             <p className="mb-4 text-sm text-[var(--muted)]">
               Moving: <strong>{rescheduleBooking.service}</strong> with {rescheduleBooking.provider.name}
             </p>
-            <div className="space-y-3">
+
+            <PolicyBlock
+              policy={rescheduleBooking.provider}
+              depositCents={rescheduleBooking.depositCents}
+              mode="reschedule"
+            />
+
+            <div className="mt-4 space-y-3">
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-[var(--muted)] mb-1.5">New date</label>
                 <input
@@ -418,17 +635,41 @@ export function AccountPortal({
                 />
               </div>
             </div>
+
+            {(rescheduleBooking.provider.rescheduleFeePercent || rescheduleBooking.provider.rescheduleNoticeHours || rescheduleBooking.provider.policyText) && (
+              <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-2xl border border-[var(--line)] p-3 hover:bg-[var(--background)]">
+                <input
+                  type="checkbox"
+                  checked={rescheduleTermsAccepted}
+                  onChange={(e) => setRescheduleTermsAccepted(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-[var(--brand)] shrink-0"
+                />
+                <span className="text-xs text-[var(--muted)]">
+                  I have read and accept the reschedule policy, including any applicable fees.
+                </span>
+              </label>
+            )}
+
             {rescheduleError && <p className="mt-2 text-sm font-semibold text-red-500">{rescheduleError}</p>}
+
             <div className="mt-5 flex gap-2">
               <button
                 onClick={handleReschedule}
-                disabled={rescheduling || !rescheduleDate || !rescheduleTime}
+                disabled={
+                  rescheduling || !rescheduleDate || !rescheduleTime ||
+                  ((rescheduleBooking.provider.rescheduleFeePercent != null ||
+                    rescheduleBooking.provider.rescheduleNoticeHours != null ||
+                    !!rescheduleBooking.provider.policyText) && !rescheduleTermsAccepted)
+                }
                 className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-[var(--brand)] py-2.5 text-sm font-bold text-white hover:bg-[var(--brand-dark)] disabled:opacity-60 transition"
               >
                 {rescheduling && <Loader2 className="h-4 w-4 animate-spin" />}
                 Confirm reschedule
               </button>
-              <button onClick={() => setRescheduleBooking(null)} className="rounded-xl border border-[var(--line)] px-4 py-2.5 text-sm font-semibold text-[var(--muted)] hover:bg-[var(--background)]">
+              <button
+                onClick={() => setRescheduleBooking(null)}
+                className="rounded-xl border border-[var(--line)] px-4 py-2.5 text-sm font-semibold text-[var(--muted)] hover:bg-[var(--background)]"
+              >
                 Cancel
               </button>
             </div>
