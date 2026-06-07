@@ -170,18 +170,19 @@ export function MarketplaceApp() {
     }, 600);
   }, []);
 
-  // Compute distances client-side whenever userLocation changes
+  // Compute distances client-side whenever userLocation or any provider list changes
   useEffect(() => {
     const distances: Record<string, number> = {};
-    for (const p of providers) {
-      // Treat unknown/unset coordinates (0,0) as "nearby" so they aren't filtered out by radius
+    const allProviders = [...providers, ...newProviders, ...trendingProviders];
+    for (const p of allProviders) {
+      if (p.id in distances) continue;
       const hasCoords = p.location.lat !== 0 || p.location.lng !== 0;
       distances[p.id] = hasCoords
         ? haversineKm(userLocation.lat, userLocation.lng, p.location.lat, p.location.lng)
         : 0;
     }
     setDistanceByProvider(distances);
-  }, [userLocation.lat, userLocation.lng, providers]);
+  }, [userLocation.lat, userLocation.lng, providers, newProviders, trendingProviders]);
 
   // Track scroll progress for back-to-top button
   useEffect(() => {
@@ -207,13 +208,16 @@ export function MarketplaceApp() {
   }, []);
 
   const displayProviders = useMemo(
-    () => providers.map((provider) => ({
-      ...provider,
-      distanceKm: distanceByProvider[provider.id] !== undefined
-        ? Math.round(distanceByProvider[provider.id] * 10) / 10
-        : provider.distanceKm
-    })),
+    () => providers.map((p) => ({ ...p, distanceKm: distanceByProvider[p.id] !== undefined ? Math.round(distanceByProvider[p.id] * 10) / 10 : p.distanceKm })),
     [distanceByProvider, providers]
+  );
+  const displayNew = useMemo(
+    () => newProviders.map((p) => ({ ...p, distanceKm: distanceByProvider[p.id] !== undefined ? Math.round(distanceByProvider[p.id] * 10) / 10 : p.distanceKm })),
+    [distanceByProvider, newProviders]
+  );
+  const displayTrending = useMemo(
+    () => trendingProviders.map((p) => ({ ...p, distanceKm: distanceByProvider[p.id] !== undefined ? Math.round(distanceByProvider[p.id] * 10) / 10 : p.distanceKm })),
+    [distanceByProvider, trendingProviders]
   );
 
   const filteredProviders = useMemo(() => {
@@ -342,7 +346,7 @@ export function MarketplaceApp() {
         </section>
 
         {/* New to Glowith — no proximity filter, horizontal scroll */}
-        {newProviders.length > 0 && (
+        {displayNew.length > 0 && (
           <section className="mt-10 px-4 sm:px-6 lg:px-8">
             <div className="mb-5 flex items-baseline gap-2">
               <h2 className="text-xl font-black">New to Glowith</h2>
@@ -350,7 +354,7 @@ export function MarketplaceApp() {
             </div>
             <div className="-mx-4 px-4 sm:mx-0 sm:px-0">
               <div className="flex gap-3 overflow-x-auto pb-3 scrollbar-none snap-x snap-mandatory">
-                {newProviders.map((provider) => (
+                {displayNew.map((provider) => (
                   <div key={provider.id} className="w-[58vw] shrink-0 snap-start sm:w-64">
                     <ProviderCard
                       provider={provider}
@@ -372,7 +376,7 @@ export function MarketplaceApp() {
           </div>
           <div className="-mx-4 px-4 sm:mx-0 sm:px-0">
             <div className="flex gap-3 overflow-x-auto pb-3 scrollbar-none snap-x snap-mandatory">
-              {(trendingProviders.length > 0 ? trendingProviders : filteredProviders).map((provider) => (
+              {(displayTrending.length > 0 ? displayTrending : filteredProviders).map((provider) => (
                 <div key={provider.id} className="w-[58vw] shrink-0 snap-start sm:w-64">
                   <ProviderCard
                     provider={provider}
@@ -492,6 +496,14 @@ function MenuToggleIcon({ open }: { open: boolean }) {
 
 function TopBar({ searchInTopBar, searchProps, providers, areaName }: { searchInTopBar: boolean; searchProps: SearchBarProps; providers: Provider[]; areaName: string | null }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [loggedIn, setLoggedIn] = useState<boolean | null>(null); // null = loading
+
+  useEffect(() => {
+    fetch("/api/auth/session")
+      .then((r) => r.json())
+      .then((d) => setLoggedIn(!!(d?.user)))
+      .catch(() => setLoggedIn(false));
+  }, []);
 
   return (
     <>
@@ -545,19 +557,23 @@ function TopBar({ searchInTopBar, searchProps, providers, areaName }: { searchIn
                 List your business
               </a>
             )}
-            <a
-              href="/account"
-              className="focus-ring hidden h-9 items-center gap-2 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold transition hover:bg-[var(--background)] sm:inline-flex"
-            >
-              My account
-            </a>
-            <a
-              href="/login"
-              className="focus-ring hidden h-9 items-center gap-2 rounded-xl bg-[var(--brand)] px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--brand-dark)] sm:inline-flex"
-            >
-              <UserRoundPlus className="h-4 w-4" />
-              Log in
-            </a>
+            {loggedIn === true && (
+              <a
+                href="/account"
+                className="focus-ring hidden h-9 items-center gap-2 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold transition hover:bg-[var(--background)] sm:inline-flex"
+              >
+                My account
+              </a>
+            )}
+            {loggedIn === false && (
+              <a
+                href="/login"
+                className="focus-ring hidden h-9 items-center gap-2 rounded-xl bg-[var(--brand)] px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--brand-dark)] sm:inline-flex"
+              >
+                <UserRoundPlus className="h-4 w-4" />
+                Log in
+              </a>
+            )}
             {/* Hamburger — mobile only, no container, morphs to X when open */}
             <button
               onClick={() => setMobileMenuOpen((v) => !v)}
@@ -618,16 +634,20 @@ function TopBar({ searchInTopBar, searchProps, providers, areaName }: { searchIn
 
               {/* Bottom actions */}
               <div className="mt-auto space-y-3 border-t border-[var(--line)] p-5">
-                <a href="/account" className="block w-full rounded-xl border border-[var(--line)] py-2.5 text-center text-sm font-semibold hover:bg-[var(--background)]">
-                  My account
-                </a>
+                {loggedIn === true && (
+                  <a href="/account" className="block w-full rounded-xl border border-[var(--line)] py-2.5 text-center text-sm font-semibold hover:bg-[var(--background)]">
+                    My account
+                  </a>
+                )}
                 <a href="/business" className="block w-full rounded-xl border border-[var(--line)] py-2.5 text-center text-sm font-semibold hover:bg-[var(--background)]">
                   List your business
                 </a>
-                <a href="/login" className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] py-2.5 text-sm font-semibold text-white hover:bg-[var(--brand-dark)]">
-                  <UserRoundPlus className="h-4 w-4" />
-                  Log in
-                </a>
+                {loggedIn === false && (
+                  <a href="/login" className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] py-2.5 text-sm font-semibold text-white hover:bg-[var(--brand-dark)]">
+                    <UserRoundPlus className="h-4 w-4" />
+                    Log in
+                  </a>
+                )}
               </div>
             </motion.div>
           </>
