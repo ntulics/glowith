@@ -141,6 +141,7 @@ export function AccountCalendar({ initialBookings }: { initialBookings: Calendar
   const [busy, setBusy] = useState<BusySlot[]>([]);
   const [busyLoading, setBusyLoading] = useState(false);
   const [bookingSlot, setBookingSlot] = useState<string | null>(null);
+  const [bookingDate, setBookingDate] = useState<Date | null>(null);
   const [loadingProviders, setLoadingProviders] = useState(false);
 
   /* Load providers once when switching to book mode */
@@ -363,7 +364,7 @@ export function AccountCalendar({ initialBookings }: { initialBookings: Calendar
                       <button
                         key={s.label}
                         disabled={disabled}
-                        onClick={() => setBookingSlot(s.label)}
+                        onClick={() => { setBookingSlot(s.label); setBookingDate(selectedDate ? new Date(selectedDate) : null); }}
                         className={cn(
                           "rounded-xl border py-2.5 text-sm font-bold transition",
                           disabled
@@ -382,14 +383,16 @@ export function AccountCalendar({ initialBookings }: { initialBookings: Calendar
         </div>
       </div>
 
-      {/* BookingFlow overlay */}
-      {bookingSlot && selectedProvider && selectedDate && (
+      {/* BookingFlow overlay — date + slot pre-filled so user skips straight to review */}
+      {bookingSlot && selectedProvider && bookingDate && (
         <BookingFlow
           open
-          onClose={() => setBookingSlot(null)}
+          onClose={() => { setBookingSlot(null); setBookingDate(null); }}
           providerProfileId={selectedProvider.id}
           providerName={selectedProvider.name}
           services={selectedProvider.services}
+          preselectedDate={bookingDate}
+          preselectedSlot={bookingSlot}
         />
       )}
     </div>
