@@ -5,7 +5,6 @@
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { sendMFAEmailOTP } from "@/lib/auth";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
@@ -33,9 +32,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid" }, { status: 401 });
   }
 
-  const mfaMethod: "email" | "totp" = user.totpEnabled ? "totp" : "email";
+  // Email MFA is disabled — only TOTP is enforced (opt-in from Security settings).
+  if (!user.totpEnabled) {
+    // Password is valid, no MFA required — tell the client to proceed directly.
+    return NextResponse.json({ proceed: true, email });
+  }
 
-  // Issue a short-lived MFA ticket
+  // TOTP user — issue a ticket; client will show the TOTP prompt.
   const ticket = crypto.randomBytes(20).toString("hex");
   const ticketHash = crypto.createHash("sha256").update(ticket).digest("hex");
   await prisma.verificationToken.deleteMany({ where: { identifier: `mfa_ticket:${email}` } });
@@ -47,9 +50,5 @@ export async function POST(request: Request) {
     }
   });
 
-  if (mfaMethod === "email") {
-    await sendMFAEmailOTP(email);
-  }
-
-  return NextResponse.json({ email, ticket, method: mfaMethod });
+  return NextResponse.json({ email, ticket, method: "totp" });
 }

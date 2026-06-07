@@ -144,10 +144,19 @@ function LoginForm() {
       }
 
       const data = await res.json();
+
+      // No MFA required — complete sign-in directly via credentials provider.
+      if (data.proceed) {
+        const result = await signIn("credentials", { email, password, redirect: false });
+        if (result?.error) { setError("Sign-in failed. Please try again."); return; }
+        await redirectAfterLogin();
+        return;
+      }
+
+      // TOTP MFA required — show the MFA step.
       const state: MFAState = { email: data.email, ticket: data.ticket, method: data.method };
       setMfa(state);
       setStep("mfa");
-      if (state.method === "email") startCooldown(60);
     } finally {
       setLoading(false);
     }

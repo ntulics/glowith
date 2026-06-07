@@ -81,10 +81,21 @@ export function MarketplaceApp() {
   const router = useRouter();
   // Real DB providers (falls back to seed data until/if the API responds empty)
   const [providers, setProviders] = useState<Provider[]>(seedProviders);
+  const [newProviders, setNewProviders] = useState<Provider[]>([]);
+  const [trendingProviders, setTrendingProviders] = useState<Provider[]>([]);
+
   useEffect(() => {
     fetch("/api/providers/list")
       .then((r) => r.json())
       .then((d) => { if (Array.isArray(d.providers) && d.providers.length) setProviders(d.providers); })
+      .catch(() => {});
+    fetch("/api/providers/new")
+      .then((r) => r.json())
+      .then((d) => { if (Array.isArray(d.providers)) setNewProviders(d.providers); })
+      .catch(() => {});
+    fetch("/api/providers/trending")
+      .then((r) => r.json())
+      .then((d) => { if (Array.isArray(d.providers)) setTrendingProviders(d.providers); })
       .catch(() => {});
   }, []);
   const [query, setQuery] = useState("");
@@ -259,10 +270,10 @@ export function MarketplaceApp() {
       />
 
       {/* Main discovery */}
-      <main className="mx-auto max-w-[90rem] px-4 sm:px-6 lg:px-8 pb-8 lg:pb-16">
+      <main className="mx-auto max-w-[90rem] pb-8 lg:pb-16">
 
         {/* Category pills */}
-        <div className="flex gap-2 overflow-x-auto scroll-x py-7">
+        <div className="flex gap-2 overflow-x-auto px-4 sm:px-6 lg:px-8 py-7 scrollbar-none">
           {categories.map((item) => (
             <button
               key={item}
@@ -279,8 +290,8 @@ export function MarketplaceApp() {
           ))}
         </div>
 
-        {/* Provider grid */}
-        <section>
+        {/* Recommended near you */}
+        <section className="px-4 sm:px-6 lg:px-8">
           <h2 className="mb-5 text-xl font-black">
             {category === "All" ? "Recommended near you" : category}
             <span className="ml-2 text-sm font-semibold text-[var(--muted)]">
@@ -302,21 +313,19 @@ export function MarketplaceApp() {
             </AnimatePresence>
           </div>
 
-          {/* Mobile card stack — cards stick and layer as you scroll */}
-          <div className="relative sm:hidden">
-            {filteredProviders.map((provider, index) => (
-              <div
-                key={provider.id}
-                className="sticky pb-[9px]"
-                style={{ top: `calc(4.25rem + ${index * 6}px)`, zIndex: index + 1 }}
-              >
-                <ProviderCard
-                  provider={provider}
-                  isSelected={selectedProvider?.id === provider.id}
-                  onSelect={() => openProvider(provider)}
-                />
-              </div>
-            ))}
+          {/* Mobile horizontal scroll row */}
+          <div className="sm:hidden -mx-4 px-4">
+            <div className="flex gap-3 overflow-x-auto pb-3 scrollbar-none snap-x snap-mandatory">
+              {filteredProviders.map((provider) => (
+                <div key={provider.id} className="w-[58vw] shrink-0 snap-start">
+                  <ProviderCard
+                    provider={provider}
+                    isSelected={selectedProvider?.id === provider.id}
+                    onSelect={() => openProvider(provider)}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
 
           {filteredProviders.length === 0 && (
@@ -331,6 +340,51 @@ export function MarketplaceApp() {
             </div>
           )}
         </section>
+
+        {/* New to Glowith — no proximity filter, horizontal scroll */}
+        {newProviders.length > 0 && (
+          <section className="mt-10 px-4 sm:px-6 lg:px-8">
+            <div className="mb-5 flex items-baseline gap-2">
+              <h2 className="text-xl font-black">New to Glowith</h2>
+              <span className="text-sm font-semibold text-[var(--muted)]">Fresh faces</span>
+            </div>
+            <div className="-mx-4 px-4 sm:mx-0 sm:px-0">
+              <div className="flex gap-3 overflow-x-auto pb-3 scrollbar-none snap-x snap-mandatory">
+                {newProviders.map((provider) => (
+                  <div key={provider.id} className="w-[58vw] shrink-0 snap-start sm:w-64">
+                    <ProviderCard
+                      provider={provider}
+                      isSelected={selectedProvider?.id === provider.id}
+                      onSelect={() => openProvider(provider)}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* Trending — most rated/reviewed, proximity-based, fallback to recommended */}
+        <section className="mt-10 px-4 sm:px-6 lg:px-8">
+          <div className="mb-5 flex items-baseline gap-2">
+            <h2 className="text-xl font-black">Trending</h2>
+            <span className="text-sm font-semibold text-[var(--muted)]">Most loved near you</span>
+          </div>
+          <div className="-mx-4 px-4 sm:mx-0 sm:px-0">
+            <div className="flex gap-3 overflow-x-auto pb-3 scrollbar-none snap-x snap-mandatory">
+              {(trendingProviders.length > 0 ? trendingProviders : filteredProviders).map((provider) => (
+                <div key={provider.id} className="w-[58vw] shrink-0 snap-start sm:w-64">
+                  <ProviderCard
+                    provider={provider}
+                    isSelected={selectedProvider?.id === provider.id}
+                    onSelect={() => openProvider(provider)}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
       </main>
 
       {/* Map of nearby studios (edge-to-edge) */}
@@ -492,6 +546,12 @@ function TopBar({ searchInTopBar, searchProps, providers, areaName }: { searchIn
               </a>
             )}
             <a
+              href="/account"
+              className="focus-ring hidden h-9 items-center gap-2 rounded-xl border border-[var(--line)] px-4 text-sm font-semibold transition hover:bg-[var(--background)] sm:inline-flex"
+            >
+              My account
+            </a>
+            <a
               href="/login"
               className="focus-ring hidden h-9 items-center gap-2 rounded-xl bg-[var(--brand)] px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--brand-dark)] sm:inline-flex"
             >
@@ -558,6 +618,9 @@ function TopBar({ searchInTopBar, searchProps, providers, areaName }: { searchIn
 
               {/* Bottom actions */}
               <div className="mt-auto space-y-3 border-t border-[var(--line)] p-5">
+                <a href="/account" className="block w-full rounded-xl border border-[var(--line)] py-2.5 text-center text-sm font-semibold hover:bg-[var(--background)]">
+                  My account
+                </a>
                 <a href="/business" className="block w-full rounded-xl border border-[var(--line)] py-2.5 text-center text-sm font-semibold hover:bg-[var(--background)]">
                   List your business
                 </a>

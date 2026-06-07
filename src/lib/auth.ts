@@ -128,30 +128,26 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           const valid = await bcrypt.compare(credentials.password as string, user.passwordHash);
           if (!valid) return null;
 
-          // MFA required — TOTP app takes priority over email OTP
-          const mfaMethod = user.totpEnabled ? "totp" : "email";
-
-          // For email MFA: send OTP and create a ticket
-          const ticket = crypto.randomBytes(20).toString("hex");
-          const ticketHash = crypto.createHash("sha256").update(ticket).digest("hex");
-          await prisma.verificationToken.deleteMany({ where: { identifier: `mfa_ticket:${user.email}` } });
-          await prisma.verificationToken.create({
-            data: {
-              identifier: `mfa_ticket:${user.email}`,
-              token: ticketHash,
-              expires: new Date(Date.now() + 10 * 60 * 1000)
-            }
-          });
-
-          if (mfaMethod === "email") {
-            await sendMFAEmailOTP(user.email);
+          // MFA: only TOTP is enforced (opt-in from user settings).
+          // Email OTP on every login is disabled — users can enable TOTP in Security settings.
+          if (user.totpEnabled) {
+            const ticket = crypto.randomBytes(20).toString("hex");
+            const ticketHash = crypto.createHash("sha256").update(ticket).digest("hex");
+            await prisma.verificationToken.deleteMany({ where: { identifier: `mfa_ticket:${user.email}` } });
+            await prisma.verificationToken.create({
+              data: {
+                identifier: `mfa_ticket:${user.email}`,
+                token: ticketHash,
+                expires: new Date(Date.now() + 10 * 60 * 1000)
+              }
+            });
+            // Signal to the client that TOTP MFA is required
+            throw new Error(`MFA_REQUIRED|${user.email}|${ticket}|totp`);
           }
 
-          // Signal to the client that MFA is required
-          // Format: MFA_REQUIRED|<email>|<ticket>|<method>
-          throw new Error(`MFA_REQUIRED|${user.email}|${ticket}|${mfaMethod}`);
+          // No MFA required — return user payload directly
+          return await buildUserPayload(user.id);
         } catch (err: any) {
-          // Re-throw MFA errors so NextAuth encodes them in the redirect URL
           if (err.message?.startsWith("MFA_REQUIRED")) throw err;
           console.error("[auth] authorize error:", err.message);
           return null;

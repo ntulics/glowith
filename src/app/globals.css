@@ -172,3 +172,13 @@ textarea {
 .scroll-x::-webkit-scrollbar {
   display: none;
 }
+
+/* Tailwind scrollbar-none utility */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
