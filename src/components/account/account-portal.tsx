@@ -358,7 +358,8 @@ export function AccountPortal({
         body: JSON.stringify({ bookingId })
       });
       if (res.ok) {
-        setBookings((prev) => prev.map((b) => b.id === bookingId ? { ...b, status: "CANCELLED" } : b));
+        const data = await res.json();
+        setBookings((prev) => prev.map((b) => b.id === bookingId ? { ...b, status: data.status ?? "CANCELLED" } : b));
       }
     } finally {
       setCancelling(null);
@@ -392,7 +393,7 @@ export function AccountPortal({
         {[
           { label: "Upcoming", value: upcoming.length, icon: CalendarClock, accent: "text-[var(--brand)]" },
           { label: "Completed", value: bookings.filter((b) => b.status === "COMPLETED").length, icon: CheckCircle2, accent: "text-emerald-600" },
-          { label: "Total deposits", value: formatCurrency(bookings.filter((b) => b.status !== "CANCELLED").reduce((s, b) => s + b.depositCents, 0)), icon: Sparkles, accent: "text-[var(--muted)]" }
+          { label: "Total deposits", value: formatCurrency(bookings.filter((b) => b.status !== "CANCELLED" && b.status !== "EXPIRED").reduce((s, b) => s + b.depositCents, 0)), icon: Sparkles, accent: "text-[var(--muted)]" }
         ].map(({ label, value, icon: Icon, accent }) => (
           <div key={label} className="rounded-2xl border border-[var(--line)] bg-white p-4">
             <Icon className={cn("mb-2 h-5 w-5", accent)} />

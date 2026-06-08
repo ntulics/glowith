@@ -86,12 +86,12 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
   if (booking.status === "CANCELLED" || booking.status === "EXPIRED") {
-    return NextResponse.json({ error: "Already cancelled" }, { status: 400 });
+    return NextResponse.json({ error: "Already closed" }, { status: 400 });
   }
 
   const updated = await prisma.booking.update({
     where: { id: bookingId },
-    data: { status: "CANCELLED" }
+    data: { status: booking.status === "PENDING_DEPOSIT" ? "EXPIRED" : "CANCELLED" }
   });
 
   return NextResponse.json({ ok: true, status: updated.status });

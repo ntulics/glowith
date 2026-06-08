@@ -4,25 +4,34 @@ import { computeDiscountCents, couponLabel } from "@/lib/coupons";
 
 // Validate a coupon against a provider + service. Public (used during booking).
 export async function POST(request: Request) {
-  const { providerProfileId, code, serviceId } = await request.json();
-  if (!providerProfileId || !code || !serviceId) {
+  const body = await request.json();
+  const { providerProfileId, code } = body;
+  const serviceIds: string[] = Array.isArray(body.serviceIds) && body.serviceIds.length
+    ? body.serviceIds
+    : body.serviceId ? [body.serviceId] : [];
+  if (!providerProfileId || !code || !serviceIds.length) {
     return NextResponse.json({ valid: false, error: "Missing details" }, { status: 400 });
   }
 
-  const service = await prisma.service.findUnique({ where: { id: serviceId }, select: { priceCents: true, providerProfileId: true } });
-  if (!service) return NextResponse.json({ valid: false, error: "Service not found" }, { status: 404 });
-
-  // Agents can also redeem their parent business's coupons
   const profile = await prisma.providerProfile.findUnique({
-    where: { id: providerProfileId }, select: { parentBusinessId: true }
+    where: { id: providerProfileId },
+    select: { id: true, parentBusinessId: true, agents: { select: { id: true } } }
   });
-  const providerIds = [providerProfileId, profile?.parentBusinessId].filter(Boolean) as string[];
-  if (!providerIds.includes(service.providerProfileId)) {
+  if (!profile) return NextResponse.json({ valid: false, error: "Provider not found" }, { status: 404 });
+
+  const serviceOwnerIds = new Set<string>([profile.id, ...(profile.parentBusinessId ? [profile.parentBusinessId] : []), ...profile.agents.map((a) => a.id)]);
+  const couponOwnerIds = [profile.parentBusinessId ?? profile.id, profile.id];
+
+  const services = await prisma.service.findMany({
+    where: { id: { in: serviceIds }, active: true },
+    select: { priceCents: true, providerProfileId: true }
+  });
+  if (services.length !== serviceIds.length || services.some((service) => !serviceOwnerIds.has(service.providerProfileId))) {
     return NextResponse.json({ valid: false, error: "Service not found" }, { status: 404 });
   }
 
   const coupon = await prisma.coupon.findFirst({
-    where: { code: code.toString().trim().toUpperCase(), providerProfileId: { in: providerIds }, active: true }
+    where: { code: code.toString().trim().toUpperCase(), providerProfileId: { in: couponOwnerIds }, active: true }
   });
   if (!coupon) return NextResponse.json({ valid: false, error: "Invalid code" });
   if (coupon.expiresAt && coupon.expiresAt.getTime() < Date.now()) return NextResponse.json({ valid: false, error: "This coupon has expired" });
@@ -30,12 +39,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ valid: false, error: "This coupon has been fully redeemed" });
   }
 
-  const discountCents = computeDiscountCents(coupon, service.priceCents);
+  const totalPriceCents = services.reduce((sum, service) => sum + service.priceCents, 0);
+  const discountCents = computeDiscountCents(coupon, totalPriceCents);
   return NextResponse.json({
     valid: true,
     code: coupon.code,
     discountCents,
     label: couponLabel(coupon),
-    finalCents: service.priceCents - discountCents
+    finalCents: totalPriceCents - discountCents
   });
 }

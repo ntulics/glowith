@@ -26,6 +26,7 @@ export async function POST(request: Request) {
   });
   if (!profile) return NextResponse.json({ error: "Provider not found" }, { status: 404 });
   const allowedProviderIds = new Set<string>([profile.id, ...(profile.parentBusinessId ? [profile.parentBusinessId] : []), ...profile.agents.map((a) => a.id)]);
+  const couponOwnerIds = [profile.parentBusinessId ?? profile.id, profile.id];
 
   const services = await prisma.service.findMany({ where: { id: { in: serviceIds }, active: true } });
   if (services.length !== serviceIds.length || services.some((s) => !allowedProviderIds.has(s.providerProfileId))) {
@@ -60,8 +61,11 @@ export async function POST(request: Request) {
   let couponId: string | null = null;
   let discountCents = 0;
   if (couponCode) {
-    const coupon = await prisma.coupon.findUnique({
-      where: { providerProfileId_code: { providerProfileId, code: couponCode.toString().trim().toUpperCase() } }
+    const coupon = await prisma.coupon.findFirst({
+      where: {
+        providerProfileId: { in: couponOwnerIds },
+        code: couponCode.toString().trim().toUpperCase()
+      }
     });
     const usable = coupon && coupon.active
       && (!coupon.expiresAt || coupon.expiresAt.getTime() >= Date.now())
@@ -80,7 +84,8 @@ export async function POST(request: Request) {
   if (totalDepositBase > 0 && profile.plan === "STARTER") {
     const config = await prisma.platformConfig.findUnique({ where: { id: "global" } });
     const pct = config?.depositPercent ?? 20;
-    depositCents = Math.round(((totalPrice - discountCents) * pct) / 100);
+    const discountedTotal = Math.max(totalPrice - discountCents, 0);
+    depositCents = discountedTotal === 0 ? 0 : Math.round((discountedTotal * pct) / 100);
   }
 
   const status = depositCents > 0 ? "PENDING_DEPOSIT" : "CONFIRMED";

@@ -6,13 +6,15 @@ const STATUS_STYLE: Record<string, string> = {
   PENDING_DEPOSIT: "bg-amber-50 text-amber-700",
   CONFIRMED: "bg-emerald-50 text-emerald-700",
   COMPLETED: "bg-blue-50 text-blue-700",
-  CANCELLED: "bg-gray-100 text-gray-500"
+  CANCELLED: "bg-gray-100 text-gray-500",
+  EXPIRED: "bg-amber-50 text-amber-700"
 };
 const STATUS_LABEL: Record<string, string> = {
   PENDING_DEPOSIT: "Pending",
   CONFIRMED: "Confirmed",
   COMPLETED: "Completed",
-  CANCELLED: "Cancelled"
+  CANCELLED: "Cancelled",
+  EXPIRED: "Expired"
 };
 
 const formatZAR = (cents: number) =>

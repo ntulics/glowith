@@ -101,6 +101,8 @@ export function BookingFlow({
   const totalDuration = selectedServices.reduce((a, s) => a + s.durationMinutes, 0) + selectedExtras.reduce((a, e) => a + e.durationMinutes, 0);
   const totalPrice = selectedServices.reduce((a, s) => a + s.priceCents, 0) + selectedExtras.reduce((a, e) => a + e.priceCents, 0);
   const totalDeposit = selectedServices.reduce((a, s) => a + (s.depositCents ?? 0), 0);
+  const finalTotal = Math.max(totalPrice - (appliedCode ? discountCents : 0), 0);
+  const depositDueAtCheckout = finalTotal === 0 ? 0 : Math.min(totalDeposit, finalTotal);
   const categories = useMemo(() => {
     const set = new Set(services.map((s) => s.category).filter(Boolean) as string[]);
     return ["All", ...Array.from(set)];
@@ -363,7 +365,7 @@ export function BookingFlow({
     try {
       const res = await fetch("/api/coupons/validate", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ providerProfileId: activeProviderId, code: couponInput.trim(), serviceId: selectedServices[0].id })
+        body: JSON.stringify({ providerProfileId: activeProviderId, code: couponInput.trim(), serviceIds: selectedIds })
       });
       const d = await res.json();
       if (!d.valid) { setCouponError(d.error ?? "Invalid code"); setAppliedCode(null); setDiscountCents(0); return; }
@@ -697,8 +699,8 @@ export function BookingFlow({
                       </div>
                       {appliedCode && <Row label={`Coupon ${appliedCode} (${couponLabel})`} value={`– ${ZAR(discountCents)}`} highlight />}
                       <div className="border-t border-[var(--line)] pt-3">
-                        <Row label="Total" value={ZAR(totalPrice - (appliedCode ? discountCents : 0))} bold />
-                        {totalDeposit > 0 && <Row label="Deposit at checkout" value={ZAR(totalDeposit)} highlight />}
+                        <Row label="Total" value={ZAR(finalTotal)} bold />
+                        {depositDueAtCheckout > 0 && <Row label="Deposit at checkout" value={ZAR(depositDueAtCheckout)} highlight />}
                       </div>
                     </div>
 
@@ -720,7 +722,7 @@ export function BookingFlow({
                     <button onClick={confirm} disabled={submitting}
                       className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] py-3.5 text-sm font-black text-white hover:bg-[var(--brand-dark)] disabled:opacity-50">
                       {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                      {totalDeposit > 0 ? "Continue to payment" : "Confirm booking"}
+                      {depositDueAtCheckout > 0 ? "Continue to payment" : "Confirm booking"}
                     </button>
                   </Section>
                 )}
