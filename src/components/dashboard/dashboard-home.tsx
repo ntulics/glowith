@@ -55,9 +55,18 @@ export function DashboardHome({
   stats, upcoming, chartData
 }: {
   stats: { totalBookings: number; prevBookings: number; revenue: number; prevRevenue: number; clients: number; prevClients: number };
-  upcoming: Array<{ id: string; clientName: string; service: string; startsAt: string; status: string; priceCents: number; depositCents: number }>;
+  upcoming: Array<{ id: string; clientName: string; service: string; startsAt: string; checkedInAt?: string | null; noShowAt?: string | null; status: string; priceCents: number; depositCents: number }>;
   chartData: Array<{ label: string; revenue: number }>;
 }) {
+  async function updateAttendance(id: string, action: "check_in" | "no_show" | "complete") {
+    const res = await fetch(`/api/dashboard/bookings/${id}/attendance`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action })
+    });
+    if (res.ok) window.location.reload();
+  }
+
   return (
     <div className="flex flex-col overflow-y-auto">
       {/* Header */}
@@ -129,7 +138,7 @@ export function DashboardHome({
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-t border-gray-50 text-xs font-bold uppercase tracking-wider text-gray-400">
-                  {["Date", "Time", "Client", "Service", "Price", "Status"].map((h) => (
+                  {["Date", "Time", "Client", "Service", "Price", "Status", "Actions"].map((h) => (
                     <th key={h} className="px-5 py-2.5 text-left font-semibold">{h}</th>
                   ))}
                 </tr>
@@ -147,8 +156,36 @@ export function DashboardHome({
                       <td className="px-5 py-3">
                         <span className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold", STATUS_STYLES[appt.status])}>
                           <CheckCircle className="h-3 w-3" />
-                          {STATUS_LABEL[appt.status]}
+                          {appt.noShowAt ? "No-show" : appt.checkedInAt ? "Checked in" : STATUS_LABEL[appt.status]}
                         </span>
+                      </td>
+                      <td className="px-5 py-3">
+                        <div className="flex flex-wrap gap-2">
+                          {appt.status === "CONFIRMED" && !appt.checkedInAt && !appt.noShowAt && (
+                            <button
+                              onClick={() => updateAttendance(appt.id, "check_in")}
+                              className="rounded-full bg-[#D94472] px-3 py-1 text-xs font-bold text-white"
+                            >
+                              Check in
+                            </button>
+                          )}
+                          {appt.status === "CONFIRMED" && appt.checkedInAt && (
+                            <button
+                              onClick={() => updateAttendance(appt.id, "complete")}
+                              className="rounded-full bg-emerald-600 px-3 py-1 text-xs font-bold text-white"
+                            >
+                              Complete
+                            </button>
+                          )}
+                          {appt.status === "CONFIRMED" && !appt.checkedInAt && !appt.noShowAt && (
+                            <button
+                              onClick={() => updateAttendance(appt.id, "no_show")}
+                              className="rounded-full border border-red-200 px-3 py-1 text-xs font-bold text-red-600"
+                            >
+                              No-show
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );

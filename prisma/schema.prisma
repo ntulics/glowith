@@ -284,6 +284,9 @@ model Booking {
   discountCents     Int           @default(0)
   paymentProvider   String?
   paymentIntentId   String?
+  checkedInAt       DateTime?
+  checkedInById     String?
+  noShowAt          DateTime?
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 

@@ -37,6 +37,8 @@ type Booking = {
   status: BookingStatus;
   startsAt: string;
   createdAt: string;
+  checkedInAt?: string | null;
+  noShowAt?: string | null;
   notes?: string | null;
   depositCents: number;
   durationMinutes: number;
@@ -62,8 +64,40 @@ function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" });
 }
 
-function isUpcoming(iso: string, status: BookingStatus) {
-  return (status === "CONFIRMED" || status === "PENDING_DEPOSIT") && new Date(iso) > new Date();
+function bookingEnd(booking: Booking) {
+  return new Date(new Date(booking.startsAt).getTime() + booking.durationMinutes * 60000);
+}
+
+function isUpcoming(booking: Booking) {
+  if (booking.status === "CANCELLED" || booking.status === "COMPLETED" || booking.noShowAt) return false;
+  return (booking.status === "CONFIRMED" || booking.status === "PENDING_DEPOSIT") && bookingEnd(booking) > new Date();
+}
+
+function isSameDay(a: Date, b: Date) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+function appointmentState(booking: Booking) {
+  const now = new Date();
+  const start = new Date(booking.startsAt);
+  const end = bookingEnd(booking);
+  if (booking.noShowAt) return { label: "No-show recorded", color: "text-red-600 bg-red-50", icon: ShieldAlert };
+  if (booking.checkedInAt && now < end) return { label: "Checked in", color: "text-emerald-700 bg-emerald-50", icon: CheckCircle2 };
+  if (booking.status === "COMPLETED") return STATUS_CONFIG.COMPLETED;
+  if (booking.status === "CANCELLED") return STATUS_CONFIG.CANCELLED;
+  if (booking.status === "PENDING_DEPOSIT") return STATUS_CONFIG.PENDING_DEPOSIT;
+  if (now >= start && now < end) return { label: "Ongoing now", color: "text-emerald-700 bg-emerald-50", icon: CalendarClock };
+  if (start > now && isSameDay(start, now)) {
+    const minutes = Math.max(1, Math.round((start.getTime() - now.getTime()) / 60000));
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return {
+      label: hours > 0 ? `In ${hours}h${mins ? ` ${mins}m` : ""}` : `In ${mins}m`,
+      color: "text-[var(--brand)] bg-[var(--brand)]/10",
+      icon: Clock
+    };
+  }
+  return { label: "Upcoming", color: "text-emerald-700 bg-emerald-50", icon: CalendarCheck };
 }
 
 /** Returns mm:ss remaining for a 15-min pending deposit window, or null if expired */
@@ -326,8 +360,8 @@ export function AccountPortal({
     }
   }
 
-  const upcoming = bookings.filter((b) => isUpcoming(b.startsAt, b.status));
-  const history = bookings.filter((b) => !isUpcoming(b.startsAt, b.status));
+  const upcoming = bookings.filter((b) => isUpcoming(b));
+  const history = bookings.filter((b) => !isUpcoming(b));
   const displayed = tab === "upcoming" ? upcoming : history;
 
   return (
@@ -415,7 +449,7 @@ export function AccountPortal({
         ) : (
           <div className="space-y-3">
             {displayed.map((booking) => {
-              const cfg = STATUS_CONFIG[booking.status];
+              const cfg = appointmentState(booking);
               const StatusIcon = cfg.icon;
               const canCancel = booking.status === "CONFIRMED" || booking.status === "PENDING_DEPOSIT";
               const isPast = new Date(booking.startsAt) < new Date();

@@ -40,6 +40,8 @@ export async function GET() {
       status: b.status,
       startsAt: b.startsAt.toISOString(),
       createdAt: b.createdAt.toISOString(),
+      checkedInAt: b.checkedInAt?.toISOString() ?? null,
+      noShowAt: b.noShowAt?.toISOString() ?? null,
       notes: b.notes,
       depositCents: b.depositCents,
       durationMinutes: b.service?.durationMinutes ?? b.durationMinutes,

@@ -35,7 +35,11 @@ export default async function DashboardPage() {
   const prevRevenue = prevMonthBookings.reduce((sum, b) => sum + b.depositCents, 0);
 
   const upcoming = profile.bookings
-    .filter((b) => new Date(b.startsAt) >= now && b.status !== "CANCELLED")
+    .filter((b) => {
+      const duration = b.durationMinutes || b.service.durationMinutes;
+      const endsAt = new Date(b.startsAt.getTime() + duration * 60000);
+      return b.status === "CONFIRMED" && !b.noShowAt && endsAt >= now;
+    })
     .slice(0, 10);
 
   // Build daily revenue chart data (last 30 days)
@@ -67,6 +71,8 @@ export default async function DashboardPage() {
         clientName: b.client.name,
         service: b.service.name,
         startsAt: b.startsAt.toISOString(),
+        checkedInAt: b.checkedInAt?.toISOString() ?? null,
+        noShowAt: b.noShowAt?.toISOString() ?? null,
         status: b.status,
         priceCents: b.service.priceCents,
         depositCents: b.depositCents
