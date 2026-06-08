@@ -8,15 +8,24 @@ export async function GET() {
 
   const userId = (session.user as any).id as string;
 
-  // Auto-expire PENDING_DEPOSIT bookings older than 15 minutes
+  // Auto-expire abandoned deposit bookings, then keep them visible in History
+  // briefly so customers understand what happened.
   const expiryThreshold = new Date(Date.now() - 15 * 60 * 1000);
+  const deleteExpiredBefore = new Date(Date.now() - 2 * 60 * 60 * 1000);
   await prisma.booking.updateMany({
     where: {
       clientId: userId,
       status: "PENDING_DEPOSIT",
       createdAt: { lt: expiryThreshold }
     },
-    data: { status: "CANCELLED" }
+    data: { status: "EXPIRED" }
+  });
+  await prisma.booking.deleteMany({
+    where: {
+      clientId: userId,
+      status: "EXPIRED",
+      updatedAt: { lt: deleteExpiredBefore }
+    }
   });
 
   const bookings = await prisma.booking.findMany({
@@ -76,7 +85,7 @@ export async function PATCH(request: Request) {
   if (!booking || booking.clientId !== userId) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  if (booking.status === "CANCELLED") {
+  if (booking.status === "CANCELLED" || booking.status === "EXPIRED") {
     return NextResponse.json({ error: "Already cancelled" }, { status: 400 });
   }
 

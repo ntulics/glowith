@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type BookingStatus = "PENDING_DEPOSIT" | "CONFIRMED" | "COMPLETED" | "CANCELLED";
+type BookingStatus = "PENDING_DEPOSIT" | "CONFIRMED" | "COMPLETED" | "CANCELLED" | "EXPIRED";
 
 type ProviderPolicy = {
   cancelNoticeHours?: number | null;
@@ -55,7 +55,8 @@ const STATUS_CONFIG: Record<BookingStatus, { label: string; color: string; icon:
   PENDING_DEPOSIT: { label: "Awaiting deposit", color: "text-amber-600 bg-amber-50", icon: Clock },
   CONFIRMED: { label: "Confirmed", color: "text-emerald-700 bg-emerald-50", icon: CalendarCheck },
   COMPLETED: { label: "Completed", color: "text-[var(--muted)] bg-[var(--background)]", icon: CheckCircle2 },
-  CANCELLED: { label: "Cancelled", color: "text-red-600 bg-red-50", icon: XCircle }
+  CANCELLED: { label: "Cancelled", color: "text-red-600 bg-red-50", icon: XCircle },
+  EXPIRED: { label: "Expired", color: "text-amber-700 bg-amber-50", icon: Clock }
 };
 
 const formatCurrency = (cents: number) =>
@@ -74,7 +75,7 @@ function bookingEnd(booking: Booking) {
 }
 
 function isUpcoming(booking: Booking) {
-  if (booking.status === "CANCELLED" || booking.status === "COMPLETED" || booking.noShowAt) return false;
+  if (booking.status === "CANCELLED" || booking.status === "EXPIRED" || booking.status === "COMPLETED" || booking.noShowAt) return false;
   return (booking.status === "CONFIRMED" || booking.status === "PENDING_DEPOSIT") && bookingEnd(booking) > new Date();
 }
 
@@ -90,6 +91,7 @@ function appointmentState(booking: Booking) {
   if (booking.checkedInAt && now < end) return { label: "Checked in", color: "text-emerald-700 bg-emerald-50", icon: CheckCircle2 };
   if (booking.status === "COMPLETED") return STATUS_CONFIG.COMPLETED;
   if (booking.status === "CANCELLED") return STATUS_CONFIG.CANCELLED;
+  if (booking.status === "EXPIRED") return STATUS_CONFIG.EXPIRED;
   if (booking.status === "PENDING_DEPOSIT") return STATUS_CONFIG.PENDING_DEPOSIT;
   if (now >= start && now < end) return { label: "Ongoing now", color: "text-emerald-700 bg-emerald-50", icon: CalendarClock };
   if (start > now && isSameDay(start, now)) {

@@ -27,7 +27,7 @@ export default async function AccountPage() {
 
   const bookingData = bookings.map((b) => ({
     id: b.id,
-    status: b.status as "PENDING_DEPOSIT" | "CONFIRMED" | "COMPLETED" | "CANCELLED",
+    status: b.status as "PENDING_DEPOSIT" | "CONFIRMED" | "COMPLETED" | "CANCELLED" | "EXPIRED",
     startsAt: b.startsAt.toISOString(),
     createdAt: b.createdAt.toISOString(),
     checkedInAt: b.checkedInAt?.toISOString() ?? null,

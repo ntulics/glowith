@@ -17,16 +17,23 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "Invalid attendance action" }, { status: 400 });
   }
 
-  const profile = await prisma.providerProfile.findUnique({ where: { userId } });
+  const profile = await prisma.providerProfile.findUnique({
+    where: { userId },
+    include: { agents: { select: { id: true } } }
+  });
   if (!profile) return NextResponse.json({ error: "Provider profile not found" }, { status: 404 });
+  const scopedProfileIds = profile.parentBusinessId ? [profile.id] : [profile.id, ...profile.agents.map((a) => a.id)];
 
   const booking = await prisma.booking.findFirst({
-    where: { id, providerProfileId: profile.id },
+    where: { id, providerProfileId: { in: scopedProfileIds } },
     include: { service: { select: { durationMinutes: true } } }
   });
   if (!booking) return NextResponse.json({ error: "Booking not found" }, { status: 404 });
   if (booking.status === "CANCELLED" || booking.status === "PENDING_DEPOSIT") {
     return NextResponse.json({ error: "Only confirmed appointments can be updated" }, { status: 400 });
+  }
+  if (action === "no_show" && Date.now() < booking.startsAt.getTime() + 10 * 60 * 1000) {
+    return NextResponse.json({ error: "No-show can only be marked 10 minutes after the scheduled start time" }, { status: 400 });
   }
 
   let code = booking.checkInCode;
@@ -57,7 +64,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     data,
     include: {
       client: { select: { id: true, name: true, email: true, image: true } },
-      service: { select: { name: true, durationMinutes: true, priceCents: true } }
+      service: {
+        select: {
+          name: true,
+          durationMinutes: true,
+          priceCents: true,
+          providerProfile: { select: { id: true, businessName: true } }
+        }
+      }
     }
   });
 
@@ -75,6 +89,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       depositCents: updated.depositCents,
       durationMinutes: updated.service?.durationMinutes ?? updated.durationMinutes,
       service: updated.service?.name ?? "Service",
+      agentName: updated.service?.providerProfile?.id !== profile.id ? updated.service?.providerProfile?.businessName ?? null : null,
       priceCents: updated.service?.priceCents ?? 0,
       client: {
         id: updated.client.id,

@@ -58,7 +58,7 @@ export type Provider = {
   portfolio: PortfolioPost[];
 };
 
-export type BookingStatus = "PENDING_DEPOSIT" | "CONFIRMED" | "COMPLETED" | "CANCELLED";
+export type BookingStatus = "PENDING_DEPOSIT" | "CONFIRMED" | "COMPLETED" | "CANCELLED" | "EXPIRED";
 
 export type Booking = {
   id: string;
