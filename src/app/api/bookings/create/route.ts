@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { checkInCodeExpiry, generateCheckInCode } from "@/lib/booking-attendance";
 
 // Create a real DB booking (one or more services). Requires the client signed in.
 export async function POST(request: Request) {
@@ -82,6 +83,7 @@ export async function POST(request: Request) {
     depositCents = Math.round(((totalPrice - discountCents) * pct) / 100);
   }
 
+  const status = depositCents > 0 ? "PENDING_DEPOSIT" : "CONFIRMED";
   const booking = await prisma.booking.create({
     data: {
       clientId: user.id,
@@ -93,7 +95,9 @@ export async function POST(request: Request) {
       depositCents,
       couponId,
       discountCents,
-      status: depositCents > 0 ? "PENDING_DEPOSIT" : "CONFIRMED",
+      status,
+      checkInCode: status === "CONFIRMED" ? generateCheckInCode() : null,
+      checkInCodeExpiresAt: status === "CONFIRMED" ? checkInCodeExpiry(start, totalDuration) : null,
       items: {
         create: services.map((s) => ({ serviceId: s.id, name: s.name, priceCents: s.priceCents, durationMinutes: s.durationMinutes }))
       }

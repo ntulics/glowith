@@ -59,10 +59,12 @@ export function DashboardHome({
   chartData: Array<{ label: string; revenue: number }>;
 }) {
   async function updateAttendance(id: string, action: "check_in" | "no_show" | "complete") {
+    const confirmationCode = action === "check_in" ? window.prompt("Enter the customer's 6-digit check-in code")?.trim() : undefined;
+    if (action === "check_in" && !confirmationCode) return;
     const res = await fetch(`/api/dashboard/bookings/${id}/attendance`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action })
+      body: JSON.stringify({ action, confirmationCode })
     });
     if (res.ok) window.location.reload();
   }

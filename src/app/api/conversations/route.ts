@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { messageWindowOpen } from "@/lib/booking-attendance";
 
 // GET /api/conversations — list all conversations for the current user
 export async function GET() {
@@ -75,15 +76,35 @@ export async function POST(request: Request) {
     select: { role: true, providerProfile: { select: { id: true } } }
   });
 
-  // Permission: providers/agents/freelancers can only message a customer who follows them
+  // Permission: providers can only initiate a customer conversation when there is
+  // an upcoming/current booking, or within 24 hours after a completed booking.
   const senderIsProvider = sender?.role === "PROVIDER";
   const recipientIsClient = recipient.role === "CLIENT";
   if (senderIsProvider && recipientIsClient && sender.providerProfile) {
-    const follows = await prisma.follow.findUnique({
-      where: { userId_providerProfileId: { userId: recipientId, providerProfileId: sender.providerProfile.id } }
+    const bookings = await prisma.booking.findMany({
+      where: {
+        clientId: recipientId,
+        providerProfileId: sender.providerProfile.id,
+        status: { in: ["CONFIRMED", "COMPLETED"] }
+      },
+      select: {
+        startsAt: true,
+        durationMinutes: true,
+        status: true,
+        completedAt: true,
+        noShowAt: true,
+        service: { select: { durationMinutes: true } }
+      }
     });
-    if (!follows) {
-      return NextResponse.json({ error: "This customer does not follow you. They must follow you before you can initiate a conversation." }, { status: 403 });
+    const allowed = bookings.some((booking) => messageWindowOpen({
+      startsAt: booking.startsAt,
+      durationMinutes: booking.durationMinutes || booking.service.durationMinutes,
+      status: booking.status,
+      completedAt: booking.completedAt,
+      noShowAt: booking.noShowAt
+    }));
+    if (!allowed) {
+      return NextResponse.json({ error: "You can message customers only for upcoming/current bookings, or for 24 hours after completion." }, { status: 403 });
     }
   }
 

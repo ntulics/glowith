@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { checkInCodeExpiry, generateCheckInCode } from "@/lib/booking-attendance";
 
 type AttendanceAction = "check_in" | "no_show" | "complete";
 
@@ -10,7 +11,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const userId = (session.user as any).id as string;
   const { id } = await params;
-  const { action } = await request.json().catch(() => ({})) as { action?: AttendanceAction };
+  const { action, confirmationCode } = await request.json().catch(() => ({})) as { action?: AttendanceAction; confirmationCode?: string };
 
   if (!["check_in", "no_show", "complete"].includes(action ?? "")) {
     return NextResponse.json({ error: "Invalid attendance action" }, { status: 400 });
@@ -28,12 +29,28 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "Only confirmed appointments can be updated" }, { status: 400 });
   }
 
+  let code = booking.checkInCode;
+  if (!code || !booking.checkInCodeExpiresAt || booking.checkInCodeExpiresAt <= new Date()) {
+    code = generateCheckInCode();
+    await prisma.booking.update({
+      where: { id },
+      data: { checkInCode: code, checkInCodeExpiresAt: checkInCodeExpiry(booking.startsAt, booking.durationMinutes || booking.service.durationMinutes) }
+    });
+  }
+
+  if (action === "check_in") {
+    const submitted = (confirmationCode ?? "").replace(/\D/g, "");
+    if (!submitted || submitted !== code) {
+      return NextResponse.json({ error: "Ask the customer for their check-in code or scan their QR code." }, { status: 400 });
+    }
+  }
+
   const data =
     action === "check_in"
       ? { checkedInAt: new Date(), checkedInById: userId, noShowAt: null }
       : action === "no_show"
-        ? { noShowAt: new Date(), checkedInAt: null, checkedInById: null, status: "COMPLETED" as const }
-        : { status: "COMPLETED" as const };
+        ? { noShowAt: new Date(), checkedInAt: null, checkedInById: null, status: "COMPLETED" as const, completedAt: new Date() }
+        : { status: "COMPLETED" as const, completedAt: new Date(), feedbackRequestedAt: new Date() };
 
   const updated = await prisma.booking.update({
     where: { id },
@@ -52,6 +69,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       createdAt: updated.createdAt.toISOString(),
       checkedInAt: updated.checkedInAt?.toISOString() ?? null,
       noShowAt: updated.noShowAt?.toISOString() ?? null,
+      completedAt: updated.completedAt?.toISOString() ?? null,
+      feedbackRequestedAt: updated.feedbackRequestedAt?.toISOString() ?? null,
       notes: updated.notes,
       depositCents: updated.depositCents,
       durationMinutes: updated.service?.durationMinutes ?? updated.durationMinutes,

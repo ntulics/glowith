@@ -35,6 +35,8 @@ export async function GET() {
       createdAt: b.createdAt.toISOString(),
       checkedInAt: b.checkedInAt?.toISOString() ?? null,
       noShowAt: b.noShowAt?.toISOString() ?? null,
+      completedAt: b.completedAt?.toISOString() ?? null,
+      feedbackRequestedAt: b.feedbackRequestedAt?.toISOString() ?? null,
       notes: b.notes,
       depositCents: b.depositCents,
       durationMinutes: b.service?.durationMinutes ?? b.durationMinutes,

@@ -13,7 +13,9 @@ import {
   Loader2,
   MapPin,
   MessageCircle,
+  QrCode,
   Settings,
+  Star,
   Sparkles,
   X,
   XCircle,
@@ -39,6 +41,9 @@ type Booking = {
   createdAt: string;
   checkedInAt?: string | null;
   noShowAt?: string | null;
+  checkInCode?: string | null;
+  completedAt?: string | null;
+  feedbackRequestedAt?: string | null;
   notes?: string | null;
   depositCents: number;
   durationMinutes: number;
@@ -495,6 +500,23 @@ export function AccountPortal({
                         <p className="mt-2 text-xs font-bold text-[var(--muted)]">
                           Deposit: {formatCurrency(booking.depositCents)}
                         </p>
+                        {booking.checkInCode && booking.status === "CONFIRMED" && (
+                          <div className="mt-3 inline-flex items-center gap-2 rounded-xl bg-pink-50 px-3 py-2 text-sm font-black text-[var(--brand)]">
+                            <QrCode className="h-4 w-4" />
+                            Check-in code: {booking.checkInCode}
+                          </div>
+                        )}
+                        {booking.status === "COMPLETED" && booking.feedbackRequestedAt && (
+                          <div className="mt-3 rounded-xl border border-pink-100 bg-pink-50 p-3 text-sm text-[var(--ink)]">
+                            <div className="flex items-center gap-2 font-black">
+                              <Star className="h-4 w-4 text-[var(--brand)]" />
+                              Rate your {booking.service.toLowerCase()} booking
+                            </div>
+                            <p className="mt-1 text-xs font-semibold text-[var(--muted)]">
+                              Please leave feedback for {booking.provider.name} and the agent who served you, if applicable.
+                            </p>
+                          </div>
+                        )}
                       </div>
                     </div>
 

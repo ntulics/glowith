@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyTransaction } from "@/lib/paystack";
+import { checkInCodeExpiry, generateCheckInCode } from "@/lib/booking-attendance";
 
 // Confirm a booking after payment, keyed by reference and verified with Paystack
 // (no session needed — Paystack verification is the source of truth). Mirrors the
@@ -15,7 +16,7 @@ export async function POST(request: Request) {
   try {
     const { success } = await verifyTransaction(reference);
     if (success) {
-      await prisma.booking.update({ where: { id: booking.id }, data: { status: "CONFIRMED" } });
+      await prisma.booking.update({ where: { id: booking.id }, data: { status: "CONFIRMED", checkInCode: generateCheckInCode(), checkInCodeExpiresAt: checkInCodeExpiry(booking.startsAt, booking.durationMinutes) } });
       return NextResponse.json({ status: "CONFIRMED" });
     }
   } catch { /* fall through */ }

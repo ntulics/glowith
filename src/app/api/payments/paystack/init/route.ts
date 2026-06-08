@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { initTransaction, paystackEnabled } from "@/lib/paystack";
+import { checkInCodeExpiry, generateCheckInCode } from "@/lib/booking-attendance";
 
 const BASE = process.env.NEXTAUTH_URL ?? "https://glowith.co.za";
 
@@ -16,7 +17,7 @@ export async function POST(request: Request) {
   const booking = await prisma.booking.findUnique({ where: { id: bookingId } });
   if (!booking || booking.clientId !== user.id) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (booking.depositCents <= 0) {
-    await prisma.booking.update({ where: { id: booking.id }, data: { status: "CONFIRMED" } });
+    await prisma.booking.update({ where: { id: booking.id }, data: { status: "CONFIRMED", checkInCode: generateCheckInCode(), checkInCodeExpiresAt: checkInCodeExpiry(booking.startsAt, booking.durationMinutes) } });
     return NextResponse.json({ simulated: true });
   }
 
@@ -24,7 +25,7 @@ export async function POST(request: Request) {
   if (!paystackEnabled()) {
     await prisma.booking.update({
       where: { id: booking.id },
-      data: { status: "CONFIRMED", paymentProvider: "simulated", paymentIntentId: `sim_${Date.now()}` }
+      data: { status: "CONFIRMED", paymentProvider: "simulated", paymentIntentId: `sim_${Date.now()}`, checkInCode: generateCheckInCode(), checkInCodeExpiresAt: checkInCodeExpiry(booking.startsAt, booking.durationMinutes) }
     });
     return NextResponse.json({ simulated: true });
   }

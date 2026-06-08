@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { paystackEnabled } from "@/lib/paystack";
+import { checkInCodeExpiry, generateCheckInCode } from "@/lib/booking-attendance";
 
 // Prepares an inline (popup) Paystack payment: generates a reference and returns
 // the public key + amount for the client-side PaystackPop. Falls back to
@@ -17,14 +18,14 @@ export async function POST(request: Request) {
   if (!booking || booking.clientId !== user.id) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   if (booking.depositCents <= 0) {
-    await prisma.booking.update({ where: { id: booking.id }, data: { status: "CONFIRMED" } });
+    await prisma.booking.update({ where: { id: booking.id }, data: { status: "CONFIRMED", checkInCode: generateCheckInCode(), checkInCodeExpiresAt: checkInCodeExpiry(booking.startsAt, booking.durationMinutes) } });
     return NextResponse.json({ simulated: true });
   }
 
   if (!paystackEnabled() || !publicKey) {
     await prisma.booking.update({
       where: { id: booking.id },
-      data: { status: "CONFIRMED", paymentProvider: "simulated", paymentIntentId: `sim_${Date.now()}` }
+      data: { status: "CONFIRMED", paymentProvider: "simulated", paymentIntentId: `sim_${Date.now()}`, checkInCode: generateCheckInCode(), checkInCodeExpiresAt: checkInCodeExpiry(booking.startsAt, booking.durationMinutes) }
     });
     return NextResponse.json({ simulated: true });
   }

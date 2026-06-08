@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { verifyTransaction } from "@/lib/paystack";
+import { checkInCodeExpiry, generateCheckInCode } from "@/lib/booking-attendance";
 
 // Called by the popup's onSuccess. Verifies server-side and confirms the
 // booking. The webhook remains the authoritative confirmation as a backstop.
@@ -41,7 +42,7 @@ export async function POST(request: Request) {
         await prisma.booking.update({ where: { id: booking.id }, data: { status: "CANCELLED" } });
         return NextResponse.json({ status: "CANCELLED", error: "That slot was just taken — your deposit will be refunded." });
       }
-      await prisma.booking.update({ where: { id: booking.id }, data: { status: "CONFIRMED" } });
+      await prisma.booking.update({ where: { id: booking.id }, data: { status: "CONFIRMED", checkInCode: generateCheckInCode(), checkInCodeExpiresAt: checkInCodeExpiry(booking.startsAt, dur) } });
       return NextResponse.json({ status: "CONFIRMED" });
     }
   } catch {

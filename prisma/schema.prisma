@@ -286,7 +286,11 @@ model Booking {
   paymentIntentId   String?
   checkedInAt       DateTime?
   checkedInById     String?
+  checkInCode       String?
+  checkInCodeExpiresAt DateTime?
   noShowAt          DateTime?
+  completedAt       DateTime?
+  feedbackRequestedAt DateTime?
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 

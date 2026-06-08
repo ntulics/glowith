@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { PAYSTACK_SECRET } from "@/lib/paystack";
+import { checkInCodeExpiry, generateCheckInCode } from "@/lib/booking-attendance";
 
 // Authoritative payment confirmation from Paystack.
 // Configure this URL in the Paystack dashboard → Settings → API Keys & Webhooks.
@@ -18,10 +19,11 @@ export async function POST(request: Request) {
   if (event?.event === "charge.success") {
     const reference = event.data?.reference;
     if (reference) {
-      await prisma.booking.updateMany({
-        where: { paymentIntentId: reference },
-        data: { status: "CONFIRMED" }
-      });
+      const bookings = await prisma.booking.findMany({ where: { paymentIntentId: reference } });
+      await Promise.all(bookings.map((booking) => prisma.booking.update({
+        where: { id: booking.id },
+        data: { status: "CONFIRMED", checkInCode: generateCheckInCode(), checkInCodeExpiresAt: checkInCodeExpiry(booking.startsAt, booking.durationMinutes) }
+      })));
     }
   }
   return NextResponse.json({ ok: true });
