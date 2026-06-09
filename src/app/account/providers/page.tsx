@@ -8,16 +8,17 @@ export default async function AccountProvidersPage() {
   const session = await auth();
   const userId = (session!.user as any).id as string;
 
-  // Get customer's saved providers list so we can show bookmark state
-  const [savedRows, followRows] = await Promise.all([
+  const [savedRows, followRows, user] = await Promise.all([
     prisma.savedProvider.findMany({ where: { userId }, select: { providerProfileId: true } }),
-    prisma.follow.findMany({ where: { userId }, select: { providerProfileId: true } })
+    prisma.follow.findMany({ where: { userId }, select: { providerProfileId: true } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { addressLine1: true } })
   ]);
 
   return (
     <AccountProviders
       savedIds={savedRows.map((r) => r.providerProfileId)}
       followedIds={followRows.map((r) => r.providerProfileId)}
+      userHasAddress={!!user?.addressLine1}
     />
   );
 }

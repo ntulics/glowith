@@ -48,7 +48,8 @@ export function BookingFlow({
   providerProfileId, providerName, services, preselectedServiceId,
   preselectedDate, preselectedSlot,
   providerRating, providerReviewCount, providerAvatarUrl,
-  drawer = false
+  drawer = false,
+  userHasAddress
 }: {
   open: boolean; onClose: () => void;
   providerProfileId: string; providerName: string;
@@ -60,6 +61,8 @@ export function BookingFlow({
   providerAvatarUrl?: string | null;
   /** Render as a right-side drawer instead of full-screen (used from calendar etc.) */
   drawer?: boolean;
+  /** Whether the logged-in user has a saved address (required for minor bookings) */
+  userHasAddress?: boolean;
 }) {
   const hasPreselectedDateTime = !!(preselectedDate && preselectedSlot);
 
@@ -744,6 +747,22 @@ export function BookingFlow({
                           </button>
                         ))}
                       </div>
+                      {bookingFor === "CHILD" && userHasAddress === false && (
+                        <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                          <p className="text-xs font-bold text-amber-800">Address required for minor bookings</p>
+                          <p className="mt-1 text-xs text-amber-700 leading-5">
+                            Your address is required when booking for a minor. It is used for statistics only and is never shown to the provider.
+                          </p>
+                          <a
+                            href="/account/settings"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-2 inline-flex items-center gap-1 rounded-lg bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-900 hover:bg-amber-200 transition"
+                          >
+                            Add address in Settings →
+                          </a>
+                        </div>
+                      )}
                       {(bookingFor === "CHILD" || bookingFor === "OTHER") && (
                         <div className="mt-2 space-y-2 rounded-xl border border-[var(--line)] bg-[var(--background)] p-3">
                           {bookingFor === "CHILD" && (
@@ -770,8 +789,11 @@ export function BookingFlow({
                     </div>
                     <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Anything the provider should know? (optional)"
                       className="mt-3 w-full resize-none rounded-xl border border-[var(--line)] bg-white px-4 py-3 text-sm outline-none focus:border-[var(--brand)]" />
-                    <button onClick={confirm} disabled={submitting}
-                      className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] py-3.5 text-sm font-black text-white hover:bg-[var(--brand-dark)] disabled:opacity-50">
+                    <button
+                      onClick={confirm}
+                      disabled={submitting || (bookingFor === "CHILD" && userHasAddress === false)}
+                      className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] py-3.5 text-sm font-black text-white hover:bg-[var(--brand-dark)] disabled:opacity-50"
+                    >
                       {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
                       {depositDueAtCheckout > 0 ? "Continue to payment" : "Confirm booking"}
                     </button>

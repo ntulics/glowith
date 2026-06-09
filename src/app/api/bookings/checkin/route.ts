@@ -7,15 +7,15 @@ export async function POST(req: NextRequest) {
   const user = session?.user as any;
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { code, action = "checkin" } = await req.json();
-  if (!code) return NextResponse.json({ error: "Missing code" }, { status: 400 });
+  const { code, bookingId, action = "checkin" } = await req.json();
+  if (!code && !bookingId) return NextResponse.json({ error: "Missing code" }, { status: 400 });
 
-  // Find booking by checkInCode or booking id
+  // Find booking by checkInCode, booking id, or explicit bookingId
   const booking = await prisma.booking.findFirst({
     where: {
       OR: [
-        { checkInCode: code },
-        { id: code }
+        ...(code ? [{ checkInCode: code }, { id: code }] : []),
+        ...(bookingId ? [{ id: bookingId }] : [])
       ],
       status: "CONFIRMED"
     },
@@ -46,13 +46,21 @@ export async function POST(req: NextRequest) {
       where: { id: booking.id },
       data: { checkedInAt: new Date(), checkedInById: providerProfile.id }
     });
-  } else if (action === "checkout") {
-    if (!booking.checkedInAt) {
+  } else if (action === "checkout" || action === "complete") {
+    if (!booking.checkedInAt && action === "checkout") {
       return NextResponse.json({ error: "Client has not checked in yet" }, { status: 400 });
     }
     await prisma.booking.update({
       where: { id: booking.id },
       data: { status: "COMPLETED", completedAt: new Date() }
+    });
+  } else if (action === "no_show") {
+    if (booking.noShowAt) {
+      return NextResponse.json({ error: "Already marked as no-show" }, { status: 400 });
+    }
+    await prisma.booking.update({
+      where: { id: booking.id },
+      data: { noShowAt: new Date() }
     });
   }
 

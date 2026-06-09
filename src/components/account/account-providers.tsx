@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { BookingFlow } from "@/components/marketplace/booking-flow";
 import { cn } from "@/lib/utils";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   Bookmark,
   BookmarkX,
@@ -12,7 +13,8 @@ import {
   Search,
   Star,
   UserCheck,
-  UserMinus
+  UserMinus,
+  X
 } from "lucide-react";
 
 type Provider = {
@@ -44,10 +46,12 @@ const ZAR = (c: number) =>
 
 export function AccountProviders({
   savedIds: initialSaved,
-  followedIds: initialFollowed
+  followedIds: initialFollowed,
+  userHasAddress = false
 }: {
   savedIds: string[];
   followedIds: string[];
+  userHasAddress?: boolean;
 }) {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,6 +61,7 @@ export function AccountProviders({
   const [search, setSearch] = useState("");
   const [savedSet, setSavedSet] = useState(new Set(initialSaved));
   const [followedSet, setFollowedSet] = useState(new Set(initialFollowed));
+  const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
   const [bookingProvider, setBookingProvider] = useState<Provider | null>(null);
 
   const fetchProviders = useCallback(async (lat: number | null, lng: number | null) => {
@@ -176,7 +181,11 @@ export function AccountProviders({
             const handle = p.handle.replace("@", "");
             const minPrice = p.services.length ? Math.min(...p.services.map((s) => s.priceCents)) : null;
             return (
-              <div key={p.id} className="overflow-hidden rounded-2xl border border-[var(--line)] bg-white">
+              <div
+                key={p.id}
+                className="overflow-hidden rounded-2xl border border-[var(--line)] bg-white cursor-pointer hover:border-[var(--brand)]/40 transition"
+                onClick={() => setSelectedProvider(p)}
+              >
                 <div className="p-4">
                   <div className="flex items-start gap-3">
                     {p.avatarUrl ? (
@@ -188,9 +197,9 @@ export function AccountProviders({
                       </div>
                     )}
                     <div className="min-w-0 flex-1">
-                      <a href={`/provider/${handle}`} target="_blank" rel="noopener noreferrer" className="font-black text-[var(--ink)] hover:underline">
+                      <button className="font-black text-[var(--ink)] hover:underline text-left">
                         {p.name}
-                      </a>
+                      </button>
                       <p className="text-xs text-[var(--muted)]">{p.category}</p>
                       <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--muted)]">
                         <span className="inline-flex items-center gap-1">
@@ -208,9 +217,9 @@ export function AccountProviders({
                     </div>
                   </div>
 
-                  <div className="mt-3 flex gap-2 border-t border-[var(--line)] pt-3">
+                  <div className="mt-3 flex gap-2 border-t border-[var(--line)] pt-3" onClick={(e) => e.stopPropagation()}>
                     <button
-                      onClick={() => setBookingProvider(p)}
+                      onClick={(e) => { e.stopPropagation(); setSelectedProvider(p); }}
                       className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-[var(--brand)] py-2 text-xs font-bold text-white hover:bg-[var(--brand-dark)] transition"
                     >
                       <Calendar className="h-3.5 w-3.5" />
@@ -248,13 +257,110 @@ export function AccountProviders({
         </div>
       )}
 
+      {/* Right-side provider panel */}
+      <AnimatePresence>
+        {selectedProvider && !bookingProvider && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedProvider(null)}
+              className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[2px]"
+            />
+            <motion.div
+              initial={{ x: "100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "100%" }}
+              transition={{ type: "spring", damping: 30, stiffness: 320 }}
+              className="fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col overflow-hidden bg-white shadow-2xl sm:max-w-lg"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between border-b border-[var(--line)] px-5 py-4">
+                <div>
+                  <p className="text-xs font-semibold text-[var(--muted)]">{selectedProvider.category}</p>
+                  <h2 className="text-lg font-black">{selectedProvider.name}</h2>
+                </div>
+                <button
+                  onClick={() => setSelectedProvider(null)}
+                  className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--line)] hover:bg-[var(--background)] transition"
+                  aria-label="Close"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              {/* Body */}
+              <div className="flex-1 overflow-y-auto">
+                <div className="px-5 py-4">
+                  <div className="flex items-start gap-3">
+                    {selectedProvider.avatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={selectedProvider.avatarUrl} alt={selectedProvider.name} className="h-16 w-16 shrink-0 rounded-xl object-cover" />
+                    ) : (
+                      <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-[var(--brand)] text-white text-xl font-bold">
+                        {selectedProvider.name[0]}
+                      </div>
+                    )}
+                    <div>
+                      <div className="flex flex-wrap gap-2 text-xs text-[var(--muted)]">
+                        <span className="flex items-center gap-1">
+                          <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                          {selectedProvider.rating.toFixed(1)} ({selectedProvider.reviewCount} reviews)
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <MapPin className="h-3 w-3" />
+                          {selectedProvider.distanceKm > 0 ? `${selectedProvider.distanceKm.toFixed(1)} km` : selectedProvider.location.label}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Services */}
+                  <div className="mt-5">
+                    <h3 className="mb-3 text-sm font-black">Services</h3>
+                    <div className="space-y-2">
+                      {selectedProvider.services.map((s) => (
+                        <button
+                          key={s.id}
+                          onClick={() => setBookingProvider(selectedProvider)}
+                          className="flex w-full items-center justify-between rounded-xl border border-[var(--line)] bg-white px-4 py-3 text-left text-sm hover:border-[var(--brand)]/50 transition"
+                        >
+                          <span>
+                            <span className="block font-bold">{s.name}</span>
+                            <span className="text-xs text-[var(--muted)]">{s.durationMinutes} min</span>
+                          </span>
+                          <span className="text-right">
+                            <span className="block font-black">{ZAR(s.priceCents)}</span>
+                            <span className="text-xs text-[var(--muted)]">{ZAR(s.depositCents)} deposit</span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              {/* CTA */}
+              <div className="border-t border-[var(--line)] px-5 py-4">
+                <button
+                  onClick={() => setBookingProvider(selectedProvider)}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--ink)] py-3.5 text-sm font-black text-white hover:bg-[var(--ink)]/90 transition"
+                >
+                  <Calendar className="h-4 w-4" />
+                  Book appointment
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
       {bookingProvider && (
         <BookingFlow
           open
-          onClose={() => setBookingProvider(null)}
+          onClose={() => { setBookingProvider(null); }}
           providerProfileId={bookingProvider.id}
           providerName={bookingProvider.name}
           services={bookingProvider.services}
+          userHasAddress={userHasAddress}
         />
       )}
     </div>

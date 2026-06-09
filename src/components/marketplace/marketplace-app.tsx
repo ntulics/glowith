@@ -28,6 +28,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { MapSection } from "@/components/marketplace/map-section";
 import { SiteFooter } from "@/components/marketplace/site-footer";
+import { BookingFlow } from "@/components/marketplace/booking-flow";
 
 const categories: Array<ServiceCategory | "All"> = ["All", "Hair", "Nails", "Makeup", "Lashes", "Brows", "Barber", "Spa"];
 const fallbackLocation = { label: "Rosebank, Johannesburg", areaName: "Rosebank", lat: -26.1458, lng: 28.042 };
@@ -241,14 +242,31 @@ export function MarketplaceApp() {
     }).sort((a, b) => (distanceByProvider[a.id] ?? a.distanceKm) - (distanceByProvider[b.id] ?? b.distanceKm));
   }, [category, displayProviders, distanceByProvider, radiusKm, query]);
 
+  const [bookingOpen, setBookingOpen] = useState(false);
+  const [bookingServiceId, setBookingServiceId] = useState<string>("");
+  const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    fetch("/api/auth/session")
+      .then((r) => r.json())
+      .then((d) => setLoggedIn(!!(d?.user)))
+      .catch(() => setLoggedIn(false));
+  }, []);
+
   function openProvider(provider: Provider) {
-    // Navigate to the full business/freelancer profile page
-    router.push(`/provider/${provider.handle.replace("@", "")}`);
+    if (loggedIn === true) {
+      setSelectedProvider(provider);
+      setSelectedServiceId(provider.services[0]?.id ?? "");
+      setBookingOpen(false);
+    } else {
+      router.push(`/provider/${provider.handle.replace("@", "")}`);
+    }
   }
 
   function closeProvider() {
     setSelectedProvider(null);
     setSelectedServiceId("");
+    setBookingOpen(false);
   }
 
   function handleLocationChange(val: string) {
@@ -263,7 +281,7 @@ export function MarketplaceApp() {
 
   return (
     <div className="min-h-screen bg-white">
-      <TopBar searchInTopBar={searchInTopBar} searchProps={searchProps} providers={displayProviders} areaName={areaName} />
+      <TopBar searchInTopBar={searchInTopBar} searchProps={searchProps} providers={displayProviders} areaName={areaName} loggedIn={loggedIn} />
 
       {/* Hero */}
       <HeroSection
@@ -397,18 +415,34 @@ export function MarketplaceApp() {
         user={{ lat: userLocation.lat, lng: userLocation.lng, label: areaName ?? userLocation.label }}
       />
 
-      {/* Provider detail drawer */}
+      {/* Provider detail panel (right-side for logged-in, bottom sheet otherwise) */}
       <AnimatePresence>
         {selectedProvider && selectedService && (
           <ProviderDrawer
             provider={selectedProvider}
             selectedServiceId={selectedServiceId}
             selectedService={selectedService}
-            onServiceChange={setSelectedServiceId}
+            onServiceChange={(id) => { setSelectedServiceId(id); }}
             onClose={closeProvider}
+            onBook={(serviceId) => { setBookingServiceId(serviceId); setBookingOpen(true); }}
+            rightPanel={loggedIn === true}
           />
         )}
       </AnimatePresence>
+
+      {/* Full booking flow — opens over the panel */}
+      {selectedProvider && (
+        <BookingFlow
+          open={bookingOpen}
+          onClose={() => setBookingOpen(false)}
+          providerProfileId={selectedProvider.id}
+          providerName={selectedProvider.businessName}
+          services={selectedProvider.services}
+          preselectedServiceId={bookingServiceId || selectedServiceId}
+          providerRating={selectedProvider.rating}
+          providerReviewCount={selectedProvider.reviewCount}
+        />
+      )}
 
       <Footer />
 
@@ -494,16 +528,8 @@ function MenuToggleIcon({ open }: { open: boolean }) {
   );
 }
 
-function TopBar({ searchInTopBar, searchProps, providers, areaName }: { searchInTopBar: boolean; searchProps: SearchBarProps; providers: Provider[]; areaName: string | null }) {
+function TopBar({ searchInTopBar, searchProps, providers, areaName, loggedIn }: { searchInTopBar: boolean; searchProps: SearchBarProps; providers: Provider[]; areaName: string | null; loggedIn: boolean | null }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [loggedIn, setLoggedIn] = useState<boolean | null>(null); // null = loading
-
-  useEffect(() => {
-    fetch("/api/auth/session")
-      .then((r) => r.json())
-      .then((d) => setLoggedIn(!!(d?.user)))
-      .catch(() => setLoggedIn(false));
-  }, []);
 
   return (
     <>
@@ -1171,14 +1197,48 @@ function ProviderDrawer({
   selectedServiceId,
   selectedService,
   onServiceChange,
-  onClose
+  onClose,
+  onBook,
+  rightPanel = false
 }: {
   provider: Provider;
   selectedServiceId: string;
   selectedService: { id: string; name: string; durationMinutes: number; priceCents: number; depositCents: number };
   onServiceChange: (id: string) => void;
   onClose: () => void;
+  onBook: (serviceId: string) => void;
+  rightPanel?: boolean;
 }) {
+  if (rightPanel) {
+    return (
+      <>
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={onClose}
+          className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[2px]"
+        />
+        <motion.div
+          initial={{ x: "100%" }}
+          animate={{ x: 0 }}
+          exit={{ x: "100%" }}
+          transition={{ type: "spring", damping: 30, stiffness: 320 }}
+          className="fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col overflow-hidden bg-white shadow-2xl sm:max-w-lg"
+        >
+          <ProviderPanelContent
+            provider={provider}
+            selectedServiceId={selectedServiceId}
+            selectedService={selectedService}
+            onServiceChange={onServiceChange}
+            onClose={onClose}
+            onBook={onBook}
+          />
+        </motion.div>
+      </>
+    );
+  }
+
   return (
     <>
       <motion.div
@@ -1324,31 +1384,12 @@ function ProviderDrawer({
                     ))}
                   </div>
 
-                  <Button className="w-full rounded-xl bg-[var(--ink)] text-white hover:bg-[var(--ink)]/90">
-                    <CreditCard className="h-4 w-4" />
-                    Pay {formatCurrency(selectedService.depositCents)} deposit
-                  </Button>
-                </CardContent>
-              </Card>
-
-              <Card className="rounded-2xl border-[var(--line)] shadow-sm">
-                <CardHeader className="pb-2 pt-4">
-                  <h3 className="font-black">Provider studio</h3>
-                </CardHeader>
-                <CardContent className="space-y-2.5 pb-4 text-sm text-[var(--muted)]">
-                  {[
-                    ["Portfolio posts", "2 queued"],
-                    ["Calendar sync", "Google + Outlook"],
-                    ["Notifications", "WhatsApp ready"]
-                  ].map(([label, value]) => (
-                    <div key={label} className="flex justify-between font-medium">
-                      <span>{label}</span>
-                      <span className="font-semibold text-[var(--ink)]">{value}</span>
-                    </div>
-                  ))}
-                  <Button variant="secondary" className="mt-2 w-full rounded-xl">
-                    <Store className="h-4 w-4" />
-                    Open studio
+                  <Button
+                    className="w-full rounded-xl bg-[var(--ink)] text-white hover:bg-[var(--ink)]/90"
+                    onClick={() => onBook(selectedServiceId)}
+                  >
+                    <CalendarDays className="h-4 w-4" />
+                    Book {selectedService.name}
                   </Button>
                 </CardContent>
               </Card>
@@ -1357,6 +1398,134 @@ function ProviderDrawer({
         </div>
       </motion.div>
     </>
+  );
+}
+
+/* ─── Right-side panel content (logged-in) ─────────────────── */
+
+function ProviderPanelContent({
+  provider, selectedServiceId, selectedService, onServiceChange, onClose, onBook
+}: {
+  provider: Provider;
+  selectedServiceId: string;
+  selectedService: { id: string; name: string; durationMinutes: number; priceCents: number; depositCents: number };
+  onServiceChange: (id: string) => void;
+  onClose: () => void;
+  onBook: (serviceId: string) => void;
+}) {
+  return (
+    <div className="flex h-full flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-[var(--line)] px-5 py-4">
+        <div>
+          <p className="text-xs font-semibold text-[var(--muted)]">{provider.category}</p>
+          <h2 className="text-lg font-black leading-tight">{provider.businessName}</h2>
+        </div>
+        <button
+          onClick={onClose}
+          className="focus-ring flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--line)] transition hover:bg-[var(--background)]"
+          aria-label="Close"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      {/* Scrollable body */}
+      <div className="flex-1 overflow-y-auto">
+        {/* Hero image + info */}
+        <div className="relative h-40 w-full bg-[#f3e8e4]">
+          {provider.portfolio[0] && (
+            <Image src={provider.portfolio[0].image} alt="" fill sizes="520px" className="object-cover" />
+          )}
+        </div>
+        <div className="px-5 pb-2 pt-4">
+          <div className="flex items-start gap-3">
+            <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-[#f3e8e4] ring-2 ring-white">
+              {provider.portfolio[0] && (
+                <Image src={provider.portfolio[0].image} alt="" fill sizes="56px" className="object-cover" />
+              )}
+            </div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="font-bold">{provider.name}</span>
+                {provider.verified && <BadgeCheck className="h-3.5 w-3.5 text-[var(--sage)]" />}
+              </div>
+              <div className="mt-1 flex flex-wrap gap-3 text-xs text-[var(--muted)]">
+                <span className="flex items-center gap-1">
+                  <Star className="h-3 w-3 fill-[var(--gold)] text-[var(--gold)]" />
+                  {provider.rating} ({provider.reviewCount})
+                </span>
+                <span className="flex items-center gap-1">
+                  <MapPin className="h-3 w-3" />{provider.location.label}
+                </span>
+                <span className="flex items-center gap-1">
+                  <Clock3 className="h-3 w-3" />{provider.distanceKm} km
+                </span>
+              </div>
+            </div>
+          </div>
+          {provider.bio && (
+            <p className="mt-3 text-sm leading-6 text-[var(--muted)]">{provider.bio}</p>
+          )}
+        </div>
+
+        {/* Services */}
+        <div className="border-t border-[var(--line)] px-5 py-4">
+          <h3 className="mb-3 text-sm font-black">Services</h3>
+          <div className="space-y-2">
+            {provider.services.map((service) => (
+              <button
+                key={service.id}
+                onClick={() => onServiceChange(service.id)}
+                className={cn(
+                  "focus-ring flex w-full items-center justify-between rounded-xl border px-3 py-3 text-left text-sm transition",
+                  selectedServiceId === service.id
+                    ? "border-[var(--brand)] bg-[#FFF0F4]"
+                    : "border-[var(--line)] bg-white hover:border-[var(--brand)]/30"
+                )}
+              >
+                <span>
+                  <span className="block font-bold">{service.name}</span>
+                  <span className="text-xs text-[var(--muted)]">{service.durationMinutes} min</span>
+                </span>
+                <span className="text-right">
+                  <span className="block font-black">{formatCurrency(service.priceCents)}</span>
+                  <span className="text-xs text-[var(--muted)]">{formatCurrency(service.depositCents)} deposit</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Portfolio */}
+        {provider.portfolio.length > 0 && (
+          <div className="border-t border-[var(--line)] px-5 py-4">
+            <h3 className="mb-3 text-sm font-black">Portfolio</h3>
+            <div className="grid grid-cols-3 gap-2">
+              {provider.portfolio.slice(0, 6).map((post) => (
+                <div key={post.id} className="relative aspect-square overflow-hidden rounded-xl bg-[#f3e8e4]">
+                  <Image src={post.image} alt={post.caption} fill sizes="120px" className="object-cover" />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Sticky CTA */}
+      <div className="border-t border-[var(--line)] px-5 py-4">
+        <Button
+          className="w-full rounded-xl bg-[var(--ink)] text-white hover:bg-[var(--ink)]/90"
+          onClick={() => onBook(selectedServiceId)}
+        >
+          <CalendarDays className="h-4 w-4" />
+          Book {selectedService.name}
+        </Button>
+        <p className="mt-2 text-center text-xs text-[var(--muted)]">
+          {formatCurrency(selectedService.depositCents)} deposit · {selectedService.durationMinutes} min
+        </p>
+      </div>
+    </div>
   );
 }
 
