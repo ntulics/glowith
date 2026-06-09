@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { ProviderProfilePage } from "@/components/marketplace/provider-profile-page";
+import { AgentProfilePage } from "@/components/marketplace/agent-profile-page";
 import { mediaUrl } from "@/lib/media";
 
 // Resolves the business that owns this subdomain from the x-tenant-slug header,
@@ -25,12 +25,19 @@ async function resolveAgent(handleParam: string) {
       user: { select: { name: true, createdAt: true } },
       services: { where: { active: true }, orderBy: { createdAt: "asc" } },
       posts: { orderBy: { createdAt: "desc" } },
-      _count: { select: { bookings: true } }
+      ratings: { select: { stars: true } },
+      follows: { select: { id: true } },
+      _count: { select: { bookings: { where: { status: "COMPLETED" } }, ratings: true } }
     }
   });
   if (!agent || agent.parentBusinessId !== business.id) return null;
 
-  return { agent, business };
+  const businessProfile = await prisma.providerProfile.findUnique({
+    where: { id: business.id },
+    select: { handle: true, avatarUrl: true, verified: true }
+  });
+
+  return { agent, business: { ...business, handle: businessProfile?.handle ?? "", avatarUrl: businessProfile?.avatarUrl ?? null, verified: businessProfile?.verified ?? false } };
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ handle: string }> }) {
@@ -44,21 +51,21 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
   };
 }
 
-export default async function Page({ params, searchParams }: { params: Promise<{ handle: string }>; searchParams: Promise<{ embed?: string }> }) {
+export default async function Page({ params }: { params: Promise<{ handle: string }> }) {
   const { handle } = await params;
-  const embed = (await searchParams)?.embed === "1";
   const resolved = await resolveAgent(handle);
   if (!resolved) notFound();
   const { agent, business } = resolved;
 
+  const avgRating = agent.ratings.length
+    ? agent.ratings.reduce((s, r) => s + r.stars, 0) / agent.ratings.length
+    : 0;
+
   return (
-    <ProviderProfilePage
-      embed={embed}
+    <AgentProfilePage
       profile={{
         id: agent.id,
         userId: agent.userId,
-        parentBusinessName: business.businessName,
-        parentBusinessCity: business.city,
         handle: agent.handle,
         businessName: agent.businessName,
         name: agent.user.name,
@@ -67,12 +74,19 @@ export default async function Page({ params, searchParams }: { params: Promise<{
         city: agent.city,
         avatarUrl: mediaUrl(agent.avatarUrl),
         verified: agent.verified,
-        verifiedBy: agent.verifiedBy,
-        mobile: agent.mobile,
-        studio: agent.studio,
-        providerType: agent.providerType,
+        verifiedBy: agent.verifiedBy ?? undefined,
         memberSince: agent.user.createdAt.toISOString(),
         appointmentsCompleted: agent._count.bookings,
+        followerCount: agent.follows.length,
+        followingCount: 0,
+        reviewCount: agent._count.ratings,
+        averageRating: Math.round(avgRating * 10) / 10,
+        parentBusinessName: business.businessName,
+        parentBusinessHandle: business.handle,
+        parentBusinessCity: business.city ?? "",
+        parentBusinessAvatarUrl: mediaUrl(business.avatarUrl),
+        parentBusinessVerified: business.verified,
+        employmentConfirmed: agent.canPostToCompany,
         services: agent.services.map((s) => ({
           id: s.id,
           name: s.name,

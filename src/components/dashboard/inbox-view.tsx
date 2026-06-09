@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { format, isToday, isYesterday } from "date-fns";
 import {
   ArrowLeft,
+  CornerUpLeft,
   MessageCircle,
   Search,
   Send,
@@ -48,6 +49,8 @@ interface Message {
   body: string;
   createdAt: string;
   editedAt?: string | null;
+  replyToId?: string | null;
+  replyTo?: { id: string; body: string; sender: { name: string } } | null;
   sender: { id: string; name: string; image?: string | null };
   reactions: Reaction[];
 }
@@ -181,11 +184,13 @@ function MessageBubble({
   isMe,
   myId,
   onReact,
+  onReply,
 }: {
   message: Message;
   isMe: boolean;
   myId: string;
   onReact: (messageId: string, emoji: string) => void;
+  onReply: (message: Message) => void;
 }) {
   const [showReactPicker, setShowReactPicker] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
@@ -221,6 +226,16 @@ function MessageBubble({
       )}
 
       <div className="flex flex-col gap-1">
+        {/* Reply quote */}
+        {message.replyTo && (
+          <div className={cn(
+            "rounded-xl border-l-4 px-3 py-1.5 text-xs mb-0.5",
+            isMe ? "border-white/40 bg-white/10 text-white/80" : "border-[#E85D2F]/40 bg-gray-200 text-gray-600"
+          )}>
+            <p className="font-bold mb-0.5">{message.replyTo.sender.name}</p>
+            <p className="truncate">{message.replyTo.body}</p>
+          </div>
+        )}
         <div
           className={cn(
             "rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed relative",
@@ -231,11 +246,18 @@ function MessageBubble({
         >
           {message.body}
 
-          {/* Hover react button */}
+          {/* Hover action buttons */}
           <div className={cn(
-            "absolute top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity",
-            isMe ? "-left-8" : "-right-8"
+            "absolute top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1",
+            isMe ? "-left-16" : "-right-16"
           )}>
+            <button
+              onClick={() => onReply(message)}
+              className="h-6 w-6 rounded-full bg-white shadow border border-gray-200 flex items-center justify-center text-gray-500 hover:text-[#E85D2F] transition-colors"
+              title="Reply"
+            >
+              <CornerUpLeft className="h-3.5 w-3.5" />
+            </button>
             <div className="relative">
               <button
                 onClick={() => setShowReactPicker((s) => !s)}
@@ -308,6 +330,7 @@ function MessageThread({
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -358,8 +381,9 @@ function MessageThread({
       const res = await fetch(`/api/conversations/${conversationId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body }),
+        body: JSON.stringify({ body, replyToId: replyTo?.id ?? null }),
       });
+      setReplyTo(null);
       if (res.ok) {
         const data = await res.json();
         setMessages((prev) => [...prev, data.message]);
@@ -428,6 +452,7 @@ function MessageThread({
                 isMe={m.senderId === myId}
                 myId={myId}
                 onReact={handleReact}
+                onReply={setReplyTo}
               />
             ))}
           </div>
@@ -437,6 +462,18 @@ function MessageThread({
 
       {/* Input */}
       <div className="px-4 py-3 border-t border-gray-100 bg-white shrink-0">
+        {replyTo && (
+          <div className="mb-2 flex items-start gap-2 rounded-xl bg-gray-50 border border-gray-200 px-3 py-2">
+            <CornerUpLeft className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#E85D2F]" />
+            <div className="min-w-0 flex-1 text-xs">
+              <p className="font-bold text-gray-700">{replyTo.sender.name}</p>
+              <p className="truncate text-gray-500">{replyTo.body}</p>
+            </div>
+            <button onClick={() => setReplyTo(null)} className="text-gray-400 hover:text-gray-600">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
         <div className="flex items-end gap-2 bg-gray-50 rounded-2xl border border-gray-200 px-3 py-2 focus-within:ring-2 focus-within:ring-[#E85D2F]/30 focus-within:border-[#E85D2F] transition-all">
           <div className="relative">
             <button

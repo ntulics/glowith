@@ -10,7 +10,7 @@ export default async function AccountSettingsPage() {
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, name: true, email: true, totpEnabled: true }
+    select: { id: true, name: true, email: true, totpEnabled: true, phoneNumber: true, phoneWhatsApp: true, addressLine1: true, addressLine2: true, city: true, province: true, postalCode: true }
   });
 
   return (
@@ -19,6 +19,13 @@ export default async function AccountSettingsPage() {
       name={user?.name ?? ""}
       email={user?.email ?? ""}
       totpEnabled={user?.totpEnabled ?? false}
+      phoneNumber={user?.phoneNumber}
+      phoneWhatsApp={user?.phoneWhatsApp}
+      addressLine1={user?.addressLine1}
+      addressLine2={user?.addressLine2}
+      city={user?.city}
+      province={user?.province}
+      postalCode={user?.postalCode}
     />
   );
 }

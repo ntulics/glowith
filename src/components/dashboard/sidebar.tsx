@@ -6,6 +6,7 @@ import { signOut } from "next-auth/react";
 import {
   BarChart3,
   BookOpen,
+  Briefcase,
   Calendar,
   ChevronDown,
   HardDrive,
@@ -35,6 +36,7 @@ const nav = [
   { href: "/dashboard/storage", label: "Storage", icon: HardDrive },
   { href: "/dashboard/inbox", label: "Inbox", icon: MessageCircle },
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/dashboard/jobs", label: "Jobs", icon: Briefcase },
   { href: "/dashboard/settings", label: "Settings", icon: Settings }
 ];
 

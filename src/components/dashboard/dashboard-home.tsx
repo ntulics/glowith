@@ -4,6 +4,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { ArrowDown, ArrowUp, Calendar, CheckCircle, Clock, TrendingUp, Users } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { QrScanner } from "./qr-scanner";
 
 const formatZAR = (cents: number) =>
   new Intl.NumberFormat("en-ZA", { style: "currency", currency: "ZAR", maximumFractionDigits: 0 }).format(cents / 100);
@@ -80,11 +81,9 @@ export function DashboardHome({
           <p className="text-xs text-gray-400">{format(new Date(), "EEEE, d MMMM yyyy")}</p>
         </div>
         <div className="flex gap-2">
+          <QrScanner />
           <button className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-50">
             Appointments
-          </button>
-          <button className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-400 transition hover:bg-gray-50">
-            Events
           </button>
         </div>
       </div>

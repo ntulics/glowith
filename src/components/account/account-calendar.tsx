@@ -24,6 +24,8 @@ type CalendarBooking = {
   providerName: string;
   providerHandle: string;
   providerProfileId: string;
+  noShowAt?: string | null;
+  checkedInAt?: string | null;
 };
 
 type Provider = {
@@ -48,7 +50,19 @@ function isoDate(d: Date) {
 const STATUS_COLOR: Record<string, string> = {
   CONFIRMED: "bg-emerald-500",
   PENDING_DEPOSIT: "bg-amber-400",
-  COMPLETED: "bg-[var(--muted)]/40"
+  COMPLETED: "bg-[var(--muted)]/40",
+  CANCELLED: "bg-red-400",
+  EXPIRED: "bg-gray-300",
+  NO_SHOW: "bg-orange-400"
+};
+
+const STATUS_LABEL: Record<string, { text: string; cls: string }> = {
+  CONFIRMED: { text: "Confirmed", cls: "text-emerald-700 bg-emerald-50" },
+  PENDING_DEPOSIT: { text: "Awaiting deposit", cls: "text-amber-700 bg-amber-50" },
+  COMPLETED: { text: "Fulfilled", cls: "text-gray-500 bg-gray-100" },
+  CANCELLED: { text: "Cancelled", cls: "text-red-600 bg-red-50" },
+  EXPIRED: { text: "Expired", cls: "text-gray-400 bg-gray-100" },
+  NO_SHOW: { text: "No-show", cls: "text-orange-700 bg-orange-50" }
 };
 
 const SLOTS = Array.from({ length: 20 }, (_, i) => {
@@ -320,12 +334,21 @@ export function AccountCalendar({ initialBookings }: { initialBookings: Calendar
             ) : (
               <div className="space-y-3">
                 {dayBookings.map((b) => {
-                  const dot = STATUS_COLOR[b.status] ?? "bg-gray-300";
+                  const effectiveStatus = b.noShowAt ? "NO_SHOW" : b.status;
+                  const dot = STATUS_COLOR[effectiveStatus] ?? "bg-gray-300";
+                  const lbl = STATUS_LABEL[effectiveStatus];
                   return (
                     <div key={b.id} className="flex items-start gap-3 rounded-2xl border border-[var(--line)] p-4">
                       <span className={cn("mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full", dot)} />
-                      <div>
-                        <p className="font-black text-[var(--ink)]">{b.serviceName}</p>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-black text-[var(--ink)]">{b.serviceName}</p>
+                          {lbl && (
+                            <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold", lbl.cls)}>
+                              {lbl.text}
+                            </span>
+                          )}
+                        </div>
                         <p className="text-sm text-[var(--brand)] font-semibold">{b.providerName}</p>
                         <div className="mt-1 flex items-center gap-3 text-xs text-[var(--muted)]">
                           <span className="inline-flex items-center gap-1">
@@ -333,7 +356,6 @@ export function AccountCalendar({ initialBookings }: { initialBookings: Calendar
                             {new Date(b.startsAt).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" })}
                           </span>
                           <span>{b.durationMinutes} min</span>
-                          <span className="capitalize">{b.status.toLowerCase().replace("_", " ")}</span>
                         </div>
                       </div>
                     </div>

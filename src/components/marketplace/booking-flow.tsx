@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { signIn } from "next-auth/react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, ArrowRight, Check, Loader2, Minus, Plus, Star, UserCheck, X } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 /* ── Types ──────────────────────────────────────────────────────── */
 type ServiceExtra = { id: string; name: string; description?: string | null; priceCents: number; durationMinutes: number };
@@ -70,6 +71,9 @@ export function BookingFlow({
   const [slot, setSlot] = useState<string | null>(preselectedSlot ?? null);
   const [busy, setBusy] = useState<Busy[]>([]);
   const [notes, setNotes] = useState("");
+  const [bookingFor, setBookingFor] = useState<"SELF" | "CHILD" | "OTHER">("SELF");
+  const [attendeeName, setAttendeeName] = useState("");
+  const [attendeePhone, setAttendeePhone] = useState("");
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [authMode, setAuthMode] = useState<"signin" | "register">("signin");
   const [authName, setAuthName] = useState(""); const [authEmail, setAuthEmail] = useState(""); const [authPassword, setAuthPassword] = useState("");
@@ -320,7 +324,10 @@ export function BookingFlow({
           providerProfileId: activeProviderId,
           serviceIds: selectedIds,
           extraIds: selectedExtras.map((e) => e.id),
-          startsAt, notes, couponCode: appliedCode
+          startsAt, notes, couponCode: appliedCode,
+          bookingFor,
+          attendeeName: attendeeName || null,
+          attendeePhone: attendeePhone || null
         })
       });
       const d = await res.json();
@@ -716,6 +723,50 @@ export function BookingFlow({
                         </div>
                       )}
                       {couponError && <p className="mt-1 text-xs font-semibold text-red-500">{couponError}</p>}
+                    </div>
+                    {/* Booking for */}
+                    <div className="mt-4 space-y-2">
+                      <p className="text-xs font-bold uppercase tracking-wider text-[var(--muted)]">Booking for</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        {(["SELF", "CHILD", "OTHER"] as const).map((v) => (
+                          <button
+                            key={v}
+                            type="button"
+                            onClick={() => setBookingFor(v)}
+                            className={cn(
+                              "rounded-xl border py-2.5 text-xs font-bold transition",
+                              bookingFor === v
+                                ? "bg-[var(--ink)] border-[var(--ink)] text-white"
+                                : "border-[var(--line)] text-[var(--muted)] hover:border-[var(--brand)] hover:text-[var(--ink)]"
+                            )}
+                          >
+                            {v === "SELF" ? "Myself" : v === "CHILD" ? "A child" : "Someone else"}
+                          </button>
+                        ))}
+                      </div>
+                      {(bookingFor === "CHILD" || bookingFor === "OTHER") && (
+                        <div className="mt-2 space-y-2 rounded-xl border border-[var(--line)] bg-[var(--background)] p-3">
+                          {bookingFor === "CHILD" && (
+                            <p className="text-xs text-[var(--muted)] font-semibold">QR code will be used for both check-in and check-out of the child.</p>
+                          )}
+                          {bookingFor === "OTHER" && (
+                            <p className="text-xs text-[var(--muted)] font-semibold">They will need the booking code to check in.</p>
+                          )}
+                          <input
+                            value={attendeeName}
+                            onChange={(e) => setAttendeeName(e.target.value)}
+                            placeholder={bookingFor === "CHILD" ? "Child's full name" : "Full name"}
+                            className="w-full rounded-xl border border-[var(--line)] bg-white px-4 py-2.5 text-sm outline-none focus:border-[var(--brand)]"
+                          />
+                          <input
+                            value={attendeePhone}
+                            onChange={(e) => setAttendeePhone(e.target.value)}
+                            placeholder={bookingFor === "OTHER" ? "Their phone number" : "Emergency contact (optional)"}
+                            type="tel"
+                            className="w-full rounded-xl border border-[var(--line)] bg-white px-4 py-2.5 text-sm outline-none focus:border-[var(--brand)]"
+                          />
+                        </div>
+                      )}
                     </div>
                     <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Anything the provider should know? (optional)"
                       className="mt-3 w-full resize-none rounded-xl border border-[var(--line)] bg-white px-4 py-3 text-sm outline-none focus:border-[var(--brand)]" />

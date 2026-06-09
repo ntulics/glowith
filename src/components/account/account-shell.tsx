@@ -111,7 +111,7 @@ export function AccountShell({
   return (
     <div className="flex min-h-screen bg-[#F9F5F3]">
       {/* Desktop sidebar */}
-      <aside className="hidden w-60 shrink-0 border-r border-[var(--line)] bg-white lg:block">
+      <aside className="hidden w-60 shrink-0 border-r border-[var(--line)] bg-white lg:flex lg:flex-col sticky top-0 h-screen overflow-y-auto">
         <SidebarContent />
       </aside>
 

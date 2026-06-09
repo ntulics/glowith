@@ -10,7 +10,7 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Please sign in to book" }, { status: 401 });
 
   const body = await request.json();
-  const { providerProfileId, startsAt, notes, couponCode } = body;
+  const { providerProfileId, startsAt, notes, couponCode, bookingFor, attendeeName, attendeePhone } = body;
   const serviceIds: string[] = Array.isArray(body.serviceIds) && body.serviceIds.length
     ? body.serviceIds
     : body.serviceId ? [body.serviceId] : [];
@@ -103,6 +103,9 @@ export async function POST(request: Request) {
       status,
       checkInCode: status === "CONFIRMED" ? generateCheckInCode() : null,
       checkInCodeExpiresAt: status === "CONFIRMED" ? checkInCodeExpiry(start, totalDuration) : null,
+      bookingFor: bookingFor ?? "SELF",
+      attendeeName: attendeeName ?? null,
+      attendeePhone: attendeePhone ?? null,
       items: {
         create: services.map((s) => ({ serviceId: s.id, name: s.name, priceCents: s.priceCents, durationMinutes: s.durationMinutes }))
       }

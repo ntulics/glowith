@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -50,6 +50,60 @@ type Booking = {
   service: string;
   provider: { name: string; handle: string; city?: string | null } & ProviderPolicy;
 };
+
+/** Bookings that expired or were abandoned (pending deposit) within 1 hour are hidden from history */
+function shouldHideFromHistory(booking: Booking): boolean {
+  if (booking.status !== "EXPIRED" && booking.status !== "PENDING_DEPOSIT") return false;
+  const ageMs = Date.now() - new Date(booking.createdAt).getTime();
+  return ageMs > 60 * 60 * 1000; // older than 1 hour
+}
+
+/** QR code component using canvas */
+function BookingQrCode({ code, bookingId }: { code: string; bookingId: string }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [dataUrl, setDataUrl] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    const value = code || bookingId;
+    import("qrcode").then((QRCode) => {
+      QRCode.toDataURL(value, { width: 200, margin: 2, color: { dark: "#1a1a1a", light: "#ffffff" } })
+        .then(setDataUrl)
+        .catch(() => {});
+    });
+  }, [code, bookingId]);
+
+  if (!dataUrl) return null;
+
+  return (
+    <>
+      <button
+        onClick={() => setExpanded(true)}
+        className="mt-3 inline-flex items-center gap-2 rounded-xl bg-[var(--ink)] px-3 py-2 text-xs font-bold text-white hover:bg-[var(--ink)]/80 transition"
+      >
+        <QrCode className="h-3.5 w-3.5" />
+        Show QR code for check-in
+      </button>
+      {expanded && (
+        <>
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm" onClick={() => setExpanded(false)} />
+          <div className="fixed inset-x-4 top-1/2 z-50 -translate-y-1/2 max-w-xs mx-auto rounded-3xl bg-white p-6 shadow-2xl text-center">
+            <p className="mb-1 text-xs font-bold uppercase tracking-widest text-[var(--muted)]">Check-in QR code</p>
+            <p className="mb-4 text-sm font-semibold text-[var(--ink)]">Show this to your provider at check-in</p>
+            <img src={dataUrl} alt="QR code" className="mx-auto rounded-2xl w-48 h-48" />
+            <p className="mt-3 font-mono text-xs text-[var(--muted)]">{code || bookingId}</p>
+            <button
+              onClick={() => setExpanded(false)}
+              className="mt-4 w-full rounded-xl bg-[var(--ink)] py-2.5 text-sm font-bold text-white"
+            >
+              Close
+            </button>
+          </div>
+        </>
+      )}
+    </>
+  );
+}
 
 const STATUS_CONFIG: Record<BookingStatus, { label: string; color: string; icon: React.ElementType }> = {
   PENDING_DEPOSIT: { label: "Awaiting deposit", color: "text-amber-600 bg-amber-50", icon: Clock },
@@ -369,7 +423,9 @@ export function AccountPortal({
   }
 
   const upcoming = bookings.filter((b) => isUpcoming(b));
-  const history = bookings.filter((b) => !isUpcoming(b));
+  const history = bookings
+    .filter((b) => !isUpcoming(b) && !shouldHideFromHistory(b))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const displayed = tab === "upcoming" ? upcoming : history;
 
   return (
@@ -500,14 +556,17 @@ export function AccountPortal({
                             </span>
                           )}
                         </div>
+                        <p className="mt-1 text-[10px] text-[var(--muted)]/70">
+                          Booked {formatDate(booking.createdAt)} at {formatTime(booking.createdAt)}
+                        </p>
                         <p className="mt-2 text-xs font-bold text-[var(--muted)]">
                           Deposit: {formatCurrency(booking.depositCents)}
                         </p>
-                        {booking.checkInCode && booking.status === "CONFIRMED" && (
-                          <div className="mt-3 inline-flex items-center gap-2 rounded-xl bg-pink-50 px-3 py-2 text-sm font-black text-[var(--brand)]">
-                            <QrCode className="h-4 w-4" />
-                            Check-in code: {booking.checkInCode}
-                          </div>
+                        {booking.status === "CONFIRMED" && (
+                          <BookingQrCode
+                            code={booking.checkInCode ?? ""}
+                            bookingId={booking.id}
+                          />
                         )}
                         {booking.status === "COMPLETED" && booking.feedbackRequestedAt && (
                           <div className="mt-3 rounded-xl border border-pink-100 bg-pink-50 p-3 text-sm text-[var(--ink)]">

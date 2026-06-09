@@ -31,14 +31,15 @@ export async function GET(request: Request, { params }: Params) {
     take: limit,
     include: {
       sender: { select: { id: true, name: true, image: true } },
-      reactions: { include: { user: { select: { id: true, name: true } } } }
+      reactions: { include: { user: { select: { id: true, name: true } } } },
+      replyTo: { select: { id: true, body: true, sender: { select: { name: true } } } }
     }
   });
 
   return NextResponse.json({ messages: messages.reverse() });
 }
 
-const sendSchema = z.object({ body: z.string().min(1).max(4000) });
+const sendSchema = z.object({ body: z.string().min(1).max(4000), replyToId: z.string().optional().nullable() });
 
 // POST /api/conversations/[id]/messages — send a message
 export async function POST(request: Request, { params }: Params) {
@@ -94,10 +95,11 @@ export async function POST(request: Request, { params }: Params) {
   }
 
   const message = await prisma.message.create({
-    data: { conversationId: id, senderId: me.id, body: parsed.data.body },
+    data: { conversationId: id, senderId: me.id, body: parsed.data.body, replyToId: parsed.data.replyToId ?? null },
     include: {
       sender: { select: { id: true, name: true, image: true } },
-      reactions: true
+      reactions: true,
+      replyTo: { select: { id: true, body: true, sender: { select: { name: true } } } }
     }
   });
 

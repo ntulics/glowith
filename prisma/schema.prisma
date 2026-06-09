@@ -57,6 +57,26 @@ enum BookingStatus {
   EXPIRED
 }
 
+enum BookingFor {
+  SELF
+  CHILD
+  OTHER
+}
+
+enum JobEmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  FREELANCE
+}
+
+enum JobApplicationStatus {
+  PENDING
+  REVIEWED
+  SHORTLISTED
+  REJECTED
+}
+
 // NextAuth required tables
 model Account {
   id                String  @id @default(cuid())
@@ -102,6 +122,13 @@ model User {
   role          UserRole  @default(CLIENT)
   totpSecret    String?
   totpEnabled   Boolean   @default(false)
+  phoneNumber   String?
+  phoneWhatsApp Boolean   @default(false)
+  addressLine1  String?
+  addressLine2  String?
+  city          String?
+  province      String?
+  postalCode    String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -172,7 +199,9 @@ model ProviderProfile {
   saves      SavedProvider[]
   ratings    Rating[]
   coupons    Coupon[]
-  amenities  ProviderAmenity[]
+  amenities        ProviderAmenity[]
+  jobPostings      JobPosting[]
+  jobApplications  JobApplication[]
 }
 
 model ProviderAmenity {
@@ -292,6 +321,9 @@ model Booking {
   noShowAt          DateTime?
   completedAt       DateTime?
   feedbackRequestedAt DateTime?
+  bookingFor        BookingFor    @default(SELF)
+  attendeeName      String?
+  attendeePhone     String?
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
@@ -354,6 +386,10 @@ model Message {
   createdAt      DateTime  @default(now())
   editedAt       DateTime?
 
+  replyToId      String?
+  replyTo        Message?          @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies        Message[]         @relation("MessageReplies")
+
   conversation Conversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender       User              @relation(fields: [senderId], references: [id], onDelete: Cascade, map: "Message_sender_fkey")
   reactions    MessageReaction[]
@@ -400,4 +436,37 @@ model SavedProvider {
   providerProfile ProviderProfile @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
 
   @@unique([userId, providerProfileId])
+}
+
+model JobPosting {
+  id                String            @id @default(cuid())
+  providerProfileId String
+  title             String
+  description       String            @db.Text
+  requirements      String?           @db.Text
+  employmentType    JobEmploymentType @default(FULL_TIME)
+  salaryCents       Int?
+  salaryType        String?
+  published         Boolean           @default(true)
+  closingDate       DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  provider     ProviderProfile  @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
+  applications JobApplication[]
+}
+
+model JobApplication {
+  id             String               @id @default(cuid())
+  jobPostingId   String
+  applicantId    String
+  coverLetter    String?              @db.Text
+  status         JobApplicationStatus @default(PENDING)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  jobPosting  JobPosting      @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
+  applicant   ProviderProfile @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+
+  @@unique([jobPostingId, applicantId])
 }
