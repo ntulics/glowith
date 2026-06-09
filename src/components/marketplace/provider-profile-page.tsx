@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type WheelEvent } from "react";
 import Image, { type ImageProps } from "next/image";
 import Link from "next/link";
 import { format } from "date-fns";
+import { AnimatePresence, motion } from "framer-motion";
 import { Accessibility, ArrowLeft, ArrowUpDown, Award, Baby, Bath, BellRing, CalendarDays, Camera, Car, ChevronLeft, ChevronRight, Clock3, Coffee, Cookie, Droplets, Flame, Gift, GlassWater, Grid3X3, Heart, HeartPulse, Home, Lamp, Layers, Leaf, Loader2, Lock, MapPin, Menu, MessageCircle, Music, Package, PawPrint, Share2, ShieldCheck, ShowerHead, Sofa, Sparkles, Star, Sun, Thermometer, TreePine, Tv, UserCheck, UserPlus, Users, VolumeX, Wind, Wifi, X, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VerifiedBadge } from "@/components/verified-badge";
@@ -91,6 +92,10 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
   const isIndividualProfile = isAgent || isFreelancer;
 
   const [book, setBook] = useState<BookTarget | null>(null);
+  const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
+  const [bookingStep, setBookingStep] = useState<"services" | "extras">("services");
+  const [notes, setNotes] = useState("");
+  const [photoGalleryOpen, setPhotoGalleryOpen] = useState(false);
   const [agentPopup, setAgentPopup] = useState<TeamMember | null>(null);
   const [agentProfile, setAgentProfile] = useState<Profile | null>(null);
   const [agentLoading, setAgentLoading] = useState(false);
@@ -177,14 +182,15 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
   };
 
   const amenities = profile.amenities ?? [];
+  const selectedService = selectedServiceId ? profile.services.find(s => s.id === selectedServiceId) : null;
 
   const sections = [
-    gridPhotos.length > 0 ? { id: "photos", label: "Photos" } : null,
     { id: "services", label: "Services" },
     team.length > 0 ? { id: "team", label: "Team" } : null,
     { id: "reviews", label: "Reviews" },
     amenities.length > 0 ? { id: "amenities", label: "Amenities" } : null,
-    { id: "about", label: "About" }
+    { id: "about", label: "About" },
+    gridPhotos.length > 0 ? { id: "photos", label: "Photos" } : null,
   ].filter(Boolean) as { id: string; label: string }[];
 
   function openBooking(serviceId?: string) {
@@ -511,7 +517,7 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
           {docked && (
             <nav className="hidden min-w-0 flex-1 items-center gap-1 overflow-x-auto md:flex">
               {sections.map((s) => (
-                <button key={s.id} onClick={() => scrollTo(s.id)}
+                <button key={s.id} onClick={() => s.id === "photos" ? setPhotoGalleryOpen(true) : scrollTo(s.id)}
                   className="shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold text-[var(--muted)] hover:bg-[var(--background)] hover:text-[var(--ink)]">
                   {s.label}
                 </button>
@@ -600,7 +606,7 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
         </div>
       )}
 
-      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+      <div className="mx-auto max-w-[90rem] px-4 py-6 sm:px-6">
         {/* ── Hero gallery (portfolio) — desktop only ── */}
         <div className="hidden gap-2 sm:grid sm:grid-cols-3 sm:grid-rows-2">
           <button onClick={() => openHeroLightbox(0)} className="relative aspect-[16/10] overflow-hidden rounded-2xl bg-[#f3e8e4] text-left sm:col-span-2 sm:row-span-2 sm:aspect-auto">
@@ -624,8 +630,8 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
                 </span>
               )}
               {i === 2 && gridPhotos.length > 0 && (
-                <span onClick={(e) => { e.stopPropagation(); scrollTo("photos"); }}
-                  className="absolute bottom-3 right-3 rounded-full bg-white/95 px-4 py-2 text-xs font-bold shadow hover:bg-white">
+                <span onClick={(e) => { e.stopPropagation(); setPhotoGalleryOpen(true); }}
+                  className="absolute bottom-3 right-3 rounded-full bg-white/95 px-4 py-2 text-xs font-bold shadow hover:bg-white cursor-pointer">
                   See all photos
                 </span>
               )}
@@ -655,7 +661,7 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
         {/* Inline section nav (docks into the top bar on scroll — see header) */}
         <nav className="mt-4 flex gap-1 overflow-x-auto border-b border-[var(--line)] py-2">
           {sections.map((s) => (
-            <button key={s.id} onClick={() => scrollTo(s.id)}
+            <button key={s.id} onClick={() => s.id === "photos" ? setPhotoGalleryOpen(true) : scrollTo(s.id)}
               className="shrink-0 rounded-full px-4 py-2 text-sm font-bold text-[var(--muted)] hover:bg-white hover:text-[var(--ink)]">
               {s.label}
             </button>
@@ -669,46 +675,7 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
         <div className="mt-6 lg:flex lg:gap-8">
           <main className="min-w-0 flex-1 space-y-10">
 
-            {/* Photos */}
-            {gridPhotos.length > 0 && (
-              <section id="photos" className="scroll-mt-28">
-                <h2 className="mb-4 text-xl font-black">Photos</h2>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  {gridPhotos.map((post) => {
-                    const svc = post.serviceId ? serviceById.get(post.serviceId) : undefined;
-                    const imgs = post.images?.length ? post.images : [post.imageUrl];
-                    return (
-                    <div key={post.id} className="group overflow-hidden rounded-2xl border border-[var(--line)] bg-white shadow-sm">
-                      <button onClick={() => setLightbox({ images: imgs, index: 0 })} className="relative block aspect-square w-full bg-[#f3e8e4]">
-                        <PortfolioImage src={post.imageUrl} alt={post.caption} fill sizes="300px" className="object-cover" />
-                        {imgs.length > 1 && (
-                          <span className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-black/55 px-1.5 py-0.5 text-[10px] font-bold text-white">
-                            <Layers className="h-3 w-3" /> {imgs.length}
-                          </span>
-                        )}
-                        {svc && (
-                          <span onClick={(e) => { e.stopPropagation(); openBooking(svc.id); }}
-                            className="absolute bottom-2 right-2 cursor-pointer rounded-full bg-[var(--brand)] px-3 py-1.5 text-xs font-black text-white shadow-md transition hover:bg-[var(--brand-dark)]">
-                            Book · {formatZAR(svc.priceCents)}
-                          </span>
-                        )}
-                      </button>
-                      <div className="p-3">
-                        <p className="line-clamp-1 text-xs font-semibold">{post.caption}</p>
-                        {svc ? (
-                          <p className="mt-1 text-[10px] font-semibold text-[var(--brand)]">{svc.name}</p>
-                        ) : (
-                          <p className="mt-1 text-[10px] text-[var(--muted)]">♥ {post.likes} · ⊕ {post.saves}</p>
-                        )}
-                      </div>
-                    </div>
-                    );
-                  })}
-                </div>
-              </section>
-            )}
-
-            {/* Services */}
+            {/* Services — selectable cards + in-place booking steps */}
             <section id="services" className="scroll-mt-28">
               <h2 className="mb-4 text-xl font-black">Services</h2>
               {categories.length > 1 && (
@@ -723,18 +690,44 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
                 </div>
               )}
               <div className="space-y-3">
-                {shownServices.map((service) => (
-                  <div key={service.id} className="flex items-center justify-between rounded-2xl border border-[var(--line)] bg-white px-5 py-4 shadow-sm">
-                    <div>
-                      <p className="font-bold">{service.name}</p>
-                      <p className="mt-0.5 flex items-center gap-1.5 text-xs text-[var(--muted)]"><Clock3 className="h-3 w-3" />{formatDuration(service.durationMinutes)}{service.performer ? ` · with ${service.performer}` : ""}</p>
-                      <p className="mt-1 text-sm font-black">{formatZAR(service.priceCents)}</p>
-                    </div>
-                    <button onClick={() => openBooking(service.id)} className="shrink-0 rounded-xl border border-[var(--line)] px-5 py-2 text-sm font-bold transition hover:border-[var(--brand)] hover:text-[var(--brand)]">
-                      Book
+                {shownServices.map((service) => {
+                  const isSelected = selectedServiceId === service.id;
+                  return (
+                    <button
+                      key={service.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedServiceId(isSelected ? null : service.id);
+                        setBookingStep("services");
+                        setNotes("");
+                      }}
+                      className={cn(
+                        "w-full rounded-2xl border px-5 py-4 text-left shadow-sm transition",
+                        isSelected
+                          ? "border-[var(--brand)] bg-[#FFF0F4]"
+                          : "border-[var(--line)] bg-white hover:border-[var(--brand)]/50"
+                      )}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-bold">{service.name}</p>
+                          <p className="mt-0.5 flex items-center gap-1.5 text-xs text-[var(--muted)]">
+                            <Clock3 className="h-3 w-3" />
+                            {formatDuration(service.durationMinutes)}
+                            {service.performer ? ` · with ${service.performer}` : ""}
+                          </p>
+                          <p className="mt-1 text-sm font-black">{formatZAR(service.priceCents)}</p>
+                        </div>
+                        <div className={cn(
+                          "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition",
+                          isSelected ? "border-[var(--brand)] bg-[var(--brand)]" : "border-[var(--line)]"
+                        )}>
+                          {isSelected && <span className="block h-2 w-2 rounded-full bg-white" />}
+                        </div>
+                      </div>
                     </button>
-                  </div>
-                ))}
+                  );
+                })}
                 {!showAllServices && (serviceCat === "All" ? profile.services.length : profile.services.filter((s) => s.category === serviceCat).length) > 4 && (
                   <button onClick={() => setShowAllServices(true)} className="rounded-full border border-[var(--line)] bg-white px-5 py-2.5 text-sm font-bold text-[var(--ink)] hover:border-[var(--brand)]">
                     See all
@@ -744,6 +737,52 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
                   <div className="rounded-2xl border border-dashed border-[var(--line)] py-12 text-center text-sm text-[var(--muted)]">No services listed yet</div>
                 )}
               </div>
+
+              {/* Continue button — appears once a service is selected */}
+              <AnimatePresence>
+                {selectedServiceId && bookingStep === "services" && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 8 }}
+                    className="mt-4"
+                  >
+                    <button
+                      onClick={() => setBookingStep("extras")}
+                      className="w-full rounded-xl bg-[var(--brand)] py-3.5 text-sm font-black text-white shadow-sm hover:bg-[var(--brand-dark)]"
+                    >
+                      Continue
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Step 2: Notes / Extras */}
+              <AnimatePresence>
+                {selectedServiceId && bookingStep === "extras" && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 12 }}
+                    className="mt-6 rounded-2xl border border-[var(--line)] bg-white p-5 shadow-sm"
+                  >
+                    <h3 className="mb-3 font-black">Any notes or requests?</h3>
+                    <textarea
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      rows={3}
+                      placeholder="Any allergies, notes or special requests?"
+                      className="w-full resize-none rounded-xl border border-[var(--line)] bg-[var(--background)] px-4 py-3 text-sm outline-none focus:border-[var(--brand)] focus:bg-white"
+                    />
+                    <button
+                      onClick={() => openBooking(selectedServiceId)}
+                      className="mt-4 w-full rounded-xl bg-[var(--ink)] py-3.5 text-sm font-black text-white shadow-sm hover:bg-[var(--ink)]/90"
+                    >
+                      Request booking · {selectedService ? formatZAR(selectedService.priceCents) : ""}
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </section>
 
             {/* Team */}
@@ -830,38 +869,185 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
                 <p className="text-xs text-[var(--muted)]">Member since {format(new Date(profile.memberSince), "MMMM yyyy")}</p>
               </div>
             </section>
+
+            {/* Photos — moved to end */}
+            {gridPhotos.length > 0 && (
+              <section id="photos" className="scroll-mt-28">
+                <h2 className="mb-4 text-xl font-black">Photos</h2>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  {gridPhotos.map((post) => {
+                    const svc = post.serviceId ? serviceById.get(post.serviceId) : undefined;
+                    const imgs = post.images?.length ? post.images : [post.imageUrl];
+                    return (
+                    <div key={post.id} className="group overflow-hidden rounded-2xl border border-[var(--line)] bg-white shadow-sm">
+                      <button onClick={() => setLightbox({ images: imgs, index: 0 })} className="relative block aspect-square w-full bg-[#f3e8e4]">
+                        <PortfolioImage src={post.imageUrl} alt={post.caption} fill sizes="300px" className="object-cover" />
+                        {imgs.length > 1 && (
+                          <span className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-black/55 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                            <Layers className="h-3 w-3" /> {imgs.length}
+                          </span>
+                        )}
+                        {svc && (
+                          <span onClick={(e) => { e.stopPropagation(); openBooking(svc.id); }}
+                            className="absolute bottom-2 right-2 cursor-pointer rounded-full bg-[var(--brand)] px-3 py-1.5 text-xs font-black text-white shadow-md transition hover:bg-[var(--brand-dark)]">
+                            Book · {formatZAR(svc.priceCents)}
+                          </span>
+                        )}
+                      </button>
+                      <div className="p-3">
+                        <p className="line-clamp-1 text-xs font-semibold">{post.caption}</p>
+                        {svc ? (
+                          <p className="mt-1 text-[10px] font-semibold text-[var(--brand)]">{svc.name}</p>
+                        ) : (
+                          <p className="mt-1 text-[10px] text-[var(--muted)]">♥ {post.likes} · ⊕ {post.saves}</p>
+                        )}
+                      </div>
+                    </div>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
           </main>
 
-          {/* ── Sticky book-now sidebar ── */}
-          <aside className="mt-8 lg:mt-0 lg:w-80 lg:shrink-0">
-            <div className="sticky top-[6rem] rounded-2xl border border-[var(--line)] bg-white p-6 shadow-sm">
-              <h2 className="text-lg font-black">{profile.businessName}</h2>
-              <button onClick={() => scrollTo("reviews")} className="mt-1 flex items-center gap-1.5 text-sm font-bold">
-                <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-                {ratingAvg != null ? ratingAvg.toFixed(1) : "New"}
-                <span className="font-semibold text-[var(--brand)]">({ratingCount})</span>
-              </button>
-              <button onClick={() => openBooking()} className="mt-4 w-full rounded-xl bg-[var(--ink)] py-3.5 text-sm font-bold text-white transition hover:bg-[var(--ink)]/90">
-                Book now
-              </button>
-              <button onClick={toggleFollow} disabled={followBusy}
-                className={cn("mt-2 flex w-full items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-bold transition disabled:opacity-60",
-                  following ? "border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]" : "border-[var(--line)] hover:border-[var(--brand)]")}>
-                {following ? <UserCheck className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
-                {following ? "Following" : "Follow"}
-                <span className="text-xs font-semibold text-[var(--muted)]">· {followers}</span>
-              </button>
-              <div className="mt-5 space-y-3 border-t border-[var(--line)] pt-4 text-sm">
-                <div className="flex items-start gap-2"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[var(--muted)]" /><span className="text-[var(--muted)]">{profile.city}</span></div>
-                <div className="flex items-center gap-2"><CalendarDays className="h-4 w-4 text-[var(--sage)]" /><span className="text-xs font-semibold text-[var(--muted)]">Book online to confirm instantly</span></div>
-                {isAgent && (
-                  <div className="rounded-xl bg-[var(--background)] p-3 text-xs text-[var(--muted)]">Works at <span className="font-bold text-[var(--ink)]">{profile.parentBusinessName}</span></div>
+          {/* ── Sticky sidebar — static or dynamic cart ── */}
+          <aside className="mt-8 lg:mt-0 lg:w-96 lg:shrink-0">
+            <div className="sticky top-[6rem] overflow-hidden rounded-2xl border border-[var(--line)] bg-white shadow-sm">
+              <AnimatePresence mode="wait">
+                {!selectedService ? (
+                  <motion.div
+                    key="empty-cart"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.15 }}
+                    className="p-6"
+                  >
+                    <h2 className="text-lg font-black">{profile.businessName}</h2>
+                    <button onClick={() => scrollTo("reviews")} className="mt-1 flex items-center gap-1.5 text-sm font-bold">
+                      <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+                      {ratingAvg != null ? ratingAvg.toFixed(1) : "New"}
+                      <span className="font-semibold text-[var(--brand)]">({ratingCount})</span>
+                    </button>
+                    <button onClick={() => openBooking()} className="mt-4 w-full rounded-xl bg-[var(--ink)] py-3.5 text-sm font-bold text-white transition hover:bg-[var(--ink)]/90">
+                      Book now
+                    </button>
+                    <button onClick={toggleFollow} disabled={followBusy}
+                      className={cn("mt-2 flex w-full items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-bold transition disabled:opacity-60",
+                        following ? "border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]" : "border-[var(--line)] hover:border-[var(--brand)]")}>
+                      {following ? <UserCheck className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
+                      {following ? "Following" : "Follow"}
+                      <span className="text-xs font-semibold text-[var(--muted)]">· {followers}</span>
+                    </button>
+                    <div className="mt-5 space-y-3 border-t border-[var(--line)] pt-4 text-sm">
+                      <div className="flex items-start gap-2"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[var(--muted)]" /><span className="text-[var(--muted)]">{profile.city}</span></div>
+                      <div className="flex items-center gap-2"><CalendarDays className="h-4 w-4 text-[var(--sage)]" /><span className="text-xs font-semibold text-[var(--muted)]">Book online to confirm instantly</span></div>
+                      {isAgent && (
+                        <div className="rounded-xl bg-[var(--background)] p-3 text-xs text-[var(--muted)]">Works at <span className="font-bold text-[var(--ink)]">{profile.parentBusinessName}</span></div>
+                      )}
+                    </div>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="with-service"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    transition={{ duration: 0.2 }}
+                    className="p-6"
+                  >
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-base font-black text-[var(--muted)]">Your selection</h2>
+                      <button
+                        onClick={() => { setSelectedServiceId(null); setBookingStep("services"); setNotes(""); }}
+                        className="text-xs font-bold text-[var(--brand)] hover:underline"
+                      >
+                        Change
+                      </button>
+                    </div>
+                    <div className="mt-3 rounded-xl border border-[var(--brand)]/30 bg-[#FFF0F4] p-4">
+                      <p className="font-black">{selectedService.name}</p>
+                      <p className="mt-1 flex items-center gap-1.5 text-xs text-[var(--muted)]">
+                        <Clock3 className="h-3 w-3" />
+                        {formatDuration(selectedService.durationMinutes)}
+                        {selectedService.performer ? ` · with ${selectedService.performer}` : ""}
+                      </p>
+                      <p className="mt-2 text-lg font-black">{formatZAR(selectedService.priceCents)}</p>
+                      {selectedService.depositCents > 0 && (
+                        <p className="mt-1 text-xs font-semibold text-[var(--muted)]">
+                          {formatZAR(selectedService.depositCents)} deposit to confirm
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => openBooking(selectedService.id)}
+                      className="mt-4 w-full rounded-xl bg-[var(--brand)] py-3.5 text-sm font-black text-white shadow-sm hover:bg-[var(--brand-dark)]"
+                    >
+                      Book {selectedService.name}
+                    </button>
+                    {notes ? (
+                      <div className="mt-3 rounded-xl border border-[var(--line)] bg-[var(--background)] p-3 text-xs text-[var(--muted)]">
+                        <span className="font-semibold text-[var(--ink)]">Notes: </span>{notes}
+                      </div>
+                    ) : (
+                      <p className="mt-3 text-center text-xs text-[var(--muted)]">Add notes in the services section below</p>
+                    )}
+                  </motion.div>
                 )}
-              </div>
+              </AnimatePresence>
             </div>
           </aside>
         </div>
       </div>
+
+      {/* ── Full-page photo gallery modal ── */}
+      {photoGalleryOpen && (
+        <div className="fixed inset-0 z-[70] overflow-y-auto bg-white">
+          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--line)] bg-white/95 px-5 py-4 backdrop-blur-md">
+            <h2 className="text-base font-black">All photos · {profile.businessName}</h2>
+            <button
+              onClick={() => setPhotoGalleryOpen(false)}
+              aria-label="Close"
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--line)] hover:bg-[var(--background)]"
+            >
+              <X className="h-5 w-5 text-[var(--muted)]" />
+            </button>
+          </div>
+          <div className="columns-2 gap-3 p-4 sm:columns-3 sm:gap-4 sm:p-6">
+            {profile.posts.map((post) => {
+              const imgs = post.images?.length ? post.images : [post.imageUrl];
+              return (
+                <div key={post.id} className="mb-3 break-inside-avoid overflow-hidden rounded-2xl border border-[var(--line)] bg-white shadow-sm sm:mb-4">
+                  <button
+                    onClick={() => { setPhotoGalleryOpen(false); setLightbox({ images: imgs, index: 0 }); }}
+                    className="relative block w-full bg-[#f3e8e4]"
+                  >
+                    <PortfolioImage
+                      src={post.imageUrl}
+                      alt={post.caption}
+                      width={600}
+                      height={600}
+                      className="w-full object-cover"
+                    />
+                  </button>
+                  <div className="p-3">
+                    {post.caption && <p className="text-xs font-semibold text-[var(--ink)]">{post.caption}</p>}
+                    {post.tags?.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {post.tags.map((tag) => (
+                          <span key={tag} className="rounded-full bg-[var(--background)] px-2 py-0.5 text-[10px] font-semibold text-[var(--muted)]">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Carousel lightbox */}
       {lightbox && (
