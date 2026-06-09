@@ -28,7 +28,6 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { MapSection } from "@/components/marketplace/map-section";
 import { SiteFooter } from "@/components/marketplace/site-footer";
-import { BookingFlow } from "@/components/marketplace/booking-flow";
 
 const categories: Array<ServiceCategory | "All"> = ["All", "Hair", "Nails", "Makeup", "Lashes", "Brows", "Barber", "Spa"];
 const fallbackLocation = { label: "Rosebank, Johannesburg", areaName: "Rosebank", lat: -26.1458, lng: 28.042 };
@@ -242,8 +241,6 @@ export function MarketplaceApp() {
     }).sort((a, b) => (distanceByProvider[a.id] ?? a.distanceKm) - (distanceByProvider[b.id] ?? b.distanceKm));
   }, [category, displayProviders, distanceByProvider, radiusKm, query]);
 
-  const [bookingOpen, setBookingOpen] = useState(false);
-  const [bookingServiceId, setBookingServiceId] = useState<string>("");
   const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -254,19 +251,12 @@ export function MarketplaceApp() {
   }, []);
 
   function openProvider(provider: Provider) {
-    if (loggedIn === true) {
-      setSelectedProvider(provider);
-      setSelectedServiceId(provider.services[0]?.id ?? "");
-      setBookingOpen(false);
-    } else {
-      router.push(`/provider/${provider.handle.replace("@", "")}`);
-    }
+    router.push(`/provider/${provider.handle.replace("@", "")}`);
   }
 
   function closeProvider() {
     setSelectedProvider(null);
     setSelectedServiceId("");
-    setBookingOpen(false);
   }
 
   function handleLocationChange(val: string) {
@@ -424,25 +414,9 @@ export function MarketplaceApp() {
             selectedService={selectedService}
             onServiceChange={(id) => { setSelectedServiceId(id); }}
             onClose={closeProvider}
-            onBook={(serviceId) => { setBookingServiceId(serviceId); setBookingOpen(true); }}
-            rightPanel={loggedIn === true}
           />
         )}
       </AnimatePresence>
-
-      {/* Full booking flow — opens over the panel */}
-      {selectedProvider && (
-        <BookingFlow
-          open={bookingOpen}
-          onClose={() => setBookingOpen(false)}
-          providerProfileId={selectedProvider.id}
-          providerName={selectedProvider.businessName}
-          services={selectedProvider.services}
-          preselectedServiceId={bookingServiceId || selectedServiceId}
-          providerRating={selectedProvider.rating}
-          providerReviewCount={selectedProvider.reviewCount}
-        />
-      )}
 
       <Footer />
 
@@ -1198,47 +1172,13 @@ function ProviderDrawer({
   selectedService,
   onServiceChange,
   onClose,
-  onBook,
-  rightPanel = false
 }: {
   provider: Provider;
   selectedServiceId: string;
   selectedService: { id: string; name: string; durationMinutes: number; priceCents: number; depositCents: number };
   onServiceChange: (id: string) => void;
   onClose: () => void;
-  onBook: (serviceId: string) => void;
-  rightPanel?: boolean;
 }) {
-  if (rightPanel) {
-    return (
-      <>
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onClick={onClose}
-          className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[2px]"
-        />
-        <motion.div
-          initial={{ x: "100%" }}
-          animate={{ x: 0 }}
-          exit={{ x: "100%" }}
-          transition={{ type: "spring", damping: 30, stiffness: 320 }}
-          className="fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col overflow-hidden bg-white shadow-2xl sm:max-w-lg"
-        >
-          <ProviderPanelContent
-            provider={provider}
-            selectedServiceId={selectedServiceId}
-            selectedService={selectedService}
-            onServiceChange={onServiceChange}
-            onClose={onClose}
-            onBook={onBook}
-          />
-        </motion.div>
-      </>
-    );
-  }
-
   return (
     <>
       <motion.div
@@ -1384,13 +1324,13 @@ function ProviderDrawer({
                     ))}
                   </div>
 
-                  <Button
-                    className="w-full rounded-xl bg-[var(--ink)] text-white hover:bg-[var(--ink)]/90"
-                    onClick={() => onBook(selectedServiceId)}
+                  <a
+                    href={`/provider/${provider.handle.replace("@", "")}`}
+                    className="focus-ring flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--ink)] py-2.5 text-sm font-bold text-white transition hover:bg-[var(--ink)]/90"
                   >
                     <CalendarDays className="h-4 w-4" />
                     Book {selectedService.name}
-                  </Button>
+                  </a>
                 </CardContent>
               </Card>
             </div>
@@ -1401,17 +1341,15 @@ function ProviderDrawer({
   );
 }
 
-/* ─── Right-side panel content (logged-in) ─────────────────── */
-
-function ProviderPanelContent({
-  provider, selectedServiceId, selectedService, onServiceChange, onClose, onBook
+// Unused — kept for potential future use
+function _ProviderPanelContent_unused({
+  provider, selectedServiceId, selectedService, onServiceChange, onClose
 }: {
   provider: Provider;
   selectedServiceId: string;
   selectedService: { id: string; name: string; durationMinutes: number; priceCents: number; depositCents: number };
   onServiceChange: (id: string) => void;
   onClose: () => void;
-  onBook: (serviceId: string) => void;
 }) {
   return (
     <div className="flex h-full flex-col">
@@ -1510,20 +1448,6 @@ function ProviderPanelContent({
             </div>
           </div>
         )}
-      </div>
-
-      {/* Sticky CTA */}
-      <div className="border-t border-[var(--line)] px-5 py-4">
-        <Button
-          className="w-full rounded-xl bg-[var(--ink)] text-white hover:bg-[var(--ink)]/90"
-          onClick={() => onBook(selectedServiceId)}
-        >
-          <CalendarDays className="h-4 w-4" />
-          Book {selectedService.name}
-        </Button>
-        <p className="mt-2 text-center text-xs text-[var(--muted)]">
-          {formatCurrency(selectedService.depositCents)} deposit · {selectedService.durationMinutes} min
-        </p>
       </div>
     </div>
   );
