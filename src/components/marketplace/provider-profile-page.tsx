@@ -467,32 +467,94 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
           </nav>
 
           <section id="individual-services" className="scroll-mt-24">
-            {serviceTiles.length > 0 ? (
-              <div className="grid grid-cols-3 gap-1 sm:gap-2">
-                {serviceTiles.map(({ service, post, image, images }) => (
-                  <div key={service.id} className="group relative aspect-square overflow-hidden bg-[#f3e8e4]">
-                    <button
-                      onClick={() => images.length ? setLightbox({ images, index: 0 }) : openBooking(service.id)}
-                      className="absolute inset-0"
-                      aria-label={service.name}
-                    >
-                      <PortfolioImage src={image} alt={service.name} fill sizes="33vw" className="object-cover transition duration-300 group-hover:scale-105" />
-                      {post?.images?.length ? (
-                        <Layers className="absolute right-2 top-2 h-5 w-5 text-white drop-shadow" />
-                      ) : null}
-                    </button>
-                    <button onClick={() => openBooking(service.id)} className="absolute bottom-2 right-2 rounded-full bg-[var(--brand)] px-3 py-1.5 text-[11px] font-black text-white shadow hover:bg-[var(--brand-dark)]">
-                      {formatZAR(service.priceCents)}
-                    </button>
-                    <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/65 to-transparent p-2 pr-20">
-                      <p className="line-clamp-2 text-xs font-black text-white">{service.name}</p>
+            <div className="space-y-3">
+              {profile.services.map((service) => {
+                const isSelected = selectedServiceId === service.id;
+                return (
+                  <button
+                    key={service.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedServiceId(isSelected ? null : service.id);
+                      setBookingStep("services");
+                      setNotes("");
+                    }}
+                    className={cn(
+                      "w-full rounded-2xl border px-5 py-4 text-left shadow-sm transition",
+                      isSelected
+                        ? "border-[var(--brand)] bg-[#FFF0F4]"
+                        : "border-[var(--line)] bg-white hover:border-[var(--brand)]/50"
+                    )}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-bold">{service.name}</p>
+                        <p className="mt-0.5 flex items-center gap-1.5 text-xs text-[var(--muted)]">
+                          <Clock3 className="h-3 w-3" />
+                          {formatDuration(service.durationMinutes)}
+                        </p>
+                        <p className="mt-1 text-sm font-black">{formatZAR(service.priceCents)}</p>
+                      </div>
+                      <div className={cn(
+                        "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition",
+                        isSelected ? "border-[var(--brand)] bg-[var(--brand)]" : "border-[var(--line)]"
+                      )}>
+                        {isSelected && <span className="block h-2 w-2 rounded-full bg-white" />}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-dashed border-[var(--line)] py-14 text-center text-sm text-[var(--muted)]">No services listed yet</div>
-            )}
+                  </button>
+                );
+              })}
+              {profile.services.length === 0 && (
+                <div className="rounded-2xl border border-dashed border-[var(--line)] py-14 text-center text-sm text-[var(--muted)]">No services listed yet</div>
+              )}
+            </div>
+
+            {/* Continue → extras */}
+            <AnimatePresence>
+              {selectedServiceId && bookingStep === "services" && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 8 }}
+                  className="mt-4"
+                >
+                  <button
+                    onClick={() => setBookingStep("extras")}
+                    className="w-full rounded-xl bg-[var(--brand)] py-3.5 text-sm font-black text-white shadow-sm hover:bg-[var(--brand-dark)]"
+                  >
+                    Continue
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Step 2: notes */}
+            <AnimatePresence>
+              {selectedServiceId && bookingStep === "extras" && (
+                <motion.div
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 12 }}
+                  className="mt-6 rounded-2xl border border-[var(--line)] bg-white p-5 shadow-sm"
+                >
+                  <h3 className="mb-3 font-black">Any notes or requests?</h3>
+                  <textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    rows={3}
+                    placeholder="Any allergies, notes or special requests?"
+                    className="w-full resize-none rounded-xl border border-[var(--line)] bg-[var(--background)] px-4 py-3 text-sm outline-none focus:border-[var(--brand)] focus:bg-white"
+                  />
+                  <button
+                    onClick={() => openBooking(selectedServiceId)}
+                    className="mt-3 w-full rounded-xl bg-[var(--brand)] py-3.5 text-sm font-black text-white shadow-sm hover:bg-[var(--brand-dark)]"
+                  >
+                    Book now
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </section>
         </main>
 
