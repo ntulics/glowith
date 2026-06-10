@@ -853,6 +853,8 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
                       onClick={() => {
                         setSelectedServiceId(isSelected ? null : service.id);
                         setBookingStep("services");
+                        setSelectedDate(null);
+                        setSelectedSlot(null);
                         setNotes("");
                       }}
                       className={cn(
@@ -892,120 +894,6 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
                 )}
               </div>
 
-              {/* Step 2: Date picker */}
-              <AnimatePresence>
-                {selectedServiceId && bookingStep !== "services" && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 8 }}
-                    className="mt-6"
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="font-black">Pick a date</h3>
-                      <button onClick={() => { setBookingStep("services"); setSelectedDate(null); setSelectedSlot(null); setNotes(""); }} className="text-xs font-bold text-[var(--brand)] hover:underline">Back</button>
-                    </div>
-                    <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
-                      {nextBookingDays(14).map((d) => {
-                        const sel = selectedDate && d.toDateString() === selectedDate.toDateString();
-                        return (
-                          <button key={d.toISOString()} onClick={() => { setSelectedDate(d); setSelectedSlot(null); setBookingStep("time"); }}
-                            className={cn("rounded-2xl border p-2.5 text-center transition",
-                              sel ? "border-[var(--brand)] bg-[#FFF0F4]" : "border-[var(--line)] bg-white hover:border-[var(--brand)]")}>
-                            <span className="block text-[10px] font-bold uppercase text-[var(--muted)]">{d.toLocaleDateString("en-ZA", { weekday: "short" })}</span>
-                            <span className="block text-base font-black">{d.getDate()}</span>
-                            <span className="block text-[10px] text-[var(--muted)]">{d.toLocaleDateString("en-ZA", { month: "short" })}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* Step 3: Time slots */}
-              <AnimatePresence>
-                {selectedServiceId && (bookingStep === "time" || bookingStep === "notes") && selectedDate && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 8 }}
-                    className="mt-6"
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="font-black">Choose a time</h3>
-                      <button onClick={() => { setBookingStep("date"); setSelectedSlot(null); }} className="text-xs font-bold text-[var(--brand)] hover:underline">Change date</button>
-                    </div>
-                    {busyLoading ? (
-                      <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-[var(--muted)]" /></div>
-                    ) : (
-                      <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
-                        {BOOKING_SLOTS.map((s) => {
-                          const disabled = isSlotDisabled(s.label);
-                          const sel = selectedSlot === s.label;
-                          return (
-                            <button key={s.label} disabled={disabled}
-                              onClick={() => { setSelectedSlot(s.label); setBookingStep("notes"); }}
-                              className={cn("rounded-xl border py-2.5 text-sm font-bold transition",
-                                sel ? "border-[var(--brand)] bg-[var(--brand)] text-white"
-                                  : disabled ? "cursor-not-allowed border-[var(--line)] bg-[var(--line)]/30 text-[var(--muted)]/40"
-                                  : "border-[var(--line)] bg-white hover:border-[var(--brand)]")}>
-                              {s.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                    <p className="mt-2 text-center text-xs text-[var(--muted)]">Duration: {formatDuration(selectedServiceDuration)}</p>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* Step 4: Notes then confirm */}
-              <AnimatePresence>
-                {selectedServiceId && bookingStep === "notes" && selectedDate && selectedSlot && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 12 }}
-                    className="mt-6 rounded-2xl border border-[var(--line)] bg-white p-5 shadow-sm"
-                  >
-                    <h3 className="mb-3 font-black">Any notes or requests?</h3>
-                    <textarea
-                      value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
-                      rows={3}
-                      placeholder="Allergies, preferences or special requests"
-                      className="w-full resize-none rounded-xl border border-[var(--line)] bg-[var(--background)] px-4 py-3 text-sm outline-none focus:border-[var(--brand)] focus:bg-white"
-                    />
-                    <button
-                      onClick={() => openBooking(selectedServiceId ?? undefined, selectedDate, selectedSlot)}
-                      className="mt-4 w-full rounded-xl bg-[var(--brand)] py-3.5 text-sm font-black text-white shadow-sm hover:bg-[var(--brand-dark)]"
-                    >
-                      Review &amp; confirm · {selectedService ? formatZAR(selectedService.priceCents) : ""}
-                    </button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* Initial Continue button — only shown at service selection step */}
-              <AnimatePresence>
-                {selectedServiceId && bookingStep === "services" && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 8 }}
-                    className="mt-4"
-                  >
-                    <button
-                      onClick={() => { setSelectedDate(null); setSelectedSlot(null); setBookingStep("date"); }}
-                      className="w-full rounded-xl bg-[var(--brand)] py-3.5 text-sm font-black text-white shadow-sm hover:bg-[var(--brand-dark)]"
-                    >
-                      Choose date &amp; time
-                    </button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
             </section>
 
             {/* Team */}
@@ -1177,44 +1065,96 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 10 }}
                     transition={{ duration: 0.2 }}
-                    className="p-6"
+                    className="divide-y divide-[var(--line)]"
                   >
-                    <div className="flex items-center justify-between">
-                      <h2 className="text-base font-black text-[var(--muted)]">Your selection</h2>
-                      <button
-                        onClick={() => { setSelectedServiceId(null); setBookingStep("services"); setNotes(""); }}
-                        className="text-xs font-bold text-[var(--brand)] hover:underline"
-                      >
+                    {/* Service pill */}
+                    <div className="flex items-center justify-between px-5 py-4">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-black">{selectedService.name}</p>
+                        <p className="flex items-center gap-1 text-xs text-[var(--muted)]">
+                          <Clock3 className="h-3 w-3" />{formatDuration(selectedService.durationMinutes)}
+                          <span className="mx-1">·</span>
+                          <span className="font-bold text-[var(--ink)]">{formatZAR(selectedService.priceCents)}</span>
+                        </p>
+                      </div>
+                      <button onClick={() => { setSelectedServiceId(null); setBookingStep("services"); setSelectedDate(null); setSelectedSlot(null); setNotes(""); }}
+                        className="ml-3 shrink-0 text-xs font-bold text-[var(--brand)] hover:underline">
                         Change
                       </button>
                     </div>
-                    <div className="mt-3 rounded-xl border border-[var(--brand)]/30 bg-[#FFF0F4] p-4">
-                      <p className="font-black">{selectedService.name}</p>
-                      <p className="mt-1 flex items-center gap-1.5 text-xs text-[var(--muted)]">
-                        <Clock3 className="h-3 w-3" />
-                        {formatDuration(selectedService.durationMinutes)}
-                        {selectedService.performer ? ` · with ${selectedService.performer}` : ""}
-                      </p>
-                      <p className="mt-2 text-lg font-black">{formatZAR(selectedService.priceCents)}</p>
-                      {selectedService.depositCents > 0 && (
-                        <p className="mt-1 text-xs font-semibold text-[var(--muted)]">
-                          {formatZAR(selectedService.depositCents)} deposit to confirm
-                        </p>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => openBooking(selectedService.id, selectedDate, selectedSlot)}
-                      className="mt-4 w-full rounded-xl bg-[var(--brand)] py-3.5 text-sm font-black text-white shadow-sm hover:bg-[var(--brand-dark)]"
-                    >
-                      {selectedDate && selectedSlot ? "Review & confirm" : "Book"} {selectedService.name}
-                    </button>
-                    {notes ? (
-                      <div className="mt-3 rounded-xl border border-[var(--line)] bg-[var(--background)] p-3 text-xs text-[var(--muted)]">
-                        <span className="font-semibold text-[var(--ink)]">Notes: </span>{notes}
+
+                    {/* Date grid */}
+                    <div className="px-5 py-4">
+                      <p className="mb-3 text-sm font-black">Pick a date</p>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {nextBookingDays(14).map((d) => {
+                          const sel = selectedDate && d.toDateString() === selectedDate.toDateString();
+                          return (
+                            <button key={d.toISOString()}
+                              onClick={() => { setSelectedDate(d); setSelectedSlot(null); if (bookingStep === "services" || bookingStep === "date") setBookingStep("time"); }}
+                              className={cn("rounded-xl border p-2 text-center transition",
+                                sel ? "border-[var(--brand)] bg-[#FFF0F4]" : "border-[var(--line)] bg-[var(--background)] hover:border-[var(--brand)]")}>
+                              <span className="block text-[9px] font-bold uppercase text-[var(--muted)]">{d.toLocaleDateString("en-ZA", { weekday: "short" })}</span>
+                              <span className="block text-sm font-black">{d.getDate()}</span>
+                              <span className="block text-[9px] text-[var(--muted)]">{d.toLocaleDateString("en-ZA", { month: "short" })}</span>
+                            </button>
+                          );
+                        })}
                       </div>
-                    ) : (
-                      <p className="mt-3 text-center text-xs text-[var(--muted)]">Add notes in the services section below</p>
-                    )}
+                    </div>
+
+                    {/* Time slots — appear once date picked */}
+                    <AnimatePresence>
+                      {selectedDate && (
+                        <motion.div key="times" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
+                          <div className="px-5 py-4">
+                            <p className="mb-3 text-sm font-black">
+                              {selectedDate.toLocaleDateString("en-ZA", { weekday: "long", day: "numeric", month: "long" })}
+                            </p>
+                            {busyLoading ? (
+                              <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-[var(--muted)]" /></div>
+                            ) : (
+                              <div className="grid grid-cols-3 gap-1.5">
+                                {BOOKING_SLOTS.map((s) => {
+                                  const disabled = isSlotDisabled(s.label);
+                                  const sel = selectedSlot === s.label;
+                                  return (
+                                    <button key={s.label} disabled={disabled}
+                                      onClick={() => { setSelectedSlot(s.label); setBookingStep("notes"); }}
+                                      className={cn("rounded-xl border py-2 text-xs font-bold transition",
+                                        sel ? "border-[var(--brand)] bg-[var(--brand)] text-white"
+                                          : disabled ? "cursor-not-allowed border-[var(--line)] bg-[var(--line)]/20 text-[var(--muted)]/40"
+                                          : "border-[var(--line)] bg-white hover:border-[var(--brand)]")}>
+                                      {s.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    {/* Notes + confirm — appear once time picked */}
+                    <AnimatePresence>
+                      {selectedDate && selectedSlot && (
+                        <motion.div key="notes" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
+                          <div className="px-5 py-4">
+                            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2}
+                              placeholder="Allergies, preferences or special requests (optional)"
+                              className="w-full resize-none rounded-xl border border-[var(--line)] bg-[var(--background)] px-3 py-2.5 text-sm outline-none focus:border-[var(--brand)] focus:bg-white" />
+                            <button onClick={() => openBooking(selectedService.id, selectedDate, selectedSlot)}
+                              className="mt-3 w-full rounded-xl bg-[var(--brand)] py-3.5 text-sm font-black text-white shadow-sm hover:bg-[var(--brand-dark)]">
+                              Review &amp; confirm · {formatZAR(selectedService.priceCents)}
+                            </button>
+                            {selectedService.depositCents > 0 && (
+                              <p className="mt-2 text-center text-xs text-[var(--muted)]">{formatZAR(selectedService.depositCents)} deposit to confirm</p>
+                            )}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </motion.div>
                 )}
               </AnimatePresence>
