@@ -46,7 +46,7 @@ type Step = "service" | "artist" | "date" | "time" | "auth" | "review" | "pay" |
 export function BookingFlow({
   open, onClose,
   providerProfileId, providerName, services, preselectedServiceId,
-  preselectedDate, preselectedSlot,
+  preselectedDate, preselectedSlot, startStep,
   providerRating, providerReviewCount, providerAvatarUrl,
   drawer = false,
   userHasAddress
@@ -56,6 +56,7 @@ export function BookingFlow({
   services: Service[]; preselectedServiceId?: string | null;
   preselectedDate?: Date | null;
   preselectedSlot?: string | null;
+  startStep?: Step;
   providerRating?: number;
   providerReviewCount?: number;
   providerAvatarUrl?: string | null;
@@ -148,8 +149,17 @@ export function BookingFlow({
     setNotes(""); setServiceCat("All");
     setSelectedAgent(undefined); setAssignedAgent(null);
     setAgents([]);
-    setStep(preselectedServiceId ? "date" : "service");
-    fetch("/api/auth/session").then((r) => r.json()).then((s) => setAuthed(!!s?.user)).catch(() => setAuthed(false));
+    if (startStep) {
+      setStep(startStep);
+    } else {
+      setStep(preselectedServiceId ? "date" : "service");
+    }
+    fetch("/api/auth/session").then((r) => r.json()).then((s) => {
+      const isAuthed = !!s?.user;
+      setAuthed(isAuthed);
+      // If we jumped straight to review but user is not signed in, drop to auth
+      if (startStep === "review" && !isAuthed) setStep("auth");
+    }).catch(() => setAuthed(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
