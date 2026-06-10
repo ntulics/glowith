@@ -448,15 +448,19 @@ export function BookingFlow({
       </div>
     </>
   ) : (
-    <div className="fixed inset-0 z-[60] flex flex-col bg-[var(--background)]">
-      {children}
-    </div>
+    <>
+      <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      {/* Mobile: bottom sheet — Desktop: centered dialog */}
+      <div className="fixed inset-x-0 bottom-0 z-[61] flex max-h-[92dvh] flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:inset-0 sm:m-auto sm:h-fit sm:max-h-[88dvh] sm:max-w-lg sm:rounded-3xl">
+        {children}
+      </div>
+    </>
   );
 
   return drawerWrapper(
     <>
       {/* Top bar */}
-      <div className="flex shrink-0 items-center gap-4 border-b border-[var(--line)] bg-white px-4 py-3">
+      <div className="flex shrink-0 items-center gap-3 border-b border-[var(--line)] bg-white px-4 py-2.5">
         {step === "service" ? (
           <button onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--line)] hover:bg-[var(--background)]"><ArrowLeft className="h-4 w-4" /></button>
         ) : (
@@ -602,7 +606,7 @@ export function BookingFlow({
         </div>
       ) : (
         /* ── Other steps ── */
-        <div className="flex flex-1 flex-col overflow-y-auto px-4 py-5">
+        <div className="flex flex-1 flex-col overflow-y-auto px-4 py-4">
           <div className="w-full max-w-lg mx-auto">
             <AnimatePresence mode="wait">
               <motion.div key={step} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.2 }}>
@@ -689,17 +693,17 @@ export function BookingFlow({
                 {/* ── Auth ── */}
                 {step === "auth" && (
                   <Section title="Sign in to confirm" onBack={() => setStep(hasPreselectedDateTime ? (agents.length > 1 ? "artist" : "service") : "time")}>
-                    <div className="mb-4 flex gap-2">
+                    <div className="mb-3 flex gap-2">
                       <button onClick={() => setAuthMode("signin")} className={`flex-1 rounded-xl border py-2 text-sm font-bold ${authMode === "signin" ? "border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]" : "border-[var(--line)]"}`}>Sign in</button>
                       <button onClick={() => setAuthMode("register")} className={`flex-1 rounded-xl border py-2 text-sm font-bold ${authMode === "register" ? "border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]" : "border-[var(--line)]"}`}>Create account</button>
                     </div>
-                    <div className="space-y-3">
-                      {authMode === "register" && <input value={authName} onChange={(e) => setAuthName(e.target.value)} placeholder="Your name" className="w-full rounded-xl border border-[var(--line)] bg-white px-4 py-3 text-sm outline-none focus:border-[var(--brand)]" />}
-                      <input value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} type="email" placeholder="Email" className="w-full rounded-xl border border-[var(--line)] bg-white px-4 py-3 text-sm outline-none focus:border-[var(--brand)]" />
-                      <input value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} type="password" placeholder="Password" className="w-full rounded-xl border border-[var(--line)] bg-white px-4 py-3 text-sm outline-none focus:border-[var(--brand)]" />
+                    <div className="space-y-2.5">
+                      {authMode === "register" && <input value={authName} onChange={(e) => setAuthName(e.target.value)} placeholder="Your name" className="w-full rounded-xl border border-[var(--line)] bg-white px-4 py-2.5 text-sm outline-none focus:border-[var(--brand)]" />}
+                      <input value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} type="email" placeholder="Email" className="w-full rounded-xl border border-[var(--line)] bg-white px-4 py-2.5 text-sm outline-none focus:border-[var(--brand)]" />
+                      <input value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} type="password" placeholder="Password" className="w-full rounded-xl border border-[var(--line)] bg-white px-4 py-2.5 text-sm outline-none focus:border-[var(--brand)]" />
                     </div>
                     <button onClick={doAuth} disabled={submitting || !authEmail || !authPassword || (authMode === "register" && !authName)}
-                      className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] py-3 text-sm font-bold text-white hover:bg-[var(--brand-dark)] disabled:opacity-50">
+                      className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] py-3 text-sm font-bold text-white hover:bg-[var(--brand-dark)] disabled:opacity-50">
                       {submitting && <Loader2 className="h-4 w-4 animate-spin" />} Continue
                     </button>
                   </Section>
@@ -708,51 +712,54 @@ export function BookingFlow({
                 {/* ── Review ── */}
                 {step === "review" && selectedServices.length > 0 && date && slot && (
                   <Section title="Review & confirm" onBack={() => setStep(authed === false ? "auth" : (hasPreselectedDateTime ? (agents.length > 1 ? "artist" : "service") : "time"))}>
-                    <ProviderCard showChange />
-                    <div className="mt-4 space-y-3 rounded-2xl border border-[var(--line)] bg-white p-4">
-                      {selectedServices.map((s) => <Row key={s.id} label={s.name} value={ZAR(s.priceCents)} sub={fmtDur(s.durationMinutes)} />)}
+                    {/* Compact summary */}
+                    <div className="space-y-1.5 rounded-2xl border border-[var(--line)] bg-white p-3.5 text-sm">
+                      {selectedServices.map((s) => (
+                        <div key={s.id} className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-bold">{s.name}</p>
+                            <p className="text-xs text-[var(--muted)]">{fmtDur(s.durationMinutes)}</p>
+                          </div>
+                          <span className="shrink-0 font-black">{ZAR(s.priceCents)}</span>
+                        </div>
+                      ))}
                       {selectedExtras.map((e) => <Row key={e.id} label={`+ ${e.name}`} value={e.priceCents > 0 ? `+${ZAR(e.priceCents)}` : "Free"} highlight />)}
-                      <div className="border-t border-[var(--line)] pt-3">
-                        <Row label="Date" value={date.toLocaleDateString("en-ZA", { weekday: "long", day: "numeric", month: "long" })} />
-                        <Row label="Time" value={slot} />
-                        <Row label="Duration" value={fmtDur(totalDuration)} />
+                      <div className="border-t border-[var(--line)] pt-2 space-y-1">
+                        <div className="flex items-center justify-between text-xs text-[var(--muted)]">
+                          <span>{date.toLocaleDateString("en-ZA", { weekday: "short", day: "numeric", month: "short" })} at {slot}</span>
+                          <span>{fmtDur(totalDuration)}</span>
+                        </div>
                       </div>
-                      {appliedCode && <Row label={`Coupon ${appliedCode} (${couponLabel})`} value={`– ${ZAR(discountCents)}`} highlight />}
-                      <div className="border-t border-[var(--line)] pt-3">
-                        <Row label="Total" value={ZAR(finalTotal)} bold />
-                        {depositDueAtCheckout > 0 && <Row label="Deposit at checkout" value={ZAR(depositDueAtCheckout)} highlight />}
+                      {appliedCode && <Row label={`Coupon (${couponLabel})`} value={`– ${ZAR(discountCents)}`} highlight />}
+                      <div className="border-t border-[var(--line)] pt-2 flex items-center justify-between font-black">
+                        <span>Total</span><span>{ZAR(finalTotal)}</span>
                       </div>
+                      {depositDueAtCheckout > 0 && <p className="text-xs text-[var(--brand)] font-semibold">{ZAR(depositDueAtCheckout)} deposit to confirm</p>}
                     </div>
 
-                    <div className="mt-3">
+                    {/* Coupon */}
+                    <div className="mt-2">
                       {appliedCode ? (
                         <button onClick={() => { setAppliedCode(null); setDiscountCents(0); setCouponInput(""); }} className="text-xs font-bold text-[var(--brand)] hover:underline">Remove coupon</button>
                       ) : (
                         <div className="flex gap-2">
                           <input value={couponInput} onChange={(e) => setCouponInput(e.target.value.toUpperCase())} placeholder="Coupon code"
-                            className="flex-1 rounded-xl border border-[var(--line)] bg-white px-4 py-2.5 text-sm uppercase outline-none focus:border-[var(--brand)]" />
+                            className="flex-1 rounded-xl border border-[var(--line)] bg-white px-3 py-2 text-sm uppercase outline-none focus:border-[var(--brand)]" />
                           <button onClick={applyCoupon} disabled={applyingCoupon || !couponInput.trim()}
-                            className="rounded-xl border border-[var(--line)] px-4 py-2.5 text-sm font-bold hover:border-[var(--brand)] disabled:opacity-50">{applyingCoupon ? "…" : "Apply"}</button>
+                            className="rounded-xl border border-[var(--line)] px-3 py-2 text-sm font-bold hover:border-[var(--brand)] disabled:opacity-50">{applyingCoupon ? "…" : "Apply"}</button>
                         </div>
                       )}
                       {couponError && <p className="mt-1 text-xs font-semibold text-red-500">{couponError}</p>}
                     </div>
+
                     {/* Booking for */}
-                    <div className="mt-4 space-y-2">
-                      <p className="text-xs font-bold uppercase tracking-wider text-[var(--muted)]">Booking for</p>
-                      <div className="grid grid-cols-3 gap-2">
+                    <div className="mt-3">
+                      <p className="mb-1.5 text-xs font-bold uppercase tracking-wider text-[var(--muted)]">Booking for</p>
+                      <div className="grid grid-cols-3 gap-1.5">
                         {(["SELF", "CHILD", "OTHER"] as const).map((v) => (
-                          <button
-                            key={v}
-                            type="button"
-                            onClick={() => setBookingFor(v)}
-                            className={cn(
-                              "rounded-xl border py-2.5 text-xs font-bold transition",
-                              bookingFor === v
-                                ? "bg-[var(--ink)] border-[var(--ink)] text-white"
-                                : "border-[var(--line)] text-[var(--muted)] hover:border-[var(--brand)] hover:text-[var(--ink)]"
-                            )}
-                          >
+                          <button key={v} type="button" onClick={() => setBookingFor(v)}
+                            className={cn("rounded-xl border py-2 text-xs font-bold transition",
+                              bookingFor === v ? "bg-[var(--ink)] border-[var(--ink)] text-white" : "border-[var(--line)] text-[var(--muted)] hover:border-[var(--brand)] hover:text-[var(--ink)]")}>
                             {v === "SELF" ? "Myself" : v === "CHILD" ? "A child" : "Someone else"}
                           </button>
                         ))}
@@ -760,50 +767,28 @@ export function BookingFlow({
                       {bookingFor === "CHILD" && userHasAddress === false && (
                         <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
                           <p className="text-xs font-bold text-amber-800">Address required for minor bookings</p>
-                          <p className="mt-1 text-xs text-amber-700 leading-5">
-                            Your address is required when booking for a minor. It is used for statistics only and is never shown to the provider.
-                          </p>
-                          <a
-                            href="/account/settings"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="mt-2 inline-flex items-center gap-1 rounded-lg bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-900 hover:bg-amber-200 transition"
-                          >
+                          <a href="/account/settings" target="_blank" rel="noopener noreferrer"
+                            className="mt-1.5 inline-flex items-center gap-1 rounded-lg bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-900 hover:bg-amber-200 transition">
                             Add address in Settings →
                           </a>
                         </div>
                       )}
                       {(bookingFor === "CHILD" || bookingFor === "OTHER") && (
                         <div className="mt-2 space-y-2 rounded-xl border border-[var(--line)] bg-[var(--background)] p-3">
-                          {bookingFor === "CHILD" && (
-                            <p className="text-xs text-[var(--muted)] font-semibold">QR code will be used for both check-in and check-out of the child.</p>
-                          )}
-                          {bookingFor === "OTHER" && (
-                            <p className="text-xs text-[var(--muted)] font-semibold">They will need the booking code to check in.</p>
-                          )}
-                          <input
-                            value={attendeeName}
-                            onChange={(e) => setAttendeeName(e.target.value)}
+                          <input value={attendeeName} onChange={(e) => setAttendeeName(e.target.value)}
                             placeholder={bookingFor === "CHILD" ? "Child's full name" : "Full name"}
-                            className="w-full rounded-xl border border-[var(--line)] bg-white px-4 py-2.5 text-sm outline-none focus:border-[var(--brand)]"
-                          />
-                          <input
-                            value={attendeePhone}
-                            onChange={(e) => setAttendeePhone(e.target.value)}
+                            className="w-full rounded-xl border border-[var(--line)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--brand)]" />
+                          <input value={attendeePhone} onChange={(e) => setAttendeePhone(e.target.value)}
                             placeholder={bookingFor === "OTHER" ? "Their phone number" : "Emergency contact (optional)"}
-                            type="tel"
-                            className="w-full rounded-xl border border-[var(--line)] bg-white px-4 py-2.5 text-sm outline-none focus:border-[var(--brand)]"
-                          />
+                            type="tel" className="w-full rounded-xl border border-[var(--line)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--brand)]" />
                         </div>
                       )}
                     </div>
+
                     <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Anything the provider should know? (optional)"
-                      className="mt-3 w-full resize-none rounded-xl border border-[var(--line)] bg-white px-4 py-3 text-sm outline-none focus:border-[var(--brand)]" />
-                    <button
-                      onClick={confirm}
-                      disabled={submitting || (bookingFor === "CHILD" && userHasAddress === false)}
-                      className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] py-3.5 text-sm font-black text-white hover:bg-[var(--brand-dark)] disabled:opacity-50"
-                    >
+                      className="mt-3 w-full resize-none rounded-xl border border-[var(--line)] bg-white px-3 py-2.5 text-sm outline-none focus:border-[var(--brand)]" />
+                    <button onClick={confirm} disabled={submitting || (bookingFor === "CHILD" && userHasAddress === false)}
+                      className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] py-3.5 text-sm font-black text-white hover:bg-[var(--brand-dark)] disabled:opacity-50">
                       {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
                       {depositDueAtCheckout > 0 ? "Continue to payment" : "Confirm booking"}
                     </button>
