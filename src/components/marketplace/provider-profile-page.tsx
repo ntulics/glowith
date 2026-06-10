@@ -206,8 +206,12 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
     if (host.endsWith(".glowith.co.za")) window.location.href = "https://glowith.co.za/";
     else window.location.href = "/";
   }
-  // Load an agent's full profile to render natively inside the popup.
+  // On mobile, navigate directly to the agent's page; on desktop show the popup.
   function openAgent(m: TeamMember) {
+    if (typeof window !== "undefined" && window.innerWidth < 1024) {
+      window.location.href = `/team/${m.handle.replace("@", "")}`;
+      return;
+    }
     setAgentPopup(m);
     setAgentProfile(null);
     setAgentLoading(true);
