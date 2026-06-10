@@ -9,6 +9,7 @@ import { Accessibility, ArrowLeft, ArrowUpDown, Award, Baby, Bath, BellRing, Cal
 import { cn } from "@/lib/utils";
 import { VerifiedBadge } from "@/components/verified-badge";
 import { BookingFlow } from "@/components/marketplace/booking-flow";
+import { AgentProfilePage } from "@/components/marketplace/agent-profile-page";
 import { AMENITY_CATEGORIES, AMENITY_MAP } from "@/lib/amenities";
 
 type Service = { id: string; name: string; category: string; durationMinutes: number; priceCents: number; depositCents: number; performer?: string | null };
@@ -1218,9 +1219,9 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
 
       {/* Agent full profile in a popup (rendered natively) */}
       {agentPopup && (
-        <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/60 p-2 sm:p-6"
+        <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/60 p-2 sm:p-4"
           onClick={() => { setAgentPopup(null); setAgentProfile(null); }}>
-          <div className="relative flex h-full max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="relative flex h-full max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-[var(--line)] px-4 py-2.5">
               <p className="text-sm font-black">{agentPopup.name} · {agentPopup.role}</p>
               <button onClick={() => { setAgentPopup(null); setAgentProfile(null); }} aria-label="Close"
@@ -1230,7 +1231,33 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
               {agentLoading || !agentProfile ? (
                 <div className="flex h-full items-center justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-[var(--muted)]" /></div>
               ) : (
-                <ProviderProfilePage profile={agentProfile} embed />
+                <AgentProfilePage profile={{
+                  id: agentProfile.id,
+                  userId: agentProfile.userId ?? "",
+                  handle: agentProfile.handle,
+                  businessName: agentProfile.businessName,
+                  name: agentProfile.name,
+                  category: agentProfile.category,
+                  bio: agentProfile.bio,
+                  city: agentProfile.city,
+                  avatarUrl: agentProfile.avatarUrl,
+                  verified: agentProfile.verified,
+                  verifiedBy: agentProfile.verifiedBy ?? undefined,
+                  memberSince: agentProfile.memberSince,
+                  appointmentsCompleted: agentProfile.appointmentsCompleted,
+                  followerCount: 0,
+                  followingCount: 0,
+                  reviewCount: 0,
+                  averageRating: 0,
+                  parentBusinessName: profile.businessName,
+                  parentBusinessHandle: profile.handle,
+                  parentBusinessCity: profile.city,
+                  parentBusinessAvatarUrl: profile.avatarUrl,
+                  parentBusinessVerified: profile.verified,
+                  employmentConfirmed: true,
+                  services: agentProfile.services,
+                  posts: agentProfile.posts.map((p) => ({ ...p, images: p.images ?? [], featured: p.featured ?? false })),
+                }} />
               )}
             </div>
           </div>
