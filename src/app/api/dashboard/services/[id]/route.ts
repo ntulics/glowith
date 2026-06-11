@@ -2,10 +2,19 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-async function getOwnedService(userId: string, serviceId: string) {
-  const profile = await prisma.providerProfile.findUnique({ where: { userId }, select: { id: true } });
+// Returns the service if the user owns it directly OR owns it via their agent relationship
+// (business owners can manage their agents' services).
+async function getAccessibleService(userId: string, serviceId: string) {
+  const profile = await prisma.providerProfile.findUnique({
+    where: { userId },
+    select: { id: true, agents: { select: { id: true } } }
+  });
   if (!profile) return null;
-  const service = await prisma.service.findFirst({ where: { id: serviceId, providerProfileId: profile.id } });
+
+  const allowedProfileIds = [profile.id, ...profile.agents.map((a) => a.id)];
+  const service = await prisma.service.findFirst({
+    where: { id: serviceId, providerProfileId: { in: allowedProfileIds } }
+  });
   return service;
 }
 
@@ -15,7 +24,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
   const { id } = await params;
   const userId = (session.user as any).id as string;
-  const owned = await getOwnedService(userId, id);
+  const owned = await getAccessibleService(userId, id);
   if (!owned) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const body = await request.json();
@@ -47,7 +56,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const { id } = await params;
   const userId = (session.user as any).id as string;
-  const owned = await getOwnedService(userId, id);
+  const owned = await getAccessibleService(userId, id);
   if (!owned) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const body = await request.json();
@@ -61,7 +70,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
 
   const { id } = await params;
   const userId = (session.user as any).id as string;
-  const owned = await getOwnedService(userId, id);
+  const owned = await getAccessibleService(userId, id);
   if (!owned) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   // If the service has bookings we can't hard-delete (FK constraint).

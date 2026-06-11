@@ -5,10 +5,19 @@ import { geocodeQuery } from "@/lib/geocode";
 
 // Public marketplace list — real DB providers (businesses & standalone freelancers)
 // that have at least one active service and one portfolio photo, shaped for the cards.
-export async function GET() {
+// When called from the freelancer subdomain (x-tenant-slug: freelancer), only FREELANCER type is returned.
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const typeParam = url.searchParams.get("type");
+  const tenantSlug = request.headers.get("x-tenant-slug");
+  const freelancerOnly = typeParam === "freelancer" || tenantSlug === "freelancer";
+  const providerTypeFilter = freelancerOnly
+    ? ({ in: ["FREELANCER"] } as any)
+    : ({ in: ["BUSINESS", "FREELANCER"] } as any);
+
   const profiles = await prisma.providerProfile.findMany({
     where: {
-      providerType: { in: ["BUSINESS", "FREELANCER"] },
+      providerType: providerTypeFilter,
       parentBusinessId: null,
       services: { some: { active: true } },
       posts: { some: {} }

@@ -77,15 +77,17 @@ function getHeroHeadline(areaName: string | null, hIdx: number, sIdx: number): {
   return { phrase: HERO_HEADLINES[hIdx % HERO_HEADLINES.length], areaLine: where, subtext: sub };
 }
 
-export function MarketplaceApp() {
+export function MarketplaceApp({ tenantSlug }: { tenantSlug?: string }) {
   const router = useRouter();
+  const isFreelancer = tenantSlug === "freelancer";
   // Real DB providers (falls back to seed data until/if the API responds empty)
   const [providers, setProviders] = useState<Provider[]>(seedProviders);
   const [newProviders, setNewProviders] = useState<Provider[]>([]);
   const [trendingProviders, setTrendingProviders] = useState<Provider[]>([]);
 
   useEffect(() => {
-    fetch("/api/providers/list")
+    const listUrl = isFreelancer ? "/api/providers/list?type=freelancer" : "/api/providers/list";
+    fetch(listUrl)
       .then((r) => r.json())
       .then((d) => { if (Array.isArray(d.providers) && d.providers.length) setProviders(d.providers); })
       .catch(() => {});
@@ -97,7 +99,7 @@ export function MarketplaceApp() {
       .then((r) => r.json())
       .then((d) => { if (Array.isArray(d.providers)) setTrendingProviders(d.providers); })
       .catch(() => {});
-  }, []);
+  }, [isFreelancer]);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<ServiceCategory | "All">("All");
   const [locationQuery, setLocationQuery] = useState("Detecting location…");

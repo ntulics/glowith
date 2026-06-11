@@ -36,17 +36,17 @@ export function middleware(request: NextRequest) {
     const segments = url.pathname.split("/").filter(Boolean);
     if (segments.length === 1) {
       // freelancer.glowith.co.za/naledi → public provider profile
-      // (the /provider/[handle] page prepends the "@", so pass the bare slug)
       url.pathname = `/provider/${segments[0]}`;
       const res = NextResponse.rewrite(url);
       res.headers.set("x-tenant-slug", "freelancer");
       return res;
     }
 
-    // Root → apex marketplace
-    url.hostname = parts.slice(1).join(".");
+    // Root → freelancer marketplace (filtered to freelancers only)
     url.pathname = "/";
-    return NextResponse.redirect(url);
+    const res = NextResponse.rewrite(url);
+    res.headers.set("x-tenant-slug", "freelancer");
+    return res;
   }
 
   // ── Business subdomain (e.g. lumegroup.glowith.co.za) ─────────────────────
