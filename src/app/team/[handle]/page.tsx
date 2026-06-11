@@ -94,6 +94,7 @@ export default async function Page({ params }: { params: Promise<{ handle: strin
           durationMinutes: s.durationMinutes,
           priceCents: s.priceCents,
           depositCents: s.depositCents,
+          depositIsPercent: s.depositIsPercent,
           extras: s.extras.map((e) => ({ id: e.id, name: e.name, description: e.description ?? null, priceCents: e.priceCents, durationMinutes: e.durationMinutes }))
         })),
         posts: agent.posts.map((p) => ({

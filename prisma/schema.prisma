@@ -312,7 +312,8 @@ model Service {
   category          String
   durationMinutes   Int
   priceCents        Int
-  depositCents      Int
+  depositCents      Int      // fixed deposit amount OR percentage value (0-100) when depositIsPercent=true
+  depositIsPercent  Boolean  @default(false) // true → depositCents stores the % (e.g. 50 = 50%)
   active            Boolean  @default(true)
   createdAt         DateTime @default(now())
 

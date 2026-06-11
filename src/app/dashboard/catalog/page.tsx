@@ -21,6 +21,7 @@ export default async function CatalogPage() {
     durationMinutes: s.durationMinutes,
     priceCents: s.priceCents,
     depositCents: s.depositCents,
+    depositIsPercent: s.depositIsPercent,
     active: s.active
   }))} />;
 }

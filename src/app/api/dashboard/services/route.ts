@@ -9,7 +9,8 @@ const schema = z.object({
   category: z.string(),
   durationMinutes: z.number().int().min(15),
   priceCents: z.number().int().min(0),
-  depositCents: z.number().int().min(0)
+  depositCents: z.number().int().min(0),
+  depositIsPercent: z.boolean().optional().default(false)
 });
 
 export async function GET() {

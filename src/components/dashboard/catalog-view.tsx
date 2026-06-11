@@ -12,7 +12,8 @@ const formatZAR = (cents: number) =>
 
 type Service = {
   id: string; name: string; category: string;
-  durationMinutes: number; priceCents: number; depositCents: number; active: boolean;
+  durationMinutes: number; priceCents: number; depositCents: number;
+  depositIsPercent: boolean; active: boolean;
 };
 
 type Extra = {
@@ -154,7 +155,8 @@ function ServiceFormModal({
     category: service?.category ?? "Hair",
     durationMinutes: service?.durationMinutes ?? 60,
     priceCents: service ? service.priceCents / 100 : 0,
-    depositCents: service ? service.depositCents / 100 : 0,
+    depositCents: service ? service.depositCents : 0,
+    depositIsPercent: service?.depositIsPercent ?? false,
     active: service?.active ?? true,
     description: "",
     color: "#D94472",
@@ -206,7 +208,11 @@ function ServiceFormModal({
         category: form.category,
         durationMinutes: Number(form.durationMinutes),
         priceCents: Math.round(Number(form.priceCents) * 100),
-        depositCents: Math.round(Number(form.depositCents) * 100),
+        // percentage: store as integer 0-100; fixed: store in cents
+        depositCents: form.depositIsPercent
+          ? Math.min(100, Math.max(0, Math.round(Number(form.depositCents))))
+          : Math.round(Number(form.depositCents) * 100),
+        depositIsPercent: form.depositIsPercent,
         active: form.active,
       })
     });
@@ -468,11 +474,37 @@ function ServiceFormModal({
                   </div>
 
                   {/* Deposit */}
-                  <div className="relative rounded-xl border border-gray-200 bg-white focus-within:border-[var(--brand)]">
-                    <span className="absolute -top-2 left-3 bg-white px-1 text-[10px] text-gray-500">Deposit (R)</span>
-                    <input type="number" value={form.depositCents} onChange={(e) => set("depositCents", e.target.value)}
-                      min={0} step={0.01}
-                      className="w-full rounded-xl bg-transparent px-3 py-2.5 text-sm outline-none" />
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-500">Deposit type</span>
+                      <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-bold">
+                        <button type="button"
+                          onClick={() => set("depositIsPercent", false)}
+                          className={`px-3 py-1.5 transition ${!form.depositIsPercent ? "bg-[var(--brand)] text-white" : "text-gray-500 hover:bg-gray-50"}`}>
+                          Fixed (R)
+                        </button>
+                        <button type="button"
+                          onClick={() => set("depositIsPercent", true)}
+                          className={`px-3 py-1.5 transition ${form.depositIsPercent ? "bg-[var(--brand)] text-white" : "text-gray-500 hover:bg-gray-50"}`}>
+                          Percentage (%)
+                        </button>
+                      </div>
+                    </div>
+                    <div className="relative rounded-xl border border-gray-200 bg-white focus-within:border-[var(--brand)]">
+                      <span className="absolute -top-2 left-3 bg-white px-1 text-[10px] text-gray-500">
+                        {form.depositIsPercent ? "Deposit % of total (incl. extras)" : "Deposit amount (R)"}
+                      </span>
+                      <div className="flex items-center">
+                        {!form.depositIsPercent && <span className="pl-3 text-sm text-gray-400">R</span>}
+                        <input type="number" value={form.depositCents} onChange={(e) => set("depositCents", e.target.value)}
+                          min={0} max={form.depositIsPercent ? 100 : undefined} step={form.depositIsPercent ? 1 : 0.01}
+                          className="w-full rounded-xl bg-transparent px-3 py-2.5 text-sm outline-none" />
+                        {form.depositIsPercent && <span className="pr-3 text-sm text-gray-400">%</span>}
+                      </div>
+                    </div>
+                    {form.depositIsPercent && (
+                      <p className="text-xs text-gray-400">Calculated at booking time from the service price + any extras selected.</p>
+                    )}
                   </div>
 
                   {/* Pricing by date & time */}
@@ -758,7 +790,9 @@ export function CatalogView({ profileId, services: initial }: { profileId: strin
                       </td>
                       <td className="px-4 py-3 text-gray-500">{svc.durationMinutes >= 60 ? `${Math.floor(svc.durationMinutes / 60)}h${svc.durationMinutes % 60 ? ` ${svc.durationMinutes % 60}min` : ""}` : `${svc.durationMinutes}min`}</td>
                       <td className="px-4 py-3 font-semibold">{formatZAR(svc.priceCents)}</td>
-                      <td className="px-4 py-3 text-gray-500">{formatZAR(svc.depositCents)}</td>
+                      <td className="px-4 py-3 text-gray-500">
+                        {svc.depositIsPercent ? `${svc.depositCents}%` : formatZAR(svc.depositCents)}
+                      </td>
                       <td className="px-4 py-3">
                         <button onClick={() => toggleActive(svc.id, !svc.active)}
                           className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold transition", svc.active ? "bg-emerald-50 text-emerald-700" : "bg-gray-100 text-gray-500")}>

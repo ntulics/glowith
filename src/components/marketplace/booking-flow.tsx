@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 
 /* ── Types ──────────────────────────────────────────────────────── */
 type ServiceExtra = { id: string; name: string; description?: string | null; priceCents: number; durationMinutes: number };
-type Service = { id: string; name: string; category?: string; durationMinutes: number; priceCents: number; depositCents: number; performer?: string | null; extras?: ServiceExtra[] };
+type Service = { id: string; name: string; category?: string; durationMinutes: number; priceCents: number; depositCents: number; depositIsPercent?: boolean; performer?: string | null; extras?: ServiceExtra[] };
 type Busy = { start: string; durationMinutes: number };
 type Agent = { id: string; name: string; avatarUrl: string | null; category: string; serviceCategories: string[] };
 
@@ -113,8 +113,12 @@ export function BookingFlow({
   }, [selectedServices]);
   const totalDuration = selectedServices.reduce((a, s) => a + s.durationMinutes, 0) + selectedExtras.reduce((a, e) => a + e.durationMinutes, 0);
   const totalPrice = selectedServices.reduce((a, s) => a + s.priceCents, 0) + selectedExtras.reduce((a, e) => a + e.priceCents, 0);
-  const totalDeposit = selectedServices.reduce((a, s) => a + (s.depositCents ?? 0), 0);
   const finalTotal = Math.max(totalPrice - (appliedCode ? discountCents : 0), 0);
+  // Match server logic: percentage deposits apply to the discounted total incl. extras
+  const totalDeposit = selectedServices.reduce((a, s) => {
+    if (s.depositIsPercent) return a + Math.round((finalTotal * (s.depositCents ?? 0)) / 100);
+    return a + (s.depositCents ?? 0);
+  }, 0);
   const depositDueAtCheckout = finalTotal === 0 ? 0 : Math.min(totalDeposit, finalTotal);
   const categories = useMemo(() => {
     const set = new Set(services.map((s) => s.category).filter(Boolean) as string[]);

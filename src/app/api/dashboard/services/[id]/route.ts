@@ -16,7 +16,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       category: body.category,
       durationMinutes: body.durationMinutes,
       priceCents: body.priceCents,
-      depositCents: body.depositCents
+      depositCents: body.depositCents,
+      depositIsPercent: body.depositIsPercent ?? false
     }
   });
   return NextResponse.json({ service });

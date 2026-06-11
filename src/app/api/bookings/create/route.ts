@@ -60,7 +60,13 @@ export async function POST(request: Request) {
   const extrasPrice = extras.reduce((s, e) => s + e.priceCents, 0);
   const totalPrice = servicesPrice + extrasPrice;
 
-  const totalDepositBase = services.reduce((s, x) => s + (x.depositCents ?? 0), 0);
+  // Provider-defined deposit applied to the booking total (service + extras).
+  // depositIsPercent=true  → depositCents stores the % (e.g. 50 = 50% of total)
+  // depositIsPercent=false → depositCents is a fixed amount in cents
+  const totalDepositBase = services.reduce((sum, svc) => {
+    if (svc.depositIsPercent) return sum + Math.round((totalPrice * svc.depositCents) / 100);
+    return sum + (svc.depositCents ?? 0);
+  }, 0);
 
   const start = new Date(startsAt);
   if (isNaN(start.getTime()) || start.getTime() < Date.now()) {
@@ -111,13 +117,17 @@ export async function POST(request: Request) {
     }
   }
 
-  // Deposit Glowith collects upfront (STARTER plan only)
+  // Deposit the client pays upfront — provider-defined amount applied to discounted total.
+  // platformConfig.depositPercent is only used for the Paystack subaccount split, not here.
+  const discountedTotal = Math.max(totalPrice - discountCents, 0);
   let depositCents = 0;
-  if (totalDepositBase > 0 && profile.plan === "STARTER") {
-    const config = await prisma.platformConfig.findUnique({ where: { id: "global" } });
-    const pct = config?.depositPercent ?? 20;
-    const discountedTotal = Math.max(totalPrice - discountCents, 0);
-    depositCents = discountedTotal === 0 ? 0 : Math.round((discountedTotal * pct) / 100);
+  if (discountedTotal > 0) {
+    // Re-compute deposit against discounted total if percentage-based
+    depositCents = services.reduce((sum, svc) => {
+      if (svc.depositIsPercent) return sum + Math.round((discountedTotal * svc.depositCents) / 100);
+      return sum + (svc.depositCents ?? 0);
+    }, 0);
+    depositCents = Math.min(depositCents, discountedTotal); // never exceed total
   }
 
   const status = depositCents > 0 ? "PENDING_DEPOSIT" : "CONFIRMED";
