@@ -53,7 +53,8 @@ export async function verifyTransaction(reference: string): Promise<{ success: b
 
 /** Create a Paystack subaccount for a provider. Returns the subaccount code. */
 export async function createSubaccount(input: {
-  businessName: string;
+  businessName: string;  // used as alias/description
+  accountName: string;   // shown as "Account Name" in Paystack dashboard
   bankCode: string;
   accountNumber: string;
   /** Percentage of each charge the platform keeps (0-100). Provider receives the rest. */
@@ -67,11 +68,11 @@ export async function createSubaccount(input: {
     method: "POST",
     headers: headers(),
     body: JSON.stringify({
-      business_name: input.businessName,
+      business_name: input.accountName,   // shown as "Account Name" in Paystack
       bank_code: input.bankCode,
       account_number: input.accountNumber,
       percentage_charge: percentageCharge,
-      description: `Glowith provider: ${input.businessName}`,
+      description: input.businessName,    // shown as "Account Alias"
     }),
   });
   const data = await res.json();

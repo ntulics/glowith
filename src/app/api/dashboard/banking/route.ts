@@ -62,6 +62,7 @@ export async function POST(request: Request) {
   } else {
     const result = await createSubaccount({
       businessName: profile.businessName,
+      accountName,
       bankCode,
       accountNumber,
       platformPercent,
