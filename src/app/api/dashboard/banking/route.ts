@@ -26,9 +26,9 @@ export async function POST(request: Request) {
   const user = session?.user as any;
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { bankCode, accountNumber } = await request.json();
-  if (!bankCode || !accountNumber) {
-    return NextResponse.json({ error: "bankCode and accountNumber are required" }, { status: 400 });
+  const { bankCode, accountNumber, accountName: providedAccountName } = await request.json();
+  if (!bankCode || !accountNumber || !providedAccountName) {
+    return NextResponse.json({ error: "bankCode, accountNumber and accountName are required" }, { status: 400 });
   }
 
   const profile = await prisma.providerProfile.findUnique({
@@ -37,11 +37,9 @@ export async function POST(request: Request) {
   });
   if (!profile) return NextResponse.json({ error: "Provider profile not found" }, { status: 404 });
 
-  // Resolve account name from Paystack
-  const accountName = await resolveAccountName(accountNumber, bankCode);
-  if (!accountName) {
-    return NextResponse.json({ error: "Could not verify account. Check the account number and bank." }, { status: 422 });
-  }
+  // Try to verify via Paystack; fall back to the provider-supplied name if unsupported
+  const resolvedName = await resolveAccountName(accountNumber, bankCode);
+  const accountName = resolvedName ?? providedAccountName;
 
   // Get the bank name from our banks list
   const banks = await listBanks();

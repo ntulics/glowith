@@ -360,7 +360,7 @@ export function SettingsView({
       const res = await fetch("/api/dashboard/banking", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bankCode, accountNumber: bankAccountNumber }),
+        body: JSON.stringify({ bankCode, accountNumber: bankAccountNumber, accountName: bankAccountName }),
       });
       const data = await res.json();
       if (!res.ok) { setBankingError(data.error ?? "Failed to save banking details"); setBankingStatus("error"); return; }
@@ -633,12 +633,16 @@ export function SettingsView({
                 className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none focus:border-[#D94472] focus:bg-white"
               />
             </div>
-            {bankAccountName && (
-              <div className="flex items-center gap-2 text-sm text-gray-700">
-                <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
-                <span>Account name: <strong>{bankAccountName}</strong></span>
-              </div>
-            )}
+            <div>
+              <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-gray-500">Account name</label>
+              <input
+                type="text"
+                value={bankAccountName ?? ""}
+                onChange={(e) => setBankAccountName(e.target.value)}
+                placeholder="Initials and Surname"
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none focus:border-[#D94472] focus:bg-white"
+              />
+            </div>
             {bankingError && (
               <p className="text-sm text-red-600">{bankingError}</p>
             )}
@@ -647,7 +651,7 @@ export function SettingsView({
             <button
               type="button"
               onClick={saveBanking}
-              disabled={!bankCode || !bankAccountNumber || bankingStatus === "saving"}
+              disabled={!bankCode || !bankAccountNumber || !bankAccountName || bankingStatus === "saving"}
               className="rounded-xl bg-[#D94472] px-6 py-2.5 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50"
             >
               {bankingStatus === "saving" ? "Verifying & saving…" : bankingStatus === "saved" ? "Saved!" : "Save banking details"}
