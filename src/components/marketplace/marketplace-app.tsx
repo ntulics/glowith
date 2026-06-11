@@ -77,9 +77,9 @@ function getHeroHeadline(areaName: string | null, hIdx: number, sIdx: number): {
   return { phrase: HERO_HEADLINES[hIdx % HERO_HEADLINES.length], areaLine: where, subtext: sub };
 }
 
-export function MarketplaceApp({ tenantSlug }: { tenantSlug?: string }) {
+export function MarketplaceApp() {
   const router = useRouter();
-  const isFreelancer = tenantSlug === "freelancer";
+  const isFreelancer = typeof window !== "undefined" && window.location.hostname.startsWith("freelancer.");
   // Real DB providers (falls back to seed data until/if the API responds empty)
   const [providers, setProviders] = useState<Provider[]>(seedProviders);
   const [newProviders, setNewProviders] = useState<Provider[]>([]);
@@ -99,7 +99,7 @@ export function MarketplaceApp({ tenantSlug }: { tenantSlug?: string }) {
       .then((r) => r.json())
       .then((d) => { if (Array.isArray(d.providers)) setTrendingProviders(d.providers); })
       .catch(() => {});
-  }, [isFreelancer]);
+  }, []);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<ServiceCategory | "All">("All");
   const [locationQuery, setLocationQuery] = useState("Detecting location…");

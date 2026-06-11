@@ -17,10 +17,17 @@ const BOOKING_SLOTS = Array.from({ length: 20 }, (_, i) => {
   const mins = 8 * 60 + i * 30;
   return { h: Math.floor(mins / 60), m: mins % 60, label: `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}` };
 });
-function nextBookingDays(n: number): Date[] {
+function nextBookingDays(n: number, serviceDurationMinutes = 60): Date[] {
   const out: Date[] = [];
-  const d = new Date(); d.setHours(0, 0, 0, 0);
-  for (let i = 0; i < n; i++) { const x = new Date(d); x.setDate(d.getDate() + i); out.push(x); }
+  const now = new Date();
+  const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+  const skipToday = nowMins >= (18 * 60 - serviceDurationMinutes);
+  let added = 0;
+  for (let i = 0; added < n; i++) {
+    if (i === 0 && skipToday) continue;
+    const x = new Date(todayStart); x.setDate(todayStart.getDate() + i); out.push(x); added++;
+  }
   return out;
 }
 
@@ -103,7 +110,9 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
   const team = profile.team ?? [];
   const isAgent = !!profile.parentBusinessName;
   const isFreelancer = profile.providerType === "FREELANCER";
-  const isIndividualProfile = isAgent || isFreelancer;
+  // Agents (team members of a business) get the social-style individual profile.
+  // Freelancers are standalone providers and use the full business booking layout.
+  const isIndividualProfile = isAgent;
 
   const [book, setBook] = useState<BookTarget | null>(null);
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
@@ -588,7 +597,7 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
                     <button onClick={() => { setBookingStep("services"); setSelectedDate(null); setSelectedSlot(null); setNotes(""); }} className="text-xs font-bold text-[var(--brand)] hover:underline">Back</button>
                   </div>
                   <div className="grid grid-cols-4 gap-2">
-                    {nextBookingDays(14).map((d) => {
+                    {nextBookingDays(14, selectedServiceDuration || 30).map((d) => {
                       const sel = selectedDate && d.toDateString() === selectedDate.toDateString();
                       return (
                         <button key={d.toISOString()} onClick={() => { setSelectedDate(d); setSelectedSlot(null); setBookingStep("time"); }}
@@ -1109,7 +1118,7 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
                           transition={{ duration: 0.18 }} className="px-5 py-4">
                           <p className="mb-3 text-sm font-black">Pick a date</p>
                           <div className="grid grid-cols-4 gap-1.5">
-                            {nextBookingDays(14).map((d) => {
+                            {nextBookingDays(14, selectedServiceDuration || 30).map((d) => {
                               const sel = selectedDate && d.toDateString() === (selectedDate as Date).toDateString();
                               return (
                                 <button key={d.toISOString()}
