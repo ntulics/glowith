@@ -227,14 +227,15 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
       // Build the subdomain URL from the provider's handle so this works
       // whether the user is on the subdomain or the apex domain.
       const slug = profile.handle.replace("@", "");
-      const host = window.location.host; // e.g. "duvha_demo.glowith.co.za" or "glowith.co.za"
+      const host = window.location.host;
       const agentHandle = m.handle.replace("@", "");
       if (host.startsWith(`${slug}.`)) {
-        // Already on the correct subdomain — relative URL is fine
         window.location.href = `/team/${agentHandle}`;
       } else {
-        // Apex or different subdomain — jump to the right subdomain explicitly
-        const apexDomain = host.split(".").slice(-2).join(".");
+        // Derive the apex domain: if host has a subdomain matching slug, strip it;
+        // otherwise host is already the apex (e.g. "glowith.co.za").
+        const parts = host.split(".");
+        const apexDomain = parts[0] === slug ? parts.slice(1).join(".") : host;
         window.location.href = `https://${slug}.${apexDomain}/team/${agentHandle}`;
       }
       return;
