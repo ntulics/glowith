@@ -2,16 +2,25 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+async function getOwnedService(userId: string, serviceId: string) {
+  const profile = await prisma.providerProfile.findUnique({ where: { userId }, select: { id: true } });
+  if (!profile) return null;
+  const service = await prisma.service.findFirst({ where: { id: serviceId, providerProfileId: profile.id } });
+  return service;
+}
+
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const body = await request.json();
+  const userId = (session.user as any).id as string;
+  const owned = await getOwnedService(userId, id);
+  if (!owned) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  const body = await request.json();
   const agentIds: string[] = Array.isArray(body.agentIds) ? body.agentIds : [];
 
-  // Replace agents: delete all then re-create
   await prisma.serviceAgent.deleteMany({ where: { serviceId: id } });
 
   const service = await prisma.service.update({
@@ -37,6 +46,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
+  const userId = (session.user as any).id as string;
+  const owned = await getOwnedService(userId, id);
+  if (!owned) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
   const body = await request.json();
   const service = await prisma.service.update({ where: { id }, data: { active: body.active } });
   return NextResponse.json({ service });
@@ -47,6 +60,18 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
+  const userId = (session.user as any).id as string;
+  const owned = await getOwnedService(userId, id);
+  if (!owned) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // If the service has bookings we can't hard-delete (FK constraint).
+  // Soft-delete instead so booking history is preserved.
+  const bookingCount = await prisma.booking.count({ where: { serviceId: id } });
+  if (bookingCount > 0) {
+    await prisma.service.update({ where: { id }, data: { active: false } });
+    return NextResponse.json({ ok: true, softDeleted: true });
+  }
+
   await prisma.service.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }

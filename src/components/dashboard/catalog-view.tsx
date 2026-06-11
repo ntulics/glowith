@@ -28,6 +28,7 @@ type Service = {
   durationMinutes: number; priceCents: number; depositCents: number;
   depositIsPercent: boolean; active: boolean;
   agents?: { agentId: string }[];
+  ownerName?: string | null;
 };
 
 type Extra = {
@@ -666,7 +667,11 @@ export function CatalogView({
 
   async function deleteService(id: string) {
     if (!confirm("Delete this service?")) return;
-    await fetch(`/api/dashboard/services/${id}`, { method: "DELETE" });
+    const res = await fetch(`/api/dashboard/services/${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      alert("Could not delete service. Please try again.");
+      return;
+    }
     setServices((prev) => prev.filter((s) => s.id !== id));
   }
 
@@ -772,7 +777,10 @@ export function CatalogView({
                             <div className="h-7 w-7 rounded-full bg-[var(--brand)]/10 flex items-center justify-center text-[10px] font-bold text-[var(--brand)]">{svc.name[0]}</div>
                             <div>
                               <p className="font-semibold">{svc.name}</p>
-                              {svc.categoryId && <p className="text-[10px] text-gray-400">{categories.find((c) => c.id === svc.categoryId)?.name}</p>}
+                              {svc.ownerName
+                                ? <p className="text-[10px] text-indigo-500 font-semibold">{svc.ownerName}</p>
+                                : svc.categoryId && <p className="text-[10px] text-gray-400">{categories.find((c) => c.id === svc.categoryId)?.name}</p>
+                              }
                             </div>
                           </div>
                         </td>

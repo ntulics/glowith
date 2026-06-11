@@ -11,6 +11,7 @@ export default async function CatalogPage() {
     where: { userId: user.id },
     include: {
       services: {
+        where: { active: true },
         orderBy: { createdAt: "asc" },
         include: { agents: { select: { agentId: true } } }
       }
@@ -22,26 +23,41 @@ export default async function CatalogPage() {
   // Load agents connected to this provider (agents are ProviderProfiles with parentBusinessId)
   const agentProfiles = await prisma.providerProfile.findMany({
     where: { parentBusinessId: profile.id },
-    select: { id: true, businessName: true, avatarUrl: true }
+    select: {
+      id: true, businessName: true, avatarUrl: true,
+      services: {
+        where: { active: true },
+        orderBy: { createdAt: "asc" },
+        include: { agents: { select: { agentId: true } } }
+      }
+    }
   });
+
+  const ownServices = profile.services.map((s) => ({
+    id: s.id, name: s.name, category: s.category,
+    categoryId: (s as any).categoryId ?? null,
+    description: (s as any).description ?? null,
+    durationMinutes: s.durationMinutes, priceCents: s.priceCents,
+    depositCents: s.depositCents, depositIsPercent: s.depositIsPercent,
+    active: s.active, agents: s.agents, ownerName: null as string | null,
+  }));
+
+  const agentServices = agentProfiles.flatMap((a) =>
+    a.services.map((s) => ({
+      id: s.id, name: s.name, category: s.category,
+      categoryId: (s as any).categoryId ?? null,
+      description: (s as any).description ?? null,
+      durationMinutes: s.durationMinutes, priceCents: s.priceCents,
+      depositCents: s.depositCents, depositIsPercent: s.depositIsPercent,
+      active: s.active, agents: s.agents, ownerName: a.businessName,
+    }))
+  );
 
   return (
     <CatalogView
       profileId={profile.id}
-      services={profile.services.map((s) => ({
-        id: s.id,
-        name: s.name,
-        category: s.category,
-        categoryId: (s as any).categoryId ?? null,
-        description: (s as any).description ?? null,
-        durationMinutes: s.durationMinutes,
-        priceCents: s.priceCents,
-        depositCents: s.depositCents,
-        depositIsPercent: s.depositIsPercent,
-        active: s.active,
-        agents: s.agents,
-      }))}
-      agents={agentProfiles}
+      services={[...ownServices, ...agentServices]}
+      agents={agentProfiles.map((a) => ({ id: a.id, businessName: a.businessName, avatarUrl: a.avatarUrl }))}
     />
   );
 }
