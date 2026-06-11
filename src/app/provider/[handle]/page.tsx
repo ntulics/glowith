@@ -24,12 +24,12 @@ export default async function Page({ params }: { params: Promise<{ handle: strin
     where: { handle: `@${handle}` },
     include: {
       user: { select: { name: true, createdAt: true } },
-      services: { where: { active: true }, orderBy: { createdAt: "asc" } },
+      services: { where: { active: true }, orderBy: { createdAt: "asc" }, include: { extras: { where: { active: true } } } },
       posts: { orderBy: { createdAt: "desc" } },
       agents: {
         select: {
           id: true, businessName: true, category: true, avatarUrl: true, handle: true,
-          services: { where: { active: true }, orderBy: { createdAt: "asc" } }
+          services: { where: { active: true }, orderBy: { createdAt: "asc" }, include: { extras: { where: { active: true } } } }
         }
       },
       _count: { select: { bookings: true } },
@@ -45,9 +45,10 @@ export default async function Page({ params }: { params: Promise<{ handle: strin
   const tenantSlug = (await headers()).get("x-tenant-slug");
   if (tenantSlug === "freelancer" && profile.parentBusinessId) notFound();
 
-  const mapSvc = (s: { id: string; name: string; category: string; durationMinutes: number; priceCents: number; depositCents: number }, performer: string | null) => ({
+  const mapSvc = (s: { id: string; name: string; category: string; durationMinutes: number; priceCents: number; depositCents: number; extras: { id: string; name: string; description?: string | null; priceCents: number; durationMinutes: number }[] }, performer: string | null) => ({
     id: s.id, name: s.name, category: s.category, durationMinutes: s.durationMinutes,
-    priceCents: s.priceCents, depositCents: s.depositCents, performer
+    priceCents: s.priceCents, depositCents: s.depositCents, performer,
+    extras: s.extras.map((e) => ({ id: e.id, name: e.name, description: e.description, priceCents: e.priceCents, durationMinutes: e.durationMinutes }))
   });
   // Business storefront lists its own services + every agent's services.
   const combinedServices = [

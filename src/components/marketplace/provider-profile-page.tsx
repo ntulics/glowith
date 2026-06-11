@@ -1080,10 +1080,9 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 10 }}
                     transition={{ duration: 0.2 }}
-                    className="divide-y divide-[var(--line)]"
                   >
-                    {/* Service pill */}
-                    <div className="flex items-center justify-between px-5 py-4">
+                    {/* Service pill — always visible */}
+                    <div className="flex items-center justify-between border-b border-[var(--line)] px-5 py-4">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-black">{selectedService.name}</p>
                         <p className="flex items-center gap-1 text-xs text-[var(--muted)]">
@@ -1098,67 +1097,78 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
                       </button>
                     </div>
 
-                    {/* Date grid */}
-                    <div className="px-5 py-4">
-                      <p className="mb-3 text-sm font-black">Pick a date</p>
-                      <div className="grid grid-cols-4 gap-1.5">
-                        {nextBookingDays(14).map((d) => {
-                          const sel = selectedDate && d.toDateString() === selectedDate.toDateString();
-                          return (
-                            <button key={d.toISOString()}
-                              onClick={() => { setSelectedDate(d); setSelectedSlot(null); if (bookingStep === "services" || bookingStep === "date") setBookingStep("time"); }}
-                              className={cn("rounded-xl border p-2 text-center transition",
-                                sel ? "border-[var(--brand)] bg-[#FFF0F4]" : "border-[var(--line)] bg-[var(--background)] hover:border-[var(--brand)]")}>
-                              <span className="block text-[9px] font-bold uppercase text-[var(--muted)]">{d.toLocaleDateString("en-ZA", { weekday: "short" })}</span>
-                              <span className="block text-sm font-black">{d.getDate()}</span>
-                              <span className="block text-[9px] text-[var(--muted)]">{d.toLocaleDateString("en-ZA", { month: "short" })}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Time slots — appear once date picked */}
-                    <AnimatePresence>
-                      {selectedDate && (
-                        <motion.div key="times" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-                          <div className="px-5 py-4">
-                            <p className="mb-3 text-sm font-black">
-                              {selectedDate.toLocaleDateString("en-ZA", { weekday: "long", day: "numeric", month: "long" })}
-                            </p>
-                            {busyLoading ? (
-                              <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-[var(--muted)]" /></div>
-                            ) : (
-                              <div className="grid grid-cols-3 gap-1.5">
-                                {BOOKING_SLOTS.map((s) => {
-                                  const disabled = isSlotDisabled(s.label);
-                                  const sel = selectedSlot === s.label;
-                                  return (
-                                    <button key={s.label} disabled={disabled}
-                                      onClick={() => { setSelectedSlot(s.label); setBookingStep("notes"); }}
-                                      className={cn("rounded-xl border py-2 text-xs font-bold transition",
-                                        sel ? "border-[var(--brand)] bg-[var(--brand)] text-white"
-                                          : disabled ? "cursor-not-allowed border-[var(--line)] bg-[var(--line)]/20 text-[var(--muted)]/40"
-                                          : "border-[var(--line)] bg-white hover:border-[var(--brand)]")}>
-                                      {s.label}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            )}
+                    {/* Steps — each replaces the previous (mode="wait") */}
+                    <AnimatePresence mode="wait">
+                      {/* STEP: date */}
+                      {!selectedDate && (
+                        <motion.div key="step-date"
+                          initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
+                          transition={{ duration: 0.18 }} className="px-5 py-4">
+                          <p className="mb-3 text-sm font-black">Pick a date</p>
+                          <div className="grid grid-cols-4 gap-1.5">
+                            {nextBookingDays(14).map((d) => {
+                              const sel = selectedDate && d.toDateString() === (selectedDate as Date).toDateString();
+                              return (
+                                <button key={d.toISOString()}
+                                  onClick={() => { setSelectedDate(d); setSelectedSlot(null); setBookingStep("time"); }}
+                                  className={cn("rounded-xl border p-2 text-center transition",
+                                    sel ? "border-[var(--brand)] bg-[#FFF0F4]" : "border-[var(--line)] bg-[var(--background)] hover:border-[var(--brand)]")}>
+                                  <span className="block text-[9px] font-bold uppercase text-[var(--muted)]">{d.toLocaleDateString("en-ZA", { weekday: "short" })}</span>
+                                  <span className="block text-sm font-black">{d.getDate()}</span>
+                                  <span className="block text-[9px] text-[var(--muted)]">{d.toLocaleDateString("en-ZA", { month: "short" })}</span>
+                                </button>
+                              );
+                            })}
                           </div>
                         </motion.div>
                       )}
-                    </AnimatePresence>
 
-                    {/* Notes + confirm — appear once time picked */}
-                    <AnimatePresence>
+                      {/* STEP: time */}
+                      {selectedDate && !selectedSlot && (
+                        <motion.div key="step-time"
+                          initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
+                          transition={{ duration: 0.18 }} className="px-5 py-4">
+                          <div className="mb-3 flex items-center gap-2">
+                            <button onClick={() => { setSelectedDate(null); setSelectedSlot(null); setBookingStep("date"); }}
+                              className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--line)] text-[var(--muted)] hover:border-[var(--brand)] hover:text-[var(--brand)]">
+                              <ArrowLeft className="h-3.5 w-3.5" />
+                            </button>
+                            <p className="text-sm font-black">
+                              {selectedDate.toLocaleDateString("en-ZA", { weekday: "short", day: "numeric", month: "short" })}
+                            </p>
+                          </div>
+                          {busyLoading ? (
+                            <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-[var(--muted)]" /></div>
+                          ) : (
+                            <div className="grid grid-cols-3 gap-1.5">
+                              {BOOKING_SLOTS.map((s) => {
+                                const disabled = isSlotDisabled(s.label);
+                                const sel = selectedSlot === s.label;
+                                return (
+                                  <button key={s.label} disabled={disabled}
+                                    onClick={() => { setSelectedSlot(s.label); setBookingStep("notes"); }}
+                                    className={cn("rounded-xl border py-2 text-xs font-bold transition",
+                                      sel ? "border-[var(--brand)] bg-[var(--brand)] text-white"
+                                        : disabled ? "cursor-not-allowed border-[var(--line)] bg-[var(--line)]/20 text-[var(--muted)]/40"
+                                        : "border-[var(--line)] bg-white hover:border-[var(--brand)]")}>
+                                    {s.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </motion.div>
+                      )}
+
+                      {/* STEP: inline booking flow (notes → auth → review → pay → done) */}
                       {selectedDate && selectedSlot && (
-                        <motion.div key="flow" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden border-t border-[var(--line)]">
+                        <motion.div key="step-flow"
+                          initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
+                          transition={{ duration: 0.18 }}>
                           <BookingFlow
                             open
                             inline
-                            onClose={() => { setSelectedServiceId(null); setBookingStep("services"); setSelectedDate(null); setSelectedSlot(null); setNotes(""); }}
+                            onClose={() => { setSelectedDate(null); setSelectedSlot(null); setBookingStep("time"); }}
                             onSuccess={() => { setSelectedServiceId(null); setBookingStep("services"); setSelectedDate(null); setSelectedSlot(null); setNotes(""); }}
                             providerProfileId={profile.id}
                             providerName={profile.businessName}
@@ -1312,10 +1322,6 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
         service={selectedService ?? null}
         providerProfileId={profile.id}
         hidden={!!book}
-        onBook={(serviceId, date, slot, notes) => {
-          setNotes(notes);
-          openBooking(serviceId, date, slot);
-        }}
         onClear={() => { setSelectedServiceId(null); setBookingStep("services"); setSelectedDate(null); setSelectedSlot(null); setNotes(""); }}
       />
 

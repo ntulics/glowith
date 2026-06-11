@@ -473,7 +473,6 @@ export function AgentProfilePage({ profile }: { profile: AgentProfile }) {
         service={selectedServiceId ? (profile.services.find(s => s.id === selectedServiceId) ?? null) : null}
         providerProfileId={profile.id}
         hidden={!!bookTarget}
-        onBook={(serviceId, date, slot) => openBooking(serviceId, date, slot)}
         onClear={() => setSelectedServiceId(null)}
       />
     </div>

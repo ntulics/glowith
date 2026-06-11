@@ -23,7 +23,7 @@ async function resolveAgent(handleParam: string) {
     where: { handle: `@${handleParam}` },
     include: {
       user: { select: { name: true, createdAt: true } },
-      services: { where: { active: true }, orderBy: { createdAt: "asc" } },
+      services: { where: { active: true }, orderBy: { createdAt: "asc" }, include: { extras: { where: { active: true } } } },
       posts: { orderBy: { createdAt: "desc" } },
       ratings: { select: { stars: true } },
       follows: { select: { id: true } },
@@ -93,7 +93,8 @@ export default async function Page({ params }: { params: Promise<{ handle: strin
           category: s.category,
           durationMinutes: s.durationMinutes,
           priceCents: s.priceCents,
-          depositCents: s.depositCents
+          depositCents: s.depositCents,
+          extras: s.extras.map((e) => ({ id: e.id, name: e.name, description: e.description ?? null, priceCents: e.priceCents, durationMinutes: e.durationMinutes }))
         })),
         posts: agent.posts.map((p) => ({
           id: p.id,
