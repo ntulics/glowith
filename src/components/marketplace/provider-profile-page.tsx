@@ -224,7 +224,19 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
   // On mobile, navigate directly to the agent's page; on desktop show the popup.
   function openAgent(m: TeamMember) {
     if (typeof window !== "undefined" && window.innerWidth < 1024) {
-      window.location.href = `/team/${m.handle.replace("@", "")}`;
+      // Build the subdomain URL from the provider's handle so this works
+      // whether the user is on the subdomain or the apex domain.
+      const slug = profile.handle.replace("@", "");
+      const host = window.location.host; // e.g. "duvha_demo.glowith.co.za" or "glowith.co.za"
+      const agentHandle = m.handle.replace("@", "");
+      if (host.startsWith(`${slug}.`)) {
+        // Already on the correct subdomain — relative URL is fine
+        window.location.href = `/team/${agentHandle}`;
+      } else {
+        // Apex or different subdomain — jump to the right subdomain explicitly
+        const apexDomain = host.split(".").slice(-2).join(".");
+        window.location.href = `https://${slug}.${apexDomain}/team/${agentHandle}`;
+      }
       return;
     }
     setAgentPopup(m);
