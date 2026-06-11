@@ -13,6 +13,7 @@ import {
   LogOut,
   Settings,
   ShieldAlert,
+  ShieldCheck,
   Store,
   Users
 } from "lucide-react";
@@ -25,6 +26,7 @@ const nav = [
   { href: "/admin/blog", label: "Blog", icon: FileText },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/admin/verifications", label: "Verifications", icon: ShieldCheck },
   { href: "/admin/restricted-names", label: "Restricted Names", icon: ShieldAlert },
   { href: "/admin/settings", label: "Settings", icon: Settings }
 ];

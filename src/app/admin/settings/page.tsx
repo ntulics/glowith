@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, Percent, CheckCircle2, Crown } from "lucide-react";
+import { Loader2, Percent, CheckCircle2, Crown, ShieldCheck } from "lucide-react";
 
 const PLANS = [
   { name: "Starter", price: "Free", tagline: "For getting started", features: ["Public storefront & portfolio", "Bookings & calendar", "Glowith collects the platform deposit %", "Community support"] },
@@ -11,6 +11,7 @@ const PLANS = [
 
 export default function AdminSettingsPage() {
   const [depositPercent, setDepositPercent] = useState("20");
+  const [verificationFeeRand, setVerificationFeeRand] = useState("150");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -19,6 +20,7 @@ export default function AdminSettingsPage() {
   useEffect(() => {
     fetch("/api/admin/settings").then((r) => r.json()).then((d) => {
       if (d.depositPercent != null) setDepositPercent(String(d.depositPercent));
+      if (d.verificationFee != null) setVerificationFeeRand(String(d.verificationFee / 100));
     }).finally(() => setLoading(false));
   }, []);
 
@@ -27,7 +29,7 @@ export default function AdminSettingsPage() {
     try {
       const res = await fetch("/api/admin/settings", {
         method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ depositPercent })
+        body: JSON.stringify({ depositPercent, verificationFee: Math.round(parseFloat(verificationFeeRand) * 100) })
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error ?? "Could not save");
@@ -73,6 +75,33 @@ export default function AdminSettingsPage() {
             </div>
           )}
           {error && <p className="mt-2 text-sm font-semibold text-red-500">{error}</p>}
+        </div>
+
+        {/* Verification fee */}
+        <div className="max-w-lg rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+          <div className="mb-1 flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-[#D94472]" />
+            <h2 className="font-black">Verification fee</h2>
+          </div>
+          <p className="mb-4 text-sm text-gray-500">
+            Once-off fee charged to providers when they submit identity verification documents (Gov ID, Proof of Address, Proof of Bank). Also charged on re-verification triggered by business name or banking detail changes.
+          </p>
+          {loading ? (
+            <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+          ) : (
+            <div className="flex items-center gap-3">
+              <div className="flex items-center rounded-xl border border-gray-200 bg-gray-50 px-3 focus-within:border-[#D94472]">
+                <span className="text-sm font-bold text-gray-400 mr-1">R</span>
+                <input value={verificationFeeRand} onChange={(e) => setVerificationFeeRand(e.target.value)} type="number" min={0} step={1}
+                  className="w-24 bg-transparent py-2.5 text-sm font-bold outline-none" />
+              </div>
+              <button onClick={save} disabled={saving}
+                className="inline-flex items-center gap-2 rounded-xl bg-[#1a1a1a] px-5 py-2.5 text-sm font-bold text-white hover:opacity-90 disabled:opacity-60">
+                {saving && <Loader2 className="h-4 w-4 animate-spin" />} Save
+              </button>
+              {saved && <span className="inline-flex items-center gap-1 text-sm font-semibold text-emerald-600"><CheckCircle2 className="h-4 w-4" /> Saved</span>}
+            </div>
+          )}
         </div>
 
         {/* Plans overview */}

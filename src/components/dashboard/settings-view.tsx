@@ -204,7 +204,8 @@ const sections = [
   { id: "bookings", label: "Bookings", icon: CalendarDays },
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "integrations", label: "Integrations", icon: Puzzle },
-  { id: "security", label: "Security", icon: ShieldCheck }
+  { id: "security", label: "Security", icon: ShieldCheck },
+  { id: "verification", label: "Verification", icon: ShieldCheck }
 ];
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -245,6 +246,17 @@ export function SettingsView({
   const [smtpProvider, setSmtpProvider] = useState<"smtp2go" | "postmark" | "smtp">("smtp2go");
   const [smtpGuideOpen, setSmtpGuideOpen] = useState(false);
   const [copiedText, setCopiedText] = useState<string | null>(null);
+  // Re-verification warning modal
+  const [reVerifyModal, setReVerifyModal] = useState<{ trigger: "BUSINESS_NAME_CHANGE" | "BANKING_CHANGE"; onConfirm: () => void } | null>(null);
+  // Verification
+  const [verificationInfo, setVerificationInfo] = useState<{
+    verified: boolean; feeCents: number;
+    latest: { id: string; status: string; trigger: string; paid: boolean; createdAt: string } | null
+  } | null>(null);
+  const [verifyDocs, setVerifyDocs] = useState<{ govId: string; proofOfAddress: string; proofOfBank: string }>({ govId: "", proofOfAddress: "", proofOfBank: "" });
+  const [verifySubmitting, setVerifySubmitting] = useState(false);
+  const [verifyError, setVerifyError] = useState<string | null>(null);
+  const [verifyDone, setVerifyDone] = useState(false);
   // Banking / Paystack split pay
   const [banks, setBanks] = useState<{ name: string; code: string }[]>([]);
   const [bankCode, setBankCode] = useState("");
@@ -262,8 +274,7 @@ export function SettingsView({
     setSaved(false);
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function doSubmit() {
     setLoading(true);
     await fetch(`/api/dashboard/settings`, {
       method: "PUT",
@@ -273,6 +284,15 @@ export function SettingsView({
     setLoading(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (verificationInfo?.verified && form.businessName !== initial.businessName) {
+      setReVerifyModal({ trigger: "BUSINESS_NAME_CHANGE", onConfirm: doSubmit });
+      return;
+    }
+    doSubmit();
   }
 
   async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -353,7 +373,39 @@ export function SettingsView({
       .catch(() => {});
   }, []);
 
-  async function saveBanking() {
+  useEffect(() => {
+    fetch("/api/dashboard/verification")
+      .then((r) => r.json())
+      .then((d) => setVerificationInfo(d))
+      .catch(() => {});
+  }, []);
+
+  async function submitVerification() {
+    if (!verifyDocs.govId || !verifyDocs.proofOfAddress || !verifyDocs.proofOfBank) {
+      setVerifyError("Please upload all three documents first."); return;
+    }
+    setVerifySubmitting(true); setVerifyError(null);
+    try {
+      const res = await fetch("/api/dashboard/verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          govIdUrl: verifyDocs.govId,
+          proofOfAddressUrl: verifyDocs.proofOfAddress,
+          proofOfBankUrl: verifyDocs.proofOfBank,
+          trigger: "INITIAL",
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok) { setVerifyError(d.error ?? "Submission failed"); return; }
+      setVerifyDone(true);
+      const refreshed = await fetch("/api/dashboard/verification").then((r) => r.json());
+      setVerificationInfo(refreshed);
+    } catch { setVerifyError("Network error. Please try again."); }
+    finally { setVerifySubmitting(false); }
+  }
+
+  async function saveBankingConfirmed() {
     setBankingStatus("saving");
     setBankingError(null);
     try {
@@ -371,6 +423,14 @@ export function SettingsView({
     } catch {
       setBankingError("Network error. Please try again.");
       setBankingStatus("error");
+    }
+  }
+
+  function saveBanking() {
+    if (verificationInfo?.verified) {
+      setReVerifyModal({ trigger: "BANKING_CHANGE", onConfirm: saveBankingConfirmed });
+    } else {
+      saveBankingConfirmed();
     }
   }
 
@@ -597,10 +657,18 @@ export function SettingsView({
         {/* ── Banking / Paystack split pay ── */}
         <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm space-y-4">
           <div>
-            <h2 className="font-black text-base">Banking details</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="font-black text-base">Banking details</h2>
+              {verificationInfo?.verified && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-700">
+                  <ShieldCheck className="h-3 w-3" /> Locked
+                </span>
+              )}
+            </div>
             <p className="text-xs text-gray-500 mt-1">
               Your banking details are used to automatically receive your share of each deposit via Paystack split pay.
               The platform retains its percentage and the rest is routed directly to your account.
+              {verificationInfo?.verified && " Changes will trigger re-verification."}
             </p>
           </div>
           {existingSubaccount && (
@@ -978,6 +1046,124 @@ export function SettingsView({
     return <SecuritySection />;
   }
 
+  function renderVerification(): React.ReactElement {
+    const info = verificationInfo;
+    const feeCents = info?.feeCents ?? 15000;
+    const ZAR = (c: number) => `R${(c / 100).toFixed(2)}`;
+
+    async function uploadDoc(file: File, key: keyof typeof verifyDocs) {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("folder", "verification");
+      const res = await fetch("/api/upload", { method: "POST", body: fd });
+      const d = await res.json();
+      if (d.url) setVerifyDocs((prev) => ({ ...prev, [key]: d.url }));
+    }
+
+    function DocUpload({ label, docKey }: { label: string; docKey: keyof typeof verifyDocs }) {
+      const url = verifyDocs[docKey];
+      return (
+        <div>
+          <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-gray-500">{label}</label>
+          <label className={cn(
+            "flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 text-sm transition",
+            url ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-dashed border-gray-300 bg-gray-50 text-gray-500 hover:border-[#D94472] hover:text-[#D94472]"
+          )}>
+            {url ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <Plus className="h-4 w-4 shrink-0" />}
+            <span className="truncate">{url ? "Uploaded ✓" : `Upload ${label}`}</span>
+            <input type="file" accept="image/*,.pdf" className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadDoc(f, docKey); }} />
+          </label>
+        </div>
+      );
+    }
+
+    const latest = info?.latest;
+    const isPending = latest?.status === "PENDING";
+    const isApproved = latest?.status === "APPROVED";
+    const isRejected = latest?.status === "REJECTED";
+
+    return (
+      <div className="space-y-6 max-w-xl">
+        {/* Status banner */}
+        {info?.verified && (
+          <div className="flex items-center gap-3 rounded-2xl bg-emerald-50 border border-emerald-200 px-5 py-4">
+            <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />
+            <div>
+              <p className="font-bold text-emerald-700">Identity verified</p>
+              <p className="text-xs text-emerald-600">Your profile displays the verified badge. Banking and business name are locked.</p>
+            </div>
+          </div>
+        )}
+        {isPending && (
+          <div className="flex items-center gap-3 rounded-2xl bg-amber-50 border border-amber-200 px-5 py-4">
+            <Loader2 className="h-5 w-5 text-amber-500 shrink-0 animate-spin" />
+            <div>
+              <p className="font-bold text-amber-700">Under review</p>
+              <p className="text-xs text-amber-600">Your documents have been submitted and are being reviewed. This usually takes 1–2 business days.</p>
+            </div>
+          </div>
+        )}
+        {isRejected && (
+          <div className="flex items-center gap-3 rounded-2xl bg-red-50 border border-red-200 px-5 py-4">
+            <X className="h-5 w-5 text-red-500 shrink-0" />
+            <div>
+              <p className="font-bold text-red-700">Verification rejected</p>
+              <p className="text-xs text-red-600">Your previous submission was rejected. Please re-submit with correct documents.</p>
+            </div>
+          </div>
+        )}
+
+        {/* Upload form — shown if not verified and not pending */}
+        {!info?.verified && !isPending && (
+          <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm space-y-4">
+            <div>
+              <h2 className="font-black text-base">Get verified</h2>
+              <p className="text-xs text-gray-500 mt-1">
+                Upload the required documents to get the verified badge on your profile. A once-off fee of <strong>{ZAR(feeCents)}</strong> applies.
+                Once approved, your banking details and business name cannot be changed without going through re-verification.
+              </p>
+            </div>
+            <div className="space-y-3">
+              <DocUpload label="Government ID" docKey="govId" />
+              <DocUpload label="Proof of Address (within 3 months)" docKey="proofOfAddress" />
+              <DocUpload label="Proof of Bank Account" docKey="proofOfBank" />
+            </div>
+            <div className="rounded-xl bg-amber-50 border border-amber-100 px-4 py-3 text-xs text-amber-700">
+              A once-off payment of <strong>{ZAR(feeCents)}</strong> is required upon submission. You will be redirected to pay after clicking Submit.
+            </div>
+            {verifyError && <p className="text-sm text-red-600">{verifyError}</p>}
+            {verifyDone && <p className="text-sm text-emerald-600 font-semibold">Documents submitted! We will review and notify you within 1–2 business days.</p>}
+            <div className="flex justify-end">
+              <button type="button" onClick={submitVerification} disabled={verifySubmitting}
+                className="rounded-xl bg-[#D94472] px-6 py-2.5 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50">
+                {verifySubmitting ? "Submitting…" : `Submit & Pay ${ZAR(feeCents)}`}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* What verification covers */}
+        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm space-y-3">
+          <h2 className="font-black text-base">What verification includes</h2>
+          <ul className="space-y-2 text-sm text-gray-600">
+            {[
+              "Verified badge on your public profile",
+              "Increased client trust and booking confidence",
+              "Banking details locked — prevents fraud after verification",
+              "Business name locked — changes require re-verification",
+            ].map((item) => (
+              <li key={item} className="flex items-start gap-2">
+                <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    );
+  }
+
   const contentMap: Record<string, () => React.ReactElement> = {
     profile: renderProfile,
     company: renderCompany,
@@ -986,7 +1172,8 @@ export function SettingsView({
     bookings: renderBookings,
     notifications: renderNotifications,
     integrations: renderIntegrations,
-    security: renderSecurity
+    security: renderSecurity,
+    verification: renderVerification
   };
 
   const sectionAllowed = availableSections.some((s) => s.id === activeSection);
@@ -1066,6 +1253,39 @@ export function SettingsView({
         {/* extra top padding on mobile to clear the absolute nav strip */}
         <div className="p-4 pt-16 md:pt-0 md:p-6">{contentMap[activeSection_]()}</div>
       </div>
+
+      {/* Re-verification warning modal */}
+      {reVerifyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl space-y-4">
+            <div className="flex items-start gap-3">
+              <ShieldCheck className="h-6 w-6 text-amber-500 shrink-0 mt-0.5" />
+              <div>
+                <h2 className="font-black text-base">Re-verification required</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  {reVerifyModal.trigger === "BANKING_CHANGE"
+                    ? "Changing your banking details on a verified account requires re-verification."
+                    : "Changing your business name on a verified account requires re-verification."}
+                  {" "}Your verified badge will be removed until the new documents are reviewed and approved.
+                </p>
+                <div className="mt-3 rounded-xl bg-amber-50 border border-amber-100 px-4 py-3 text-sm text-amber-700">
+                  A re-verification fee of <strong>R{((verificationInfo?.feeCents ?? 15000) / 100).toFixed(2)}</strong> will apply when you submit your updated documents.
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" onClick={() => setReVerifyModal(null)}
+                className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50">
+                Cancel
+              </button>
+              <button type="button" onClick={() => { reVerifyModal.onConfirm(); setReVerifyModal(null); }}
+                className="rounded-xl bg-[#D94472] px-4 py-2 text-sm font-bold text-white hover:opacity-90">
+                I understand, proceed
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

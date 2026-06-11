@@ -39,9 +39,56 @@ model BlogPost {
 }
 
 model PlatformConfig {
-  id             String   @id @default("global")
-  depositPercent Int      @default(20)
-  updatedAt      DateTime @updatedAt
+  id              String   @id @default("global")
+  depositPercent  Int      @default(20)
+  verificationFee Int      @default(15000) // cents — R150
+  updatedAt       DateTime @updatedAt
+}
+
+enum VerificationDocType {
+  GOV_ID
+  PROOF_OF_ADDRESS
+  PROOF_OF_BANK
+}
+
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum VerificationTrigger {
+  INITIAL
+  BUSINESS_NAME_CHANGE
+  BANKING_CHANGE
+}
+
+model VerificationRequest {
+  id                String              @id @default(cuid())
+  providerProfileId String
+  status            VerificationStatus  @default(PENDING)
+  trigger           VerificationTrigger @default(INITIAL)
+  feeCents          Int
+  paymentRef        String?
+  paid              Boolean             @default(false)
+  reviewNotes       String?
+  reviewedAt        DateTime?
+  reviewedById      String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  providerProfile ProviderProfile       @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
+  documents       VerificationDocument[]
+}
+
+model VerificationDocument {
+  id                    String              @id @default(cuid())
+  verificationRequestId String
+  type                  VerificationDocType
+  fileUrl               String
+  createdAt             DateTime            @default(now())
+
+  verificationRequest VerificationRequest @relation(fields: [verificationRequestId], references: [id], onDelete: Cascade)
 }
 
 enum ProviderType {
@@ -206,8 +253,9 @@ model ProviderProfile {
   ratings    Rating[]
   coupons    Coupon[]
   amenities        ProviderAmenity[]
-  jobPostings      JobPosting[]
-  jobApplications  JobApplication[]
+  jobPostings           JobPosting[]
+  jobApplications       JobApplication[]
+  verificationRequests  VerificationRequest[]
 }
 
 model ProviderAmenity {
