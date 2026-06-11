@@ -30,22 +30,31 @@ export async function GET(request: Request) {
     take: 60
   });
 
-  const providers = await Promise.all(profiles.map(async (p) => {
+  // Geocode unique cities once (not per-provider) to avoid rate-limiting Nominatim
+  // on cold-start when many providers share the same city.
+  const citiesNeedingGeocode = [...new Set(
+    profiles.filter(p => p.latitude === 0 && p.longitude === 0 && p.city).map(p => p.city!)
+  )];
+  const cityCoords = new Map<string, { lat: number; lng: number } | null>();
+  await Promise.all(
+    citiesNeedingGeocode.map(async city => {
+      const g = await geocodeQuery(city).catch(() => null);
+      cityCoords.set(city, g);
+    })
+  );
+
+  const providers = profiles.map((p) => {
     const avg = p.ratings.length
       ? Math.round((p.ratings.reduce((s, r) => s + r.stars, 0) / p.ratings.length) * 10) / 10
       : 5.0;
 
-    // Backfill coordinates from the city when a provider hasn't set them, so it
-    // can appear on the map. Cached + jittered slightly to avoid exact overlap.
     let lat = p.latitude, lng = p.longitude;
     if ((lat === 0 && lng === 0) && p.city) {
-      const g = await geocodeQuery(p.city);
+      const g = cityCoords.get(p.city) ?? null;
       if (g) {
-        // Deterministic offset from the id so same-city providers don't overlap
-        // but never shift between loads.
         let h = 0;
         for (let k = 0; k < p.id.length; k++) h = (h * 31 + p.id.charCodeAt(k)) | 0;
-        const offLat = ((h % 1000) / 1000 - 0.5) * 0.01;     // ~±0.55km
+        const offLat = ((h % 1000) / 1000 - 0.5) * 0.01;
         const offLng = (((h >> 10) % 1000) / 1000 - 0.5) * 0.01;
         lat = g.lat + offLat;
         lng = g.lng + offLng;
@@ -80,7 +89,7 @@ export async function GET(request: Request) {
         tags: post.tags, likes: post.likes, saves: post.saves
       }))
     };
-  }));
+  });
 
   return NextResponse.json({ providers });
 }

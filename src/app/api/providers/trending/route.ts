@@ -29,23 +29,31 @@ export async function GET() {
     const avg = count
       ? p.ratings.reduce((s, r) => s + r.stars, 0) / count
       : 0;
-    const score = count * avg;
-    return { p, score, count };
+    return { p, score: count * avg };
   });
 
-  // Sort descending by score; fallback sort by createdAt (newest first)
-  scored.sort((a, b) => b.score - a.score || 0);
+  scored.sort((a, b) => b.score - a.score);
 
   const top = scored.slice(0, 20);
 
-  const providers = await Promise.all(top.map(async ({ p }) => {
+  const citiesNeedingGeocode = [...new Set(
+    top.filter(({ p }) => p.latitude === 0 && p.longitude === 0 && p.city).map(({ p }) => p.city!)
+  )];
+  const cityCoords = new Map<string, { lat: number; lng: number } | null>();
+  await Promise.all(
+    citiesNeedingGeocode.map(async city => {
+      cityCoords.set(city, await geocodeQuery(city).catch(() => null));
+    })
+  );
+
+  const providers = top.map(({ p }) => {
     const avg = p._count.ratings
       ? Math.round((p.ratings.reduce((s, r) => s + r.stars, 0) / p._count.ratings) * 10) / 10
       : 5.0;
 
     let lat = p.latitude, lng = p.longitude;
     if ((lat === 0 && lng === 0) && p.city) {
-      const g = await geocodeQuery(p.city);
+      const g = cityCoords.get(p.city) ?? null;
       if (g) {
         let h = 0;
         for (let k = 0; k < p.id.length; k++) h = (h * 31 + p.id.charCodeAt(k)) | 0;
@@ -77,7 +85,7 @@ export async function GET() {
         likes: post.likes, saves: post.saves
       }))
     };
-  }));
+  });
 
   return NextResponse.json({ providers });
 }

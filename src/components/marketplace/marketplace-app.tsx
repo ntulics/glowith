@@ -178,9 +178,10 @@ export function MarketplaceApp() {
     const allProviders = [...providers, ...newProviders, ...trendingProviders];
     for (const p of allProviders) {
       if (p.id in distances) continue;
-      const hasCoords = p.location.lat !== 0 || p.location.lng !== 0;
+      const loc = p.location;
+      const hasCoords = loc?.lat && loc?.lng && (loc.lat !== 0 || loc.lng !== 0);
       distances[p.id] = hasCoords
-        ? haversineKm(userLocation.lat, userLocation.lng, p.location.lat, p.location.lng)
+        ? haversineKm(userLocation.lat, userLocation.lng, loc.lat, loc.lng)
         : 0;
     }
     setDistanceByProvider(distances);
