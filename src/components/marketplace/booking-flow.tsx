@@ -33,10 +33,21 @@ const SLOTS = Array.from({ length: 20 }, (_, i) => {
   return { h: Math.floor(mins / 60), m: mins % 60, label: `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}` };
 });
 
-function nextDays(n: number) {
+function nextDays(n: number, serviceDurationMinutes = 60) {
   const out: Date[] = [];
-  const d = new Date(); d.setHours(0, 0, 0, 0);
-  for (let i = 0; i < n; i++) { const x = new Date(d); x.setDate(d.getDate() + i); out.push(x); }
+  const now = new Date();
+  const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
+
+  // Last bookable start time = 18:00 - serviceDuration. If we're past that, skip today.
+  const lastSlotStart = 18 * 60 - serviceDurationMinutes; // minutes from midnight
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+  const skipToday = nowMins >= lastSlotStart;
+
+  let added = 0;
+  for (let i = 0; added < n; i++) {
+    if (i === 0 && skipToday) continue;
+    const x = new Date(todayStart); x.setDate(todayStart.getDate() + i); out.push(x); added++;
+  }
   return out;
 }
 
@@ -672,7 +683,7 @@ export function BookingFlow({
                 {step === "date" && (
                   <Section title="Pick a day" onBack={agents.length > 1 ? () => setStep("artist") : (preselectedServiceId ? undefined : () => setStep("service"))}>
                     <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                      {nextDays(14).map((d) => {
+                      {nextDays(14, totalDuration || 30).map((d) => {
                         const sel = date && d.toDateString() === date.toDateString();
                         return (
                           <button key={d.toISOString()} onClick={() => { setDate(d); setSlot(null); setStep("time"); }}

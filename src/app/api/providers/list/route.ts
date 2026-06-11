@@ -20,7 +20,6 @@ export async function GET(request: Request) {
       providerType: providerTypeFilter,
       parentBusinessId: null,
       services: { some: { active: true } },
-      posts: { some: {} }
     },
     include: {
       services: { where: { active: true }, orderBy: { createdAt: "asc" }, include: { extras: { where: { active: true } } } },

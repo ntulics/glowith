@@ -11,6 +11,7 @@ import {
 import { cn } from "@/lib/utils";
 import { LocationPicker } from "@/components/dashboard/location-picker";
 import { SecuritySection } from "@/components/dashboard/security-section";
+import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
 
 type Profile = {
   id: string; businessName: string; handle: string;
@@ -486,7 +487,6 @@ export function SettingsView({
           )}
           {[
             { key: "businessName", label: isAgent ? "Display name" : "Business name" },
-            { key: "city", label: "City" },
             { key: "category", label: "Category" },
             { key: "bio", label: "Bio", multiline: true }
           ].map(({ key, label, multiline }) => (
@@ -501,6 +501,20 @@ export function SettingsView({
               )}
             </div>
           ))}
+          <div>
+            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-gray-500">Address / City</label>
+            <AddressAutocomplete
+              value={(form as any).city ?? ""}
+              onChange={(v) => set("city", v)}
+              onSelect={({ address, lat, lng }) => {
+                set("city", address);
+                setForm((f) => ({ ...f, latitude: lat, longitude: lng }));
+                setSaved(false);
+              }}
+              placeholder="Start typing your address or city…"
+            />
+            <p className="mt-1 text-xs text-gray-400">Select a suggestion to set your exact location on the map.</p>
+          </div>
           <div>
             <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-gray-500">
               {isAgent ? "Your public page" : providerType === "FREELANCER" ? "Your public page" : "Subdomain"}
