@@ -54,7 +54,7 @@ export async function POST(request: Request) {
   let subaccountCode = profile.paystackSubaccountCode;
   if (subaccountCode) {
     await updateSubaccount(subaccountCode, {
-      businessName: profile.businessName,
+      accountName,
       bankCode,
       accountNumber,
       platformPercent,

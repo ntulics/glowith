@@ -83,10 +83,10 @@ export async function createSubaccount(input: {
 /** Update an existing subaccount (e.g. new bank details or platform percentage change). */
 export async function updateSubaccount(
   subaccountCode: string,
-  input: { businessName?: string; bankCode?: string; accountNumber?: string; platformPercent?: number }
+  input: { accountName?: string; bankCode?: string; accountNumber?: string; platformPercent?: number }
 ): Promise<void> {
   const body: Record<string, unknown> = {};
-  if (input.businessName) body.business_name = input.businessName;
+  if (input.accountName) body.business_name = input.accountName;
   if (input.bankCode) body.bank_code = input.bankCode;
   if (input.accountNumber) body.account_number = input.accountNumber;
   if (input.platformPercent !== undefined) body.percentage_charge = input.platformPercent;
