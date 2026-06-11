@@ -46,7 +46,7 @@ type Step = "service" | "artist" | "date" | "time" | "auth" | "review" | "pay" |
 export function BookingFlow({
   open, onClose,
   providerProfileId, providerName, services, preselectedServiceId,
-  preselectedDate, preselectedSlot, startStep,
+  preselectedDate, preselectedSlot, preselectedExtraIds, startStep,
   providerRating, providerReviewCount, providerAvatarUrl,
   drawer = false,
   inline = false,
@@ -58,6 +58,7 @@ export function BookingFlow({
   services: Service[]; preselectedServiceId?: string | null;
   preselectedDate?: Date | null;
   preselectedSlot?: string | null;
+  preselectedExtraIds?: string[];
   startStep?: Step;
   providerRating?: number;
   providerReviewCount?: number;
@@ -147,7 +148,14 @@ export function BookingFlow({
     if (!open) return;
     setError("");
     setSelectedIds(preselectedServiceId ? [preselectedServiceId] : []);
-    setSelectedExtras([]);
+    // Pre-populate extras when jumping straight to review
+    if (preselectedExtraIds?.length && preselectedServiceId) {
+      const svc = services.find((s) => s.id === preselectedServiceId);
+      const pre = (svc?.extras ?? []).filter((e) => preselectedExtraIds.includes(e.id));
+      setSelectedExtras(pre);
+    } else {
+      setSelectedExtras([]);
+    }
     setDate(preselectedDate ?? null);
     setSlot(preselectedSlot ?? null);
     setNotes(""); setServiceCat("All");

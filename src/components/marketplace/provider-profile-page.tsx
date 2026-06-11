@@ -5,7 +5,7 @@ import Image, { type ImageProps } from "next/image";
 import Link from "next/link";
 import { format } from "date-fns";
 import { AnimatePresence, motion } from "framer-motion";
-import { Accessibility, ArrowLeft, ArrowUpDown, Award, Baby, Bath, BellRing, CalendarDays, Camera, Car, ChevronLeft, ChevronRight, Clock3, Coffee, Cookie, Droplets, Flame, Gift, GlassWater, Grid3X3, Heart, HeartPulse, Home, Lamp, Layers, Leaf, Loader2, Lock, MapPin, Menu, MessageCircle, Music, Package, PawPrint, Share2, ShieldCheck, ShowerHead, Sofa, Sparkles, Star, Sun, Thermometer, TreePine, Tv, UserCheck, UserPlus, Users, VolumeX, Wind, Wifi, X, Zap } from "lucide-react";
+import { Accessibility, ArrowLeft, ArrowUpDown, Award, Baby, Bath, BellRing, CalendarDays, Camera, Car, Check, ChevronLeft, ChevronRight, Clock3, Coffee, Cookie, Droplets, Flame, Gift, GlassWater, Grid3X3, Heart, HeartPulse, Home, Lamp, Layers, Leaf, Loader2, Lock, MapPin, Menu, MessageCircle, Music, Package, PawPrint, Plus, Share2, ShieldCheck, ShowerHead, Sofa, Sparkles, Star, Sun, Thermometer, TreePine, Tv, UserCheck, UserPlus, Users, VolumeX, Wind, Wifi, X, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VerifiedBadge } from "@/components/verified-badge";
 import { BookingFlow } from "@/components/marketplace/booking-flow";
@@ -24,7 +24,8 @@ function nextBookingDays(n: number): Date[] {
   return out;
 }
 
-type Service = { id: string; name: string; category: string; durationMinutes: number; priceCents: number; depositCents: number; performer?: string | null };
+type ServiceExtra = { id: string; name: string; description?: string | null; priceCents: number; durationMinutes: number };
+type Service = { id: string; name: string; category: string; durationMinutes: number; priceCents: number; depositCents: number; performer?: string | null; extras?: ServiceExtra[] };
 type Post = { id: string; caption: string; imageUrl: string; images?: string[]; tags: string[]; likes: number; saves: number; featured?: boolean; serviceId?: string | null };
 type TeamMember = { id: string; name: string; role: string; avatarUrl: string | null; handle: string; services?: Service[] };
 type BookTarget = { id: string; name: string; services: Service[]; preselect: string | null; date?: Date | null; slot?: string | null };
@@ -110,6 +111,8 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
   const [notes, setNotes] = useState("");
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+  const [selectedExtraIds, setSelectedExtraIds] = useState<string[]>([]);
+  const [extrasConfirmed, setExtrasConfirmed] = useState(false);
   const [busySlots, setBusySlots] = useState<{ start: string; durationMinutes: number }[]>([]);
   const [busyLoading, setBusyLoading] = useState(false);
   const [photoGalleryOpen, setPhotoGalleryOpen] = useState(false);
@@ -1146,7 +1149,7 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
                                 const sel = selectedSlot === s.label;
                                 return (
                                   <button key={s.label} disabled={disabled}
-                                    onClick={() => { setSelectedSlot(s.label); setBookingStep("notes"); }}
+                                    onClick={() => { setSelectedSlot(s.label); setSelectedExtraIds([]); setExtrasConfirmed(false); setBookingStep("notes"); }}
                                     className={cn("rounded-xl border py-2 text-xs font-bold transition",
                                       sel ? "border-[var(--brand)] bg-[var(--brand)] text-white"
                                         : disabled ? "cursor-not-allowed border-[var(--line)] bg-[var(--line)]/20 text-[var(--muted)]/40"
@@ -1160,22 +1163,65 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
                         </motion.div>
                       )}
 
-                      {/* STEP: inline booking flow (notes → auth → review → pay → done) */}
-                      {selectedDate && selectedSlot && (
+                      {/* STEP: extras (only when service has extras, slot picked, not yet confirmed) */}
+                      {selectedDate && selectedSlot && (selectedService.extras?.length ?? 0) > 0 && !extrasConfirmed && (
+                        <motion.div key="step-extras"
+                          initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
+                          transition={{ duration: 0.18 }} className="px-5 py-4">
+                          <div className="mb-3 flex items-center gap-2">
+                            <button onClick={() => { setSelectedSlot(null); setBookingStep("time"); }}
+                              className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--line)] text-[var(--muted)] hover:border-[var(--brand)] hover:text-[var(--brand)]">
+                              <ArrowLeft className="h-3.5 w-3.5" />
+                            </button>
+                            <p className="text-sm font-black">Optional extras</p>
+                          </div>
+                          <div className="space-y-2">
+                            {selectedService.extras!.map((e) => {
+                              const checked = selectedExtraIds.includes(e.id);
+                              return (
+                                <button key={e.id} onClick={() => setSelectedExtraIds((prev) => checked ? prev.filter((id) => id !== e.id) : [...prev, e.id])}
+                                  className={cn("flex w-full items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left transition",
+                                    checked ? "border-[var(--brand)]/50 bg-[var(--brand)]/5" : "border-[var(--line)] bg-white hover:border-[var(--brand)]/40")}>
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-bold">{e.name}</p>
+                                    {e.description && <p className="text-xs text-[var(--muted)]">{e.description}</p>}
+                                    <p className="text-xs text-[var(--muted)]">
+                                      {e.priceCents > 0 ? `+${formatZAR(e.priceCents)}` : "Free"}
+                                      {e.durationMinutes > 0 ? ` · +${e.durationMinutes} min` : ""}
+                                    </p>
+                                  </div>
+                                  <span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition",
+                                    checked ? "bg-[var(--brand)] text-white" : "border border-[var(--line)] text-[var(--muted)]")}>
+                                    {checked ? <Check className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <button onClick={() => setExtrasConfirmed(true)}
+                            className="mt-4 w-full rounded-xl bg-[var(--brand)] py-3 text-sm font-black text-white hover:opacity-90">
+                            Continue
+                          </button>
+                        </motion.div>
+                      )}
+
+                      {/* STEP: inline booking flow (auth → review → pay → done) */}
+                      {selectedDate && selectedSlot && (extrasConfirmed || (selectedService.extras?.length ?? 0) === 0) && (
                         <motion.div key="step-flow"
                           initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
                           transition={{ duration: 0.18 }}>
                           <BookingFlow
                             open
                             inline
-                            onClose={() => { setSelectedDate(null); setSelectedSlot(null); setBookingStep("time"); }}
-                            onSuccess={() => { setSelectedServiceId(null); setBookingStep("services"); setSelectedDate(null); setSelectedSlot(null); setNotes(""); }}
+                            onClose={() => { setExtrasConfirmed(false); setSelectedExtraIds([]); }}
+                            onSuccess={() => { setSelectedServiceId(null); setBookingStep("services"); setSelectedDate(null); setSelectedSlot(null); setSelectedExtraIds([]); setExtrasConfirmed(false); setNotes(""); }}
                             providerProfileId={profile.id}
                             providerName={profile.businessName}
                             services={profile.services}
                             preselectedServiceId={selectedService.id}
                             preselectedDate={selectedDate}
                             preselectedSlot={selectedSlot}
+                            preselectedExtraIds={selectedExtraIds}
                             startStep="review"
                           />
                         </motion.div>

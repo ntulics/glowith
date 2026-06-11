@@ -63,6 +63,11 @@ export function StickyBookingBar({ service, providerProfileId, onClear, hidden =
   const [authPassword, setAuthPassword] = useState("");
   const [authName, setAuthName] = useState("");
 
+  // Booking for
+  const [bookingFor, setBookingFor] = useState<"SELF" | "CHILD" | "OTHER">("SELF");
+  const [attendeeName, setAttendeeName] = useState("");
+  const [attendeePhone, setAttendeePhone] = useState("");
+
   // Booking state
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -77,6 +82,7 @@ export function StickyBookingBar({ service, providerProfileId, onClear, hidden =
   useEffect(() => {
     setStep("date"); setSelectedDate(null); setSelectedSlot(null); setNotes("");
     setError(""); setAuthed(null); setPayInfo(null); payMountedRef.current = false;
+    setBookingFor("SELF"); setAttendeeName(""); setAttendeePhone("");
   }, [service?.id]);
 
   // Load availability when date selected
@@ -183,7 +189,11 @@ export function StickyBookingBar({ service, providerProfileId, onClear, hidden =
       const startsAt = slotDate(selectedDate, selectedSlot).toISOString();
       const res = await fetch("/api/bookings/create", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ providerProfileId, serviceIds: [service.id], startsAt, notes })
+        body: JSON.stringify({
+          providerProfileId, serviceIds: [service.id], startsAt, notes, bookingFor,
+          attendeeName: bookingFor !== "SELF" ? attendeeName || null : null,
+          attendeePhone: bookingFor !== "SELF" ? attendeePhone || null : null,
+        })
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error ?? "Could not create booking");
@@ -382,6 +392,30 @@ export function StickyBookingBar({ service, providerProfileId, onClear, hidden =
                         <div className="flex justify-between px-3 py-2 bg-[var(--background)]">
                           <span className="text-xs text-[var(--muted)]">Deposit required</span>
                           <span className="text-xs font-bold">{ZAR(service.depositCents)}</span>
+                        </div>
+                      )}
+                    </div>
+                    {/* Booking for */}
+                    <div>
+                      <p className="mb-1.5 text-xs font-bold uppercase tracking-wider text-[var(--muted)]">Booking for</p>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {(["SELF", "CHILD", "OTHER"] as const).map((v) => (
+                          <button key={v} onClick={() => setBookingFor(v)}
+                            className={cn("rounded-xl border py-2 text-xs font-bold transition",
+                              bookingFor === v ? "bg-[var(--ink)] border-[var(--ink)] text-white" : "border-[var(--line)] text-[var(--muted)] hover:border-[var(--brand)]")}>
+                            {v === "SELF" ? "Myself" : v === "CHILD" ? "A child" : "Someone else"}
+                          </button>
+                        ))}
+                      </div>
+                      {(bookingFor === "CHILD" || bookingFor === "OTHER") && (
+                        <div className="mt-2 space-y-2">
+                          <input value={attendeeName} onChange={(e) => setAttendeeName(e.target.value)}
+                            placeholder={bookingFor === "CHILD" ? "Child's full name" : "Full name"}
+                            className="w-full rounded-xl border border-[var(--line)] bg-[var(--background)] px-3 py-2.5 text-sm outline-none focus:border-[var(--brand)] focus:bg-white" />
+                          <input value={attendeePhone} onChange={(e) => setAttendeePhone(e.target.value)}
+                            placeholder={bookingFor === "OTHER" ? "Their phone number" : "Emergency contact (optional)"}
+                            type="tel"
+                            className="w-full rounded-xl border border-[var(--line)] bg-[var(--background)] px-3 py-2.5 text-sm outline-none focus:border-[var(--brand)] focus:bg-white" />
                         </div>
                       )}
                     </div>
