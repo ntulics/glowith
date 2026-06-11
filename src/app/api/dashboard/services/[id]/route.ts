@@ -9,16 +9,25 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params;
   const body = await request.json();
 
+  const agentIds: string[] = Array.isArray(body.agentIds) ? body.agentIds : [];
+
+  // Replace agents: delete all then re-create
+  await prisma.serviceAgent.deleteMany({ where: { serviceId: id } });
+
   const service = await prisma.service.update({
     where: { id },
     data: {
       name: body.name,
       category: body.category,
+      categoryId: body.categoryId ?? null,
+      description: body.description ?? null,
       durationMinutes: body.durationMinutes,
       priceCents: body.priceCents,
       depositCents: body.depositCents,
-      depositIsPercent: body.depositIsPercent ?? false
-    }
+      depositIsPercent: body.depositIsPercent ?? false,
+      agents: agentIds.length ? { create: agentIds.map((aid) => ({ agentId: aid })) } : undefined,
+    },
+    include: { agents: { select: { agentId: true } } }
   });
   return NextResponse.json({ service });
 }

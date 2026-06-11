@@ -256,6 +256,8 @@ model ProviderProfile {
   jobPostings           JobPosting[]
   jobApplications       JobApplication[]
   verificationRequests  VerificationRequest[]
+  serviceCategories     ServiceCategory[]
+  serviceAgents         ServiceAgent[]
 }
 
 model ProviderAmenity {
@@ -305,11 +307,25 @@ model Rating {
   @@unique([userId, providerProfileId])
 }
 
+model ServiceCategory {
+  id                String   @id @default(cuid())
+  providerProfileId String
+  name              String
+  color             String   @default("#D94472")
+  imageUrl          String?
+  createdAt         DateTime @default(now())
+
+  providerProfile ProviderProfile @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
+  services        Service[]
+}
+
 model Service {
   id                String   @id @default(cuid())
   providerProfileId String
   name              String
-  category          String
+  category          String   // legacy string kept for backwards compat
+  categoryId        String?  // FK to ServiceCategory
+  description       String?
   durationMinutes   Int
   priceCents        Int
   depositCents      Int      // fixed deposit amount OR percentage value (0-100) when depositIsPercent=true
@@ -317,9 +333,22 @@ model Service {
   active            Boolean  @default(true)
   createdAt         DateTime @default(now())
 
-  providerProfile ProviderProfile @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
-  bookings        Booking[]
-  extras          ServiceExtra[]
+  providerProfile  ProviderProfile  @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
+  serviceCategory  ServiceCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  bookings         Booking[]
+  extras           ServiceExtra[]
+  agents           ServiceAgent[]
+}
+
+model ServiceAgent {
+  id        String @id @default(cuid())
+  serviceId String
+  agentId   String // ProviderProfile id of the agent
+
+  service Service         @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  agent   ProviderProfile @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceId, agentId])
 }
 
 model ServiceExtra {

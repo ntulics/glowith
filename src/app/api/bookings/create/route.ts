@@ -95,7 +95,7 @@ export async function POST(request: Request) {
   });
   if (clash) return NextResponse.json({ error: "That slot was just taken — pick another time" }, { status: 409 });
 
-  // Coupon (applied to the combined price)
+  // Coupon: discount applies to service price only (matching the validate route)
   let couponId: string | null = null;
   let discountCents = 0;
   if (couponCode) {
@@ -110,9 +110,9 @@ export async function POST(request: Request) {
       && (coupon.maxRedemptions == null || coupon.redemptions < coupon.maxRedemptions);
     if (usable) {
       const raw = coupon!.discountType === "PERCENT"
-        ? Math.round((totalPrice * coupon!.discountValue) / 100)
+        ? Math.round((servicesPrice * coupon!.discountValue) / 100)
         : coupon!.discountValue;
-      discountCents = Math.max(0, Math.min(raw, totalPrice));
+      discountCents = Math.max(0, Math.min(raw, servicesPrice));
       couponId = coupon!.id;
     }
   }
