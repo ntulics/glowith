@@ -55,6 +55,7 @@ export async function POST(request: Request) {
   if (subaccountCode) {
     await updateSubaccount(subaccountCode, {
       accountName,
+      businessName: profile.businessName,
       bankCode,
       accountNumber,
       platformPercent,
