@@ -2,6 +2,13 @@
 
 import { useState } from "react";
 import { BadgeCheck, Building2, Check, Clock, Copy, ExternalLink, Plus, Scissors, Search, Shield, ShieldOff, Trash2, Users, X } from "lucide-react";
+
+// Core platform tenants that must never be deleted
+const PLATFORM_HANDLES = new Set(["@glowith", "@admin", "@freelancer", "@freelancers"]);
+const PLATFORM_NAMES = new Set(["Glowith Admin", "Freelancers"]);
+function isPlatform(p: { handle: string; businessName: string }) {
+  return PLATFORM_HANDLES.has(p.handle) || PLATFORM_NAMES.has(p.businessName);
+}
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
@@ -230,11 +237,16 @@ export function ProvidersTable({ providers: initial, freelancerCount }: { provid
               </tr>
             </thead>
             <tbody>
-              {filtered.map((p) => (
+              {filtered.map((p) => {
+                const locked = isPlatform(p);
+                return (
                 <tr key={p.id} className="border-t border-gray-50 hover:bg-gray-50/50">
                   <td className="px-4 py-3">
                     <div>
-                      <p className="font-bold">{p.businessName}</p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="font-bold">{p.businessName}</p>
+                        {locked && <span title="Platform tenant — cannot be deleted"><Shield className="h-3 w-3 text-blue-400" /></span>}
+                      </div>
                       <p className="text-xs text-gray-400">{p.handle}</p>
                       <p className="text-xs text-gray-300">{p.email}</p>
                     </div>
@@ -312,7 +324,11 @@ export function ProvidersTable({ providers: initial, freelancerCount }: { provid
                       <a href="/dashboard" target="_blank" className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700" title="View studio">
                         <ExternalLink className="h-3.5 w-3.5" />
                       </a>
-                      {deleteConfirm === p.id ? (
+                      {locked ? (
+                        <button disabled title="Platform tenant — cannot delete" className="rounded-lg p-1.5 text-gray-200 cursor-not-allowed">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      ) : deleteConfirm === p.id ? (
                         <div className="flex items-center gap-1">
                           <button onClick={() => deleteProvider(p.id)} disabled={loading === `del_${p.id}`}
                             className="rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-bold text-red-600 hover:bg-red-100 disabled:opacity-50">
@@ -331,7 +347,8 @@ export function ProvidersTable({ providers: initial, freelancerCount }: { provid
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
           {filtered.length === 0 && (
