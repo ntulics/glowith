@@ -59,9 +59,9 @@ export async function createSubaccount(input: {
   /** Percentage of each charge the platform keeps (0-100). Provider receives the rest. */
   platformPercent: number;
 }): Promise<{ subaccountCode: string }> {
-  // Paystack's percentage_charge is what the SUBACCOUNT (provider) receives.
-  // If platform keeps 20%, provider receives 80%.
-  const percentageCharge = (100 - input.platformPercent) / 100;
+  // Paystack's percentage_charge is what the SUBACCOUNT (provider) receives, as a whole number.
+  // If platform keeps 20%, provider receives 80 → percentage_charge: 80.
+  const percentageCharge = 100 - input.platformPercent;
 
   const res = await fetch(`${BASE}/subaccount`, {
     method: "POST",
@@ -88,7 +88,7 @@ export async function updateSubaccount(
   if (input.businessName) body.business_name = input.businessName;
   if (input.bankCode) body.bank_code = input.bankCode;
   if (input.accountNumber) body.account_number = input.accountNumber;
-  if (input.platformPercent !== undefined) body.percentage_charge = (100 - input.platformPercent) / 100;
+  if (input.platformPercent !== undefined) body.percentage_charge = 100 - input.platformPercent;
 
   const res = await fetch(`${BASE}/subaccount/${subaccountCode}`, {
     method: "PUT",
