@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { VerifiedBadge } from "@/components/verified-badge";
 import { BookingFlow } from "@/components/marketplace/booking-flow";
 import { AgentProfilePage } from "@/components/marketplace/agent-profile-page";
+import { StickyBookingBar } from "@/components/marketplace/sticky-booking-bar";
 import { AMENITY_CATEGORIES, AMENITY_MAP } from "@/lib/amenities";
 
 const BOOKING_SLOTS = Array.from({ length: 20 }, (_, i) => {
@@ -1303,35 +1304,16 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
         startStep={book?.date && book?.slot ? "review" : undefined}
       />
 
-      {/* ── Mobile sticky booking bar (appears on service selection) ── */}
-      {selectedServiceId && (() => {
-        const svc = profile.services.find((s) => s.id === selectedServiceId);
-        if (!svc) return null;
-        return (
-          <div className="fixed inset-x-0 bottom-0 z-50 lg:hidden">
-            <div className="pointer-events-none h-8 bg-gradient-to-t from-black/10 to-transparent" />
-            <div className="border-t border-[var(--line)] bg-white/95 px-4 py-3 backdrop-blur-md shadow-[0_-4px_24px_rgba(0,0,0,0.08)]">
-              <div className="mb-2.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-[var(--muted)]">
-                <span className="font-semibold text-[var(--ink)]">{svc.name}</span>
-                <span>{formatDuration(svc.durationMinutes)}</span>
-                {svc.depositCents > 0 && <span>{formatZAR(svc.depositCents)} deposit</span>}
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="min-w-0">
-                  <p className="text-xl font-black leading-none text-[var(--ink)]">{formatZAR(svc.priceCents)}</p>
-                  <p className="mt-0.5 text-[10px] text-[var(--muted)]">total</p>
-                </div>
-                <button
-                  onClick={() => openBooking(svc.id, selectedDate, selectedSlot)}
-                  className="ml-auto flex-shrink-0 rounded-xl bg-[var(--brand)] px-6 py-3 text-sm font-black text-white shadow-sm transition active:scale-95 hover:bg-[var(--brand-dark)]"
-                >
-                  {selectedDate && selectedSlot ? "Review & confirm" : `Book ${svc.name}`}
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      {/* ── Mobile sticky booking bar ── */}
+      <StickyBookingBar
+        service={selectedService ?? null}
+        providerProfileId={profile.id}
+        onBook={(serviceId, date, slot, notes) => {
+          setNotes(notes);
+          openBooking(serviceId, date, slot);
+        }}
+        onClear={() => { setSelectedServiceId(null); setBookingStep("services"); setSelectedDate(null); setSelectedSlot(null); setNotes(""); }}
+      />
 
       {/* Agent full profile in a popup (rendered natively) */}
       {agentPopup && (

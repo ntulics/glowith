@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { BookingFlow } from "./booking-flow";
+import { StickyBookingBar } from "./sticky-booking-bar";
 import {
   Award,
   BadgeCheck,
@@ -63,7 +64,7 @@ const fmtDur = (m: number) =>
 const formatDuration = fmtDur;
 
 export function AgentProfilePage({ profile }: { profile: AgentProfile }) {
-  const [bookTarget, setBookTarget] = useState<string | null>(null); // serviceId
+  const [bookTarget, setBookTarget] = useState<{ serviceId: string | null; date?: Date | null; slot?: string | null } | null>(null);
   const [bookingOpen, setBookingOpen] = useState(false);
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
   const [serviceCat, setServiceCat] = useState("All");
@@ -86,8 +87,8 @@ export function AgentProfilePage({ profile }: { profile: AgentProfile }) {
     ? profile.services.length
     : profile.services.filter((s) => s.category === serviceCat).length;
 
-  function openBooking(serviceId?: string) {
-    setBookTarget(serviceId ?? null);
+  function openBooking(serviceId?: string, date?: Date | null, slot?: string | null) {
+    setBookTarget({ serviceId: serviceId ?? null, date, slot });
     setBookingOpen(true);
   }
 
@@ -459,9 +460,20 @@ export function AgentProfilePage({ profile }: { profile: AgentProfile }) {
           providerProfileId={profile.id}
           providerName={profile.businessName}
           services={profile.services}
-          preselectedServiceId={bookTarget ?? undefined}
+          preselectedServiceId={bookTarget?.serviceId ?? undefined}
+          preselectedDate={bookTarget?.date ?? null}
+          preselectedSlot={bookTarget?.slot ?? null}
+          startStep={bookTarget?.date && bookTarget?.slot ? "review" : undefined}
         />
       )}
+
+      {/* ── Mobile sticky booking bar ── */}
+      <StickyBookingBar
+        service={selectedServiceId ? (profile.services.find(s => s.id === selectedServiceId) ?? null) : null}
+        providerProfileId={profile.id}
+        onBook={(serviceId, date, slot) => openBooking(serviceId, date, slot)}
+        onClear={() => setSelectedServiceId(null)}
+      />
     </div>
   );
 }
