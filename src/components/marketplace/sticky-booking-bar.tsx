@@ -21,6 +21,8 @@ interface Props {
   providerProfileId: string;
   onBook: (serviceId: string, date: Date, slot: string, notes: string) => void;
   onClear: () => void;
+  /** When true the bar hides itself (e.g. while the booking popup is open) */
+  hidden?: boolean;
 }
 
 const SLOTS = Array.from({ length: 20 }, (_, i) => {
@@ -45,7 +47,7 @@ const ZAR = (c: number) =>
 const fmtDur = (m: number) =>
   m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ""}`;
 
-export function StickyBookingBar({ service, providerProfileId, onBook, onClear }: Props) {
+export function StickyBookingBar({ service, providerProfileId, onBook, onClear, hidden = false }: Props) {
   const [step, setStep] = useState<Step>("date");
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
@@ -93,7 +95,7 @@ export function StickyBookingBar({ service, providerProfileId, onBook, onClear }
     else if (step === "notes") { setSelectedSlot(null); setStep("time"); }
   }
 
-  if (!service) return null;
+  if (!service || hidden) return null;
 
   const canBook = !!selectedDate && !!selectedSlot;
   const stepLabel = step === "date" ? "Pick a date" : step === "time" ? "Choose a time" : "Any notes?";

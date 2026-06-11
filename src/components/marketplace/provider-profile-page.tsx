@@ -361,6 +361,7 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
       <BookingFlow
         open={!!book}
         onClose={() => { setBook(null); }}
+        onSuccess={() => { setBook(null); setSelectedServiceId(null); setBookingStep("services"); setSelectedDate(null); setSelectedSlot(null); setNotes(""); }}
         providerProfileId={book?.id ?? profile.id}
         providerName={book?.name ?? profile.businessName}
         services={book?.services ?? profile.services}
@@ -1037,7 +1038,7 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
 
           {/* ── Sticky sidebar — static or dynamic cart ── */}
           <aside className="mt-8 lg:mt-0 lg:w-96 lg:shrink-0">
-            <div className="sticky top-[6rem] overflow-hidden rounded-2xl border border-[var(--line)] bg-white shadow-sm">
+            <div className="sticky top-[6rem] rounded-2xl border border-[var(--line)] bg-white shadow-sm overflow-hidden max-h-[calc(100dvh-8rem)] overflow-y-auto">
               <AnimatePresence mode="wait">
                 {!selectedService ? (
                   <motion.div
@@ -1153,19 +1154,20 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
                     {/* Notes + confirm — appear once time picked */}
                     <AnimatePresence>
                       {selectedDate && selectedSlot && (
-                        <motion.div key="notes" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-                          <div className="px-5 py-4">
-                            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2}
-                              placeholder="Allergies, preferences or special requests (optional)"
-                              className="w-full resize-none rounded-xl border border-[var(--line)] bg-[var(--background)] px-3 py-2.5 text-sm outline-none focus:border-[var(--brand)] focus:bg-white" />
-                            <button onClick={() => openBooking(selectedService.id, selectedDate, selectedSlot)}
-                              className="mt-3 w-full rounded-xl bg-[var(--brand)] py-3.5 text-sm font-black text-white shadow-sm hover:bg-[var(--brand-dark)]">
-                              Review &amp; confirm · {formatZAR(selectedService.priceCents)}
-                            </button>
-                            {selectedService.depositCents > 0 && (
-                              <p className="mt-2 text-center text-xs text-[var(--muted)]">{formatZAR(selectedService.depositCents)} deposit to confirm</p>
-                            )}
-                          </div>
+                        <motion.div key="flow" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden border-t border-[var(--line)]">
+                          <BookingFlow
+                            open
+                            inline
+                            onClose={() => { setSelectedServiceId(null); setBookingStep("services"); setSelectedDate(null); setSelectedSlot(null); setNotes(""); }}
+                            onSuccess={() => { setSelectedServiceId(null); setBookingStep("services"); setSelectedDate(null); setSelectedSlot(null); setNotes(""); }}
+                            providerProfileId={profile.id}
+                            providerName={profile.businessName}
+                            services={profile.services}
+                            preselectedServiceId={selectedService.id}
+                            preselectedDate={selectedDate}
+                            preselectedSlot={selectedSlot}
+                            startStep="review"
+                          />
                         </motion.div>
                       )}
                     </AnimatePresence>
@@ -1295,6 +1297,7 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
       <BookingFlow
         open={!!book}
         onClose={() => { setBook(null); }}
+        onSuccess={() => { setBook(null); setSelectedServiceId(null); setBookingStep("services"); setSelectedDate(null); setSelectedSlot(null); setNotes(""); }}
         providerProfileId={book?.id ?? profile.id}
         providerName={book?.name ?? profile.businessName}
         services={book?.services ?? profile.services}
@@ -1308,6 +1311,7 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
       <StickyBookingBar
         service={selectedService ?? null}
         providerProfileId={profile.id}
+        hidden={!!book}
         onBook={(serviceId, date, slot, notes) => {
           setNotes(notes);
           openBooking(serviceId, date, slot);

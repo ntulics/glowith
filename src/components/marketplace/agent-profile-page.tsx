@@ -457,6 +457,7 @@ export function AgentProfilePage({ profile }: { profile: AgentProfile }) {
         <BookingFlow
           open={bookingOpen}
           onClose={() => setBookingOpen(false)}
+          onSuccess={() => { setBookingOpen(false); setBookTarget(null); setSelectedServiceId(null); }}
           providerProfileId={profile.id}
           providerName={profile.businessName}
           services={profile.services}
@@ -471,6 +472,7 @@ export function AgentProfilePage({ profile }: { profile: AgentProfile }) {
       <StickyBookingBar
         service={selectedServiceId ? (profile.services.find(s => s.id === selectedServiceId) ?? null) : null}
         providerProfileId={profile.id}
+        hidden={!!bookTarget}
         onBook={(serviceId, date, slot) => openBooking(serviceId, date, slot)}
         onClear={() => setSelectedServiceId(null)}
       />
