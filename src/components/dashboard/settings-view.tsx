@@ -245,6 +245,14 @@ export function SettingsView({
   const [smtpProvider, setSmtpProvider] = useState<"smtp2go" | "postmark" | "smtp">("smtp2go");
   const [smtpGuideOpen, setSmtpGuideOpen] = useState(false);
   const [copiedText, setCopiedText] = useState<string | null>(null);
+  // Banking / Paystack split pay
+  const [banks, setBanks] = useState<{ name: string; code: string }[]>([]);
+  const [bankCode, setBankCode] = useState("");
+  const [bankAccountNumber, setBankAccountNumber] = useState("");
+  const [bankAccountName, setBankAccountName] = useState<string | null>(null);
+  const [bankingStatus, setBankingStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [bankingError, setBankingError] = useState<string | null>(null);
+  const [existingSubaccount, setExistingSubaccount] = useState<string | null>(null);
 
   const slug = form.handle.replace("@", "");
   const primaryEmail = `bookings@${slug}.glowith.co.za`;
@@ -329,6 +337,42 @@ export function SettingsView({
       setActiveSection(requested);
     }
   }, [activeSection, availableSections, searchParams]);
+
+  useEffect(() => {
+    fetch("/api/dashboard/banking")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.banks) setBanks(d.banks);
+        if (d.banking) {
+          setBankCode(d.banking.bankCode ?? "");
+          setBankAccountNumber(d.banking.bankAccountNumber ?? "");
+          setBankAccountName(d.banking.bankAccountName ?? null);
+          setExistingSubaccount(d.banking.paystackSubaccountCode ?? null);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  async function saveBanking() {
+    setBankingStatus("saving");
+    setBankingError(null);
+    try {
+      const res = await fetch("/api/dashboard/banking", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bankCode, accountNumber: bankAccountNumber }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setBankingError(data.error ?? "Failed to save banking details"); setBankingStatus("error"); return; }
+      setBankAccountName(data.accountName);
+      setExistingSubaccount(data.subaccountCode);
+      setBankingStatus("saved");
+      setTimeout(() => setBankingStatus("idle"), 3000);
+    } catch {
+      setBankingError("Network error. Please try again.");
+      setBankingStatus("error");
+    }
+  }
 
   function handleNavClick(id: string) {
     setActiveSection(id);
@@ -549,6 +593,66 @@ export function SettingsView({
               Integrations
             </button>.
           </p>
+        </div>
+        {/* ── Banking / Paystack split pay ── */}
+        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm space-y-4">
+          <div>
+            <h2 className="font-black text-base">Banking details</h2>
+            <p className="text-xs text-gray-500 mt-1">
+              Your banking details are used to automatically receive your share of each deposit via Paystack split pay.
+              The platform retains its percentage and the rest is routed directly to your account.
+            </p>
+          </div>
+          {existingSubaccount && (
+            <div className="flex items-center gap-2 rounded-xl bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              <span>Paystack subaccount active — <span className="font-mono text-xs">{existingSubaccount}</span></span>
+            </div>
+          )}
+          <div className="space-y-3">
+            <div>
+              <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-gray-500">Bank</label>
+              <select
+                value={bankCode}
+                onChange={(e) => setBankCode(e.target.value)}
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none focus:border-[#D94472] focus:bg-white"
+              >
+                <option value="">Select bank…</option>
+                {banks.map((b) => (
+                  <option key={b.code} value={b.code}>{b.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-gray-500">Account number</label>
+              <input
+                type="text"
+                value={bankAccountNumber}
+                onChange={(e) => setBankAccountNumber(e.target.value)}
+                placeholder="e.g. 123456789"
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none focus:border-[#D94472] focus:bg-white"
+              />
+            </div>
+            {bankAccountName && (
+              <div className="flex items-center gap-2 text-sm text-gray-700">
+                <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+                <span>Account name: <strong>{bankAccountName}</strong></span>
+              </div>
+            )}
+            {bankingError && (
+              <p className="text-sm text-red-600">{bankingError}</p>
+            )}
+          </div>
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={saveBanking}
+              disabled={!bankCode || !bankAccountNumber || bankingStatus === "saving"}
+              className="rounded-xl bg-[#D94472] px-6 py-2.5 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50"
+            >
+              {bankingStatus === "saving" ? "Verifying & saving…" : bankingStatus === "saved" ? "Saved!" : "Save banking details"}
+            </button>
+          </div>
         </div>
         <div className="flex justify-end">
           <button type="button" className="rounded-xl bg-[#1a1a1a] px-6 py-2.5 text-sm font-bold text-white hover:opacity-90">Save changes</button>

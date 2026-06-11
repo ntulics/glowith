@@ -95,7 +95,7 @@ export function BookingFlow({
   const [couponLabel, setCouponLabel] = useState("");
   const [couponError, setCouponError] = useState("");
   const [applyingCoupon, setApplyingCoupon] = useState(false);
-  const [payInfo, setPayInfo] = useState<{ bookingId: string; reference: string; publicKey: string; email: string; amountCents: number } | null>(null);
+  const [payInfo, setPayInfo] = useState<{ bookingId: string; reference: string; publicKey: string; email: string; amountCents: number; subaccountCode?: string | null } | null>(null);
   const [payError, setPayError] = useState("");
   const payMountedRef = useRef(false);
   const popupRef = useRef<any>(null);
@@ -264,6 +264,7 @@ export function BookingFlow({
     const opts: any = {
       key: payInfo.publicKey, email: payInfo.email, amount: payInfo.amountCents,
       currency: "ZAR", reference: payInfo.reference, ref: payInfo.reference,
+      subaccount: payInfo.subaccountCode ?? undefined, bearer: "account",
       onSuccess: onPaid, onLoad: () => {}, onCancel: () => {}, onClose: () => {}
     };
     try {
@@ -284,6 +285,7 @@ export function BookingFlow({
         popupRef.current.paymentRequest?.({
           key: payInfo!.publicKey, email: payInfo!.email, amount: payInfo!.amountCents,
           currency: "ZAR", ref: payInfo!.reference, container: "paystack-apple-pay",
+          subaccount: payInfo!.subaccountCode ?? undefined, bearer: "account",
           style: { theme: "light", applePay: { width: "100%", borderRadius: "10px", type: "pay", locale: "en" } },
           onSuccess: onPaid, onError: () => {}, onCancel: () => {}
         });
@@ -373,7 +375,7 @@ export function BookingFlow({
           return;
         }
         payMountedRef.current = false;
-        setPayInfo({ bookingId: d.booking.id, reference: pd.reference, publicKey: pd.publicKey, email: pd.email, amountCents: pd.amountCents });
+        setPayInfo({ bookingId: d.booking.id, reference: pd.reference, publicKey: pd.publicKey, email: pd.email, amountCents: pd.amountCents, subaccountCode: pd.subaccountCode });
         setStep("pay");
         return;
       }

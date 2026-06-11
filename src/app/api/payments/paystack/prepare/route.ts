@@ -30,6 +30,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ simulated: true });
   }
 
+  // Fetch provider's Paystack subaccount for split pay
+  const provider = await prisma.providerProfile.findUnique({
+    where: { id: booking.providerProfileId },
+    select: { paystackSubaccountCode: true }
+  });
+
   const reference = `glw_${booking.id}_${Date.now()}`;
   await prisma.booking.update({
     where: { id: booking.id },
@@ -41,6 +47,8 @@ export async function POST(request: Request) {
     reference,
     publicKey,
     email: user.email,
-    amountCents: booking.depositCents
+    amountCents: booking.depositCents,
+    // Split pay: if provider has a subaccount, Paystack routes their share directly
+    subaccountCode: provider?.paystackSubaccountCode ?? null,
   });
 }

@@ -186,6 +186,12 @@ model ProviderProfile {
   rescheduleNoticeHours Int?
   rescheduleFeePercent  Int?
   policyText            String?
+  // Banking / Paystack split pay
+  bankName              String?
+  bankCode              String?   // Paystack bank code (e.g. "058" for GTBank)
+  bankAccountNumber     String?
+  bankAccountName       String?   // verified account name from Paystack
+  paystackSubaccountCode String?  // ACCT_xxxxx — set after auto-creation
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

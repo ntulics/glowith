@@ -73,7 +73,7 @@ export function StickyBookingBar({ service, providerProfileId, onClear, hidden =
   const [error, setError] = useState("");
 
   // Payment state
-  const [payInfo, setPayInfo] = useState<{ bookingId: string; reference: string; publicKey: string; email: string; amountCents: number } | null>(null);
+  const [payInfo, setPayInfo] = useState<{ bookingId: string; reference: string; publicKey: string; email: string; amountCents: number; subaccountCode?: string | null } | null>(null);
   const payMountedRef = useRef(false);
 
   const isExpanded = step === "auth" || step === "review" || step === "pay" || step === "done";
@@ -117,6 +117,8 @@ export function StickyBookingBar({ service, providerProfileId, onClear, hidden =
       const handler = PaystackPop.setup({
         key: payInfo!.publicKey, email: payInfo!.email, amount: payInfo!.amountCents,
         ref: payInfo!.reference, currency: "ZAR",
+        subaccount: payInfo!.subaccountCode ?? undefined,
+        bearer: "account",
         onSuccess: async () => {
           await fetch("/api/payments/paystack/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reference: payInfo!.reference }) });
           setStep("done");
@@ -207,7 +209,7 @@ export function StickyBookingBar({ service, providerProfileId, onClear, hidden =
         if (!prep.ok) throw new Error(pd.error ?? "Payment could not be started");
         if (pd.simulated) { setStep("done"); return; }
         payMountedRef.current = false;
-        setPayInfo({ bookingId: d.booking.id, reference: pd.reference, publicKey: pd.publicKey, email: pd.email, amountCents: pd.amountCents });
+        setPayInfo({ bookingId: d.booking.id, reference: pd.reference, publicKey: pd.publicKey, email: pd.email, amountCents: pd.amountCents, subaccountCode: pd.subaccountCode });
         setStep("pay");
         return;
       }
