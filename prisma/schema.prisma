@@ -324,6 +324,7 @@ model Booking {
   bookingFor        BookingFor    @default(SELF)
   attendeeName      String?
   attendeePhone     String?
+  reservedUntil     DateTime?     // PENDING_DEPOSIT bookings expire after this time
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 

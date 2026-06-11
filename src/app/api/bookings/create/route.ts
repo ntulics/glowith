@@ -3,7 +3,10 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { checkInCodeExpiry, generateCheckInCode } from "@/lib/booking-attendance";
 
-// Create a real DB booking (one or more services). Requires the client signed in.
+// How long a PENDING_DEPOSIT booking holds a slot before another user can take it.
+const RESERVATION_MINUTES = 15;
+
+// Create a real DB booking (one or more services + optional extras). Requires client signed in.
 export async function POST(request: Request) {
   const session = await auth();
   const user = session?.user as any;
@@ -14,18 +17,29 @@ export async function POST(request: Request) {
   const serviceIds: string[] = Array.isArray(body.serviceIds) && body.serviceIds.length
     ? body.serviceIds
     : body.serviceId ? [body.serviceId] : [];
+  const extraIds: string[] = Array.isArray(body.extraIds) ? body.extraIds : [];
+
   if (!providerProfileId || !serviceIds.length || !startsAt) {
     return NextResponse.json({ error: "Missing booking details" }, { status: 400 });
   }
 
-  // The booked profile, plus its parent business and agents — services from any
-  // of these may be booked here (a business storefront lists its agents' services).
+  // Expire any stale reservations from other users so the slot-conflict check is accurate
+  await prisma.booking.updateMany({
+    where: { status: "PENDING_DEPOSIT", reservedUntil: { lt: new Date() } },
+    data: { status: "EXPIRED" }
+  });
+
   const profile = await prisma.providerProfile.findUnique({
     where: { id: providerProfileId },
     select: { id: true, parentBusinessId: true, plan: true, agents: { select: { id: true } } }
   });
   if (!profile) return NextResponse.json({ error: "Provider not found" }, { status: 404 });
-  const allowedProviderIds = new Set<string>([profile.id, ...(profile.parentBusinessId ? [profile.parentBusinessId] : []), ...profile.agents.map((a) => a.id)]);
+
+  const allowedProviderIds = new Set<string>([
+    profile.id,
+    ...(profile.parentBusinessId ? [profile.parentBusinessId] : []),
+    ...profile.agents.map((a) => a.id)
+  ]);
   const couponOwnerIds = [profile.parentBusinessId ?? profile.id, profile.id];
 
   const services = await prisma.service.findMany({ where: { id: { in: serviceIds }, active: true } });
@@ -33,8 +47,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "One or more services are unavailable" }, { status: 404 });
   }
 
-  const totalDuration = services.reduce((s, x) => s + x.durationMinutes, 0);
-  const totalPrice = services.reduce((s, x) => s + x.priceCents, 0);
+  // Load selected extras
+  const extras = extraIds.length
+    ? await prisma.serviceExtra.findMany({ where: { id: { in: extraIds }, active: true } })
+    : [];
+
+  const servicesDuration = services.reduce((s, x) => s + x.durationMinutes, 0);
+  const extrasDuration = extras.reduce((s, e) => s + e.durationMinutes, 0);
+  const totalDuration = servicesDuration + extrasDuration;
+
+  const servicesPrice = services.reduce((s, x) => s + x.priceCents, 0);
+  const extrasPrice = extras.reduce((s, e) => s + e.priceCents, 0);
+  const totalPrice = servicesPrice + extrasPrice;
+
   const totalDepositBase = services.reduce((s, x) => s + (x.depositCents ?? 0), 0);
 
   const start = new Date(startsAt);
@@ -43,11 +68,18 @@ export async function POST(request: Request) {
   }
   const end = new Date(start.getTime() + totalDuration * 60000);
 
-  // Reject overlaps with this provider's existing confirmed bookings.
+  // Reject overlaps with this provider's existing active bookings
   const dayStart = new Date(start); dayStart.setHours(0, 0, 0, 0);
   const dayEnd = new Date(start); dayEnd.setHours(23, 59, 59, 999);
   const sameDay = await prisma.booking.findMany({
-    where: { providerProfileId, status: "CONFIRMED", startsAt: { gte: dayStart, lte: dayEnd } },
+    where: {
+      providerProfileId,
+      startsAt: { gte: dayStart, lte: dayEnd },
+      OR: [
+        { status: "CONFIRMED" },
+        { status: "PENDING_DEPOSIT", reservedUntil: { gt: new Date() } },
+      ],
+    },
     select: { startsAt: true, durationMinutes: true, service: { select: { durationMinutes: true } } }
   });
   const clash = sameDay.some((b) => {
@@ -79,7 +111,7 @@ export async function POST(request: Request) {
     }
   }
 
-  // Deposit Glowith collects upfront (STARTER plan only; super-admin percentage)
+  // Deposit Glowith collects upfront (STARTER plan only)
   let depositCents = 0;
   if (totalDepositBase > 0 && profile.plan === "STARTER") {
     const config = await prisma.platformConfig.findUnique({ where: { id: "global" } });
@@ -89,6 +121,10 @@ export async function POST(request: Request) {
   }
 
   const status = depositCents > 0 ? "PENDING_DEPOSIT" : "CONFIRMED";
+  const reservedUntil = status === "PENDING_DEPOSIT"
+    ? new Date(Date.now() + RESERVATION_MINUTES * 60 * 1000)
+    : null;
+
   const booking = await prisma.booking.create({
     data: {
       clientId: user.id,
@@ -101,14 +137,20 @@ export async function POST(request: Request) {
       couponId,
       discountCents,
       status,
+      reservedUntil,
       checkInCode: status === "CONFIRMED" ? generateCheckInCode() : null,
       checkInCodeExpiresAt: status === "CONFIRMED" ? checkInCodeExpiry(start, totalDuration) : null,
       bookingFor: bookingFor ?? "SELF",
       attendeeName: attendeeName ?? null,
       attendeePhone: attendeePhone ?? null,
       items: {
-        create: services.map((s) => ({ serviceId: s.id, name: s.name, priceCents: s.priceCents, durationMinutes: s.durationMinutes }))
-      }
+        create: [
+          ...services.map((s) => ({ serviceId: s.id, name: s.name, priceCents: s.priceCents, durationMinutes: s.durationMinutes }))
+        ]
+      },
+      extras: extras.length ? {
+        create: extras.map((e) => ({ serviceExtraId: e.id, name: e.name, priceCents: e.priceCents }))
+      } : undefined
     }
   });
 

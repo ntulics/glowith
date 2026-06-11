@@ -13,12 +13,18 @@ export async function GET(request: Request) {
 
   const dayStart = new Date(`${date}T00:00:00`);
   const dayEnd = new Date(`${date}T23:59:59`);
+  const now = new Date();
 
   const bookings = await prisma.booking.findMany({
     where: {
       providerProfileId,
-      status: "CONFIRMED", // only confirmed (paid/claimed) bookings reserve a slot
-      startsAt: { gte: dayStart, lte: dayEnd }
+      startsAt: { gte: dayStart, lte: dayEnd },
+      OR: [
+        // Confirmed bookings always block the slot
+        { status: "CONFIRMED" },
+        // Pending-deposit bookings block the slot until their reservation expires
+        { status: "PENDING_DEPOSIT", reservedUntil: { gt: now } },
+      ],
     },
     select: { startsAt: true, durationMinutes: true, service: { select: { durationMinutes: true } } }
   });
