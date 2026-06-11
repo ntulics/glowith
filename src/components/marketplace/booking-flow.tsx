@@ -49,6 +49,8 @@ export function BookingFlow({
   preselectedDate, preselectedSlot, startStep,
   providerRating, providerReviewCount, providerAvatarUrl,
   drawer = false,
+  inline = false,
+  onSuccess,
   userHasAddress
 }: {
   open: boolean; onClose: () => void;
@@ -60,9 +62,11 @@ export function BookingFlow({
   providerRating?: number;
   providerReviewCount?: number;
   providerAvatarUrl?: string | null;
-  /** Render as a right-side drawer instead of full-screen (used from calendar etc.) */
   drawer?: boolean;
-  /** Whether the logged-in user has a saved address (required for minor bookings) */
+  /** Render content inline (no modal overlay — embed in sidebar/panel) */
+  inline?: boolean;
+  /** Called when the booking reaches the "done" step */
+  onSuccess?: () => void;
   userHasAddress?: boolean;
 }) {
   const hasPreselectedDateTime = !!(preselectedDate && preselectedSlot);
@@ -243,7 +247,7 @@ export function BookingFlow({
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ reference: payInfo.reference })
     });
-    setStep("done");
+    setStep("done"); onSuccess?.();
   }
 
   function openCheckout() {
@@ -353,7 +357,7 @@ export function BookingFlow({
         });
         const pd = await prep.json();
         if (!prep.ok) throw new Error(pd.error ?? "Payment could not be started");
-        if (pd.simulated) { setStep("done"); return; }
+        if (pd.simulated) { setStep("done"); onSuccess?.(); return; }
         const host = typeof window !== "undefined" ? window.location.host : "";
         if (host.endsWith("glowith.co.za")) {
           const ret = encodeURIComponent(window.location.href);
@@ -365,7 +369,7 @@ export function BookingFlow({
         setStep("pay");
         return;
       }
-      setStep("done");
+      setStep("done"); onSuccess?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {
@@ -440,7 +444,10 @@ export function BookingFlow({
   );
 
   // ── Wrapper ──────────────────────────────────────────────────────
-  const drawerWrapper = (children: React.ReactNode) => drawer ? (
+  const drawerWrapper = (children: React.ReactNode) => inline ? (
+    // Inline mode: no overlay, renders in place (e.g. desktop sidebar)
+    <div className="flex flex-col">{children}</div>
+  ) : drawer ? (
     <>
       <div className="fixed inset-0 z-[58] bg-black/30 backdrop-blur-sm" onClick={onClose} />
       <div className="fixed inset-y-0 right-0 z-[59] flex w-full max-w-[520px] flex-col bg-white shadow-2xl overflow-hidden">
