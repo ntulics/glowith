@@ -11,6 +11,7 @@ import { VerifiedBadge } from "@/components/verified-badge";
 import { BookingFlow } from "@/components/marketplace/booking-flow";
 import { AgentProfilePage } from "@/components/marketplace/agent-profile-page";
 import { StickyBookingBar } from "@/components/marketplace/sticky-booking-bar";
+import { BookingCalendar } from "@/components/marketplace/booking-calendar";
 import { AMENITY_CATEGORIES, AMENITY_MAP } from "@/lib/amenities";
 
 const BOOKING_SLOTS = Array.from({ length: 20 }, (_, i) => {
@@ -596,20 +597,12 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
                     <h3 className="font-black">Pick a date</h3>
                     <button onClick={() => { setBookingStep("services"); setSelectedDate(null); setSelectedSlot(null); setNotes(""); }} className="text-xs font-bold text-[var(--brand)] hover:underline">Back</button>
                   </div>
-                  <div className="grid grid-cols-4 gap-2">
-                    {nextBookingDays(14, selectedServiceDuration || 30).map((d) => {
-                      const sel = selectedDate && d.toDateString() === selectedDate.toDateString();
-                      return (
-                        <button key={d.toISOString()} onClick={() => { setSelectedDate(d); setSelectedSlot(null); setBookingStep("time"); }}
-                          className={cn("rounded-2xl border p-2.5 text-center transition",
-                            sel ? "border-[var(--brand)] bg-[#FFF0F4]" : "border-[var(--line)] bg-white hover:border-[var(--brand)]")}>
-                          <span className="block text-[10px] font-bold uppercase text-[var(--muted)]">{d.toLocaleDateString("en-ZA", { weekday: "short" })}</span>
-                          <span className="block text-base font-black">{d.getDate()}</span>
-                          <span className="block text-[10px] text-[var(--muted)]">{d.toLocaleDateString("en-ZA", { month: "short" })}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <BookingCalendar
+                    providerProfileId={profile.id}
+                    serviceDuration={selectedServiceDuration || 30}
+                    selectedDate={selectedDate}
+                    onSelectDate={(d) => { setSelectedDate(d); setSelectedSlot(null); setBookingStep("time"); }}
+                  />
                 </motion.div>
               )}
             </AnimatePresence>
@@ -1117,21 +1110,12 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
                           initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
                           transition={{ duration: 0.18 }} className="px-5 py-4">
                           <p className="mb-3 text-sm font-black">Pick a date</p>
-                          <div className="grid grid-cols-4 gap-1.5">
-                            {nextBookingDays(14, selectedServiceDuration || 30).map((d) => {
-                              const sel = selectedDate && d.toDateString() === (selectedDate as Date).toDateString();
-                              return (
-                                <button key={d.toISOString()}
-                                  onClick={() => { setSelectedDate(d); setSelectedSlot(null); setBookingStep("time"); }}
-                                  className={cn("rounded-xl border p-2 text-center transition",
-                                    sel ? "border-[var(--brand)] bg-[#FFF0F4]" : "border-[var(--line)] bg-[var(--background)] hover:border-[var(--brand)]")}>
-                                  <span className="block text-[9px] font-bold uppercase text-[var(--muted)]">{d.toLocaleDateString("en-ZA", { weekday: "short" })}</span>
-                                  <span className="block text-sm font-black">{d.getDate()}</span>
-                                  <span className="block text-[9px] text-[var(--muted)]">{d.toLocaleDateString("en-ZA", { month: "short" })}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
+                          <BookingCalendar
+                            providerProfileId={profile.id}
+                            serviceDuration={selectedServiceDuration || 30}
+                            selectedDate={selectedDate}
+                            onSelectDate={(d) => { setSelectedDate(d); setSelectedSlot(null); setBookingStep("time"); }}
+                          />
                         </motion.div>
                       )}
 

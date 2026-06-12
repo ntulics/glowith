@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, Check, CheckCircle2, Clock3, Loader2, X } from "lucide-react";
 import { signIn } from "next-auth/react";
 import { cn } from "@/lib/utils";
+import { BookingCalendar } from "./booking-calendar";
 
 type BusySlot = { start: string; durationMinutes: number };
 type Step = "date" | "time" | "notes" | "auth" | "review" | "pay" | "done";
@@ -296,20 +297,13 @@ export function StickyBookingBar({ service, providerProfileId, onClear, hidden =
 
                 {/* DATE */}
                 {step === "date" && (
-                  <div className="grid grid-cols-5 gap-1.5 pb-2">
-                    {nextDays(14).map((d) => {
-                      const sel = selectedDate && d.toDateString() === selectedDate.toDateString();
-                      return (
-                        <button key={d.toISOString()}
-                          onClick={() => { setSelectedDate(d); setSelectedSlot(null); setStep("time"); }}
-                          className={cn("rounded-xl border p-2 text-center transition",
-                            sel ? "border-[var(--brand)] bg-[#FFF0F4]" : "border-[var(--line)] hover:border-[var(--brand)]")}>
-                          <span className="block text-[9px] font-bold uppercase text-[var(--muted)]">{d.toLocaleDateString("en-ZA", { weekday: "short" })}</span>
-                          <span className="block text-sm font-black">{d.getDate()}</span>
-                          <span className="block text-[9px] text-[var(--muted)]">{d.toLocaleDateString("en-ZA", { month: "short" })}</span>
-                        </button>
-                      );
-                    })}
+                  <div className="pb-2">
+                    <BookingCalendar
+                      providerProfileId={providerProfileId}
+                      serviceDuration={service?.durationMinutes ?? 30}
+                      selectedDate={selectedDate}
+                      onSelectDate={(d) => { setSelectedDate(d); setSelectedSlot(null); setStep("time"); }}
+                    />
                   </div>
                 )}
 

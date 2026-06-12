@@ -5,6 +5,7 @@ import { signIn } from "next-auth/react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, ArrowRight, Check, Loader2, Minus, Plus, Star, UserCheck, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { BookingCalendar, isSAPublicHolidayClient } from "./booking-calendar";
 
 /* ── Types ──────────────────────────────────────────────────────── */
 type ServiceExtra = { id: string; name: string; description?: string | null; priceCents: number; durationMinutes: number };
@@ -26,59 +27,6 @@ function roleLabel(categories: string[]): string {
   if (/massage|body/.test(j)) return "Massage Therapist";
   if (/barber|beard|shave/.test(j)) return "Barber";
   return "Artist";
-}
-
-/* ── SA Public Holidays (client-side) ──────────────────────────── */
-function easterSunday(y: number): Date {
-  const a = y % 19, b = Math.floor(y / 100), c = y % 100;
-  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
-  const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
-  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
-  const m = Math.floor((a + 11 * h + 22 * l) / 451);
-  const month = Math.floor((h + l - 7 * m + 114) / 31);
-  const day = ((h + l - 7 * m + 114) % 31) + 1;
-  return new Date(y, month - 1, day);
-}
-function isSAPublicHolidayClient(d: Date): boolean {
-  const y = d.getFullYear(), mo = d.getMonth() + 1, da = d.getDate(), dow = d.getDay();
-  const easter = easterSunday(y);
-  const gf = new Date(easter); gf.setDate(easter.getDate() - 2);
-  const fm = new Date(easter); fm.setDate(easter.getDate() + 1);
-  // Fixed holidays: if the holiday falls on Sunday the actual observed day is Monday
-  // We check whether 'd' IS the holiday or the displaced Monday
-  function isFixed(hmo: number, hda: number): boolean {
-    if (mo === hmo && da === hda) return true; // it is the holiday
-    // displaced Monday: today is Monday, yesterday was Sunday and was the holiday
-    if (dow === 1 && mo === hmo) {
-      const sun = da - 1;
-      if (sun === hda) return true;
-    }
-    return false;
-  }
-  return (
-    isFixed(1, 1)   || // New Year
-    isFixed(3, 21)  || // Human Rights Day
-    (mo === gf.getMonth() + 1 && da === gf.getDate()) || // Good Friday
-    (mo === fm.getMonth() + 1 && da === fm.getDate()) || // Family Day
-    isFixed(4, 27)  || // Freedom Day
-    isFixed(5, 1)   || // Workers' Day
-    isFixed(6, 16)  || // Youth Day
-    isFixed(8, 9)   || // Women's Day
-    isFixed(9, 24)  || // Heritage Day
-    isFixed(12, 16) || // Reconciliation Day
-    isFixed(12, 25) || // Christmas
-    isFixed(12, 26)    // Day of Goodwill
-  );
-}
-
-function nextDays(n: number) {
-  const out: Date[] = [];
-  const now = new Date();
-  const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
-  for (let i = 0; out.length < n; i++) {
-    const x = new Date(todayStart); x.setDate(todayStart.getDate() + i); out.push(x);
-  }
-  return out;
 }
 
 type Step = "service" | "artist" | "date" | "time" | "auth" | "review" | "pay" | "done";
@@ -141,17 +89,8 @@ export function BookingFlow({
   const payMountedRef = useRef(false);
   const popupRef = useRef<any>(null);
 
-  // Working hours returned by availability API for the selected date
+  // Working hours returned by availability API for the selected date (drives slot generation)
   const [workingHours, setWorkingHours] = useState<{ open: string; close: string } | null>(null);
-
-  // Provider's weekly schedule (fetched once on open — enables synchronous day-closed checks)
-  type WeeklySchedule = Record<number, { open: string; close: string } | null>;
-  type ProviderSchedule = { weeklySchedule: WeeklySchedule; workOnPublicHolidays: boolean };
-  const [schedule, setSchedule] = useState<ProviderSchedule | null>(null);
-
-  // Per-day capacity data for the date picker (fill level only — closed state uses schedule)
-  type DayMeta = { fill: number; hasSlot: boolean; closed: boolean };
-  const [dayMeta, setDayMeta] = useState<Record<string, DayMeta>>({});
 
   // Artist selection
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -185,24 +124,10 @@ export function BookingFlow({
   const activeProviderId = displayAgent?.id ?? providerProfileId;
   const activeProviderName = displayAgent?.name ?? providerName;
 
-  // Synchronously determine whether a day is closed (non-working day or public holiday)
-  function isDayClosed(d: Date): boolean {
-    if (!schedule) return false; // schedule still loading — optimistic
-    const wh = schedule.weeklySchedule[d.getDay()];
-    if (!wh) return true; // provider doesn't work this day of week
-    if (!schedule.workOnPublicHolidays && isSAPublicHolidayClient(d)) return true;
-    return false;
-  }
-
-  // Slots generated from actual working hours for the selected date (falls back to schedule then defaults)
+  // Slots generated from actual working hours for the selected date
   const computedSlots = useMemo(() => {
-    let open = "09:00", close = "17:00";
-    if (workingHours) {
-      open = workingHours.open; close = workingHours.close;
-    } else if (date && schedule) {
-      const wh = schedule.weeklySchedule[date.getDay()];
-      if (wh) { open = wh.open; close = wh.close; }
-    }
+    const open = workingHours?.open ?? "09:00";
+    const close = workingHours?.close ?? "17:00";
     const [oh, om] = open.split(":").map(Number);
     const [ch, cm] = close.split(":").map(Number);
     const result = [];
@@ -210,7 +135,7 @@ export function BookingFlow({
       result.push({ h: Math.floor(m / 60), m: m % 60, label: `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}` });
     }
     return result;
-  }, [workingHours, schedule, date]);
+  }, [workingHours, date]);
 
   function toggleService(id: string) {
     setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
@@ -245,8 +170,6 @@ export function BookingFlow({
     setNotes(""); setServiceCat("All");
     setSelectedAgent(undefined); setAssignedAgent(null);
     setAgents([]);
-    setDayMeta({});
-    setSchedule(null);
     if (startStep) {
       setStep(startStep);
     } else {
@@ -258,16 +181,6 @@ export function BookingFlow({
       setAuthed(isAuthed);
       if (startStep === "review" && !isAuthed) setStep("auth");
     }).catch(() => setAuthed(false));
-    fetch(`/api/providers/schedule?providerProfileId=${providerProfileId}`)
-      .then((r) => r.json())
-      .then((d) => setSchedule(d))
-      .catch(() => {
-        // On failure default to Mon–Fri 09–17, allow public holidays
-        const ws: WeeklySchedule = {};
-        for (let i = 0; i < 7; i++) ws[i] = null;
-        for (let i = 1; i <= 5; i++) ws[i] = { open: "09:00", close: "17:00" };
-        setSchedule({ weeklySchedule: ws, workOnPublicHolidays: true });
-      });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -305,71 +218,6 @@ export function BookingFlow({
       .catch(() => { setBusy([]); setWorkingHours(null); })
       .finally(() => setBusyLoading(false));
   }, [date, providerProfileId, selectedAgent]);
-
-  // Prefetch capacity fill data for the next 14 days when the date step is shown.
-  // Closed days (weekend / holiday) are already handled synchronously via isDayClosed,
-  // so we skip those here to halve API calls on providers who work Mon–Fri.
-  useEffect(() => {
-    if (step !== "date" || totalDuration === 0) return;
-    const days = nextDays(14);
-    days.forEach((d) => {
-      const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      if (dayMeta[ds]) return; // already fetched
-      if (isDayClosed(d)) { // no need to fetch — we know it's closed
-        setDayMeta((prev) => ({ ...prev, [ds]: { fill: 1, hasSlot: false, closed: true } }));
-        return;
-      }
-      fetch(`/api/bookings/availability?providerProfileId=${providerProfileId}&date=${ds}`)
-        .then((r) => r.json())
-        .then((data) => {
-          const wh: { open: string; close: string } | null = data.workingHours ?? null;
-          const busySlots: Array<{ start: string; durationMinutes: number }> = data.busy ?? [];
-
-          // Closed day: no working hours or full-day block
-          const closed = !wh || busySlots.some((b) => b.durationMinutes >= 1440);
-          if (closed) {
-            setDayMeta((prev) => ({ ...prev, [ds]: { fill: 1, hasSlot: false, closed: true } }));
-            return;
-          }
-
-          // Total capacity in minutes
-          const [oh, om] = wh.open.split(":").map(Number);
-          const [ch, cm] = wh.close.split(":").map(Number);
-          const totalMins = (ch * 60 + cm) - (oh * 60 + om);
-          if (totalMins <= 0) {
-            setDayMeta((prev) => ({ ...prev, [ds]: { fill: 1, hasSlot: false, closed: true } }));
-            return;
-          }
-
-          const bookedMins = busySlots.reduce((s, b) => s + b.durationMinutes, 0);
-          const fill = Math.min(bookedMins / totalMins, 1);
-
-          // Check if at least one slot of the required duration fits
-          const now = new Date();
-          const openMs = new Date(`${ds}T${wh.open}:00`).getTime();
-          const closeMs = new Date(`${ds}T${wh.close}:00`).getTime();
-          const STEP = 30 * 60000;
-          let hasSlot = false;
-          for (let t = openMs; t + totalDuration * 60000 <= closeMs; t += STEP) {
-            if (t < now.getTime()) continue;
-            const slotEnd = t + totalDuration * 60000;
-            const overlaps = busySlots.some((b) => {
-              const bs = new Date(b.start).getTime();
-              const be = bs + b.durationMinutes * 60000;
-              return t < be && slotEnd > bs;
-            });
-            if (!overlaps) { hasSlot = true; break; }
-          }
-
-          setDayMeta((prev) => ({ ...prev, [ds]: { fill, hasSlot, closed: false } }));
-        })
-        .catch(() => {
-          // On error: don't mark day as available — let user try it and see
-          setDayMeta((prev) => ({ ...prev, [ds]: { fill: 0, hasSlot: true, closed: false } }));
-        });
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, providerProfileId, totalDuration]);
 
   // Load all agents for the artist selection step (no slot filter — user picks before choosing date)
   async function loadAllAgents(): Promise<Agent[]> {
@@ -892,131 +740,39 @@ export function BookingFlow({
                 )}
 
                 {/* ── Date ── */}
-                {step === "date" && (() => {
-                  // Build a proper calendar grid: Sun–Sat columns, starting from Sunday of this week.
-                  // Show enough weeks to always include at least 14 days from today.
-                  const today = new Date(); today.setHours(0, 0, 0, 0);
-                  const gridStart = new Date(today);
-                  gridStart.setDate(today.getDate() - today.getDay()); // back to Sunday
-                  const minEnd = new Date(today); minEnd.setDate(today.getDate() + 13);
-                  const gridEnd = new Date(minEnd);
-                  gridEnd.setDate(minEnd.getDate() + (6 - minEnd.getDay())); // forward to Saturday
-                  const calDays: Date[] = [];
-                  for (const cur = new Date(gridStart); cur <= gridEnd; cur.setDate(cur.getDate() + 1)) {
-                    calDays.push(new Date(cur));
-                  }
-                  const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-                  return (
-                    <Section title="Pick a day" onBack={() => agents.length > 0 ? setStep("artist") : (preselectedServiceId ? undefined : setStep("service"))}>
-                      {/* Selected artist chip */}
-                      {agents.length > 0 && (
-                        <button
-                          onClick={() => setStep("artist")}
-                          className="mb-3 flex w-full items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--background)] px-3 py-2 text-left hover:border-[var(--brand)] transition"
-                        >
-                          {selectedAgent?.avatarUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={selectedAgent.avatarUrl} alt={selectedAgent.name} className="h-7 w-7 rounded-lg object-cover shrink-0" />
-                          ) : (
-                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--brand)] text-white text-xs font-bold">
-                              {selectedAgent ? selectedAgent.name[0] : <UserCheck className="h-3.5 w-3.5" />}
-                            </span>
-                          )}
-                          <div className="min-w-0 flex-1">
-                            <p className="text-xs font-bold text-[var(--ink)] truncate">
-                              {selectedAgent ? selectedAgent.name : "Any available artist"}
-                            </p>
-                            <p className="text-[10px] text-[var(--muted)]">Tap to change</p>
-                          </div>
-                          <ArrowRight className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />
-                        </button>
-                      )}
-                      {/* Month label */}
-                      <p className="mb-2 text-xs font-bold uppercase tracking-wider text-[var(--muted)]">
-                        {today.toLocaleDateString("en-ZA", { month: "long", year: "numeric" })}
-                      </p>
-                      {/* Day-of-week headers */}
-                      <div className="mb-1 grid grid-cols-7">
-                        {DOW.map((d) => (
-                          <div key={d} className="py-1 text-center text-[10px] font-bold uppercase text-[var(--muted)]">{d}</div>
-                        ))}
-                      </div>
-                      {/* Calendar cells */}
-                      <div className="grid grid-cols-7 gap-1">
-                        {calDays.map((d) => {
-                          const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-                          const isPast = d < today;
-                          const meta = dayMeta[ds];
-                          const unavailable = isPast || isDayClosed(d) || (meta ? (!meta.hasSlot || meta.closed) : false);
-                          const fill = meta?.fill ?? 0;
-                          const sel = date && d.toDateString() === date.toDateString();
-                          const isToday = d.toDateString() === today.toDateString();
-
-                          const fillColor = fill < 0.5
-                            ? `rgb(34,197,94,${0.35 + fill * 0.65})`
-                            : fill < 0.85
-                            ? `rgb(251,191,36,${0.45 + fill * 0.55})`
-                            : `rgb(239,68,68,${0.5 + fill * 0.5})`;
-
-                          return (
-                            <button
-                              key={ds}
-                              disabled={unavailable}
-                              onClick={() => { setDate(d); setSlot(null); setStep("time"); }}
-                              className={`relative overflow-hidden rounded-xl border py-2 text-center transition
-                                ${unavailable
-                                  ? "cursor-not-allowed border-transparent bg-transparent opacity-35"
-                                  : sel
-                                  ? "border-[var(--brand)] bg-[var(--brand)]/10"
-                                  : "border-[var(--line)] bg-white hover:border-[var(--brand)] hover:bg-[var(--brand)]/5"
-                                }`}
-                            >
-                              {/* Water-fill capacity background */}
-                              {!unavailable && meta && fill > 0 && (
-                                <span
-                                  className="pointer-events-none absolute inset-x-0 bottom-0 rounded-b-xl transition-all duration-700"
-                                  style={{ height: `${Math.round(fill * 100)}%`, background: fillColor, opacity: 0.15 }}
-                                />
-                              )}
-
-                              {/* Date number */}
-                              <span className={`relative block text-sm font-black leading-none
-                                ${sel ? "text-[var(--brand)]" : unavailable ? "line-through text-[var(--muted)]/40" : isToday ? "text-[var(--brand)]" : "text-[var(--ink)]"}`}>
-                                {d.getDate()}
-                              </span>
-
-                              {/* Today dot */}
-                              {isToday && !sel && (
-                                <span className="relative mt-0.5 block">
-                                  <span className="mx-auto block h-1 w-1 rounded-full bg-[var(--brand)]" />
-                                </span>
-                              )}
-
-                              {/* Capacity fill bar */}
-                              {!unavailable && meta && (
-                                <span className="relative mt-1 block px-1">
-                                  <span className="block h-0.5 w-full overflow-hidden rounded-full bg-[var(--line)]">
-                                    <span
-                                      className="block h-full rounded-full transition-all duration-700"
-                                      style={{ width: `${Math.round(fill * 100)}%`, background: fillColor }}
-                                    />
-                                  </span>
-                                </span>
-                              )}
-
-                              {/* Loading shimmer */}
-                              {!meta && !unavailable && (
-                                <span className="relative mt-1 block px-1">
-                                  <span className="block h-0.5 w-full animate-pulse rounded-full bg-[var(--line)]" />
-                                </span>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </Section>
-                  );
-                })()}
+                {step === "date" && (
+                  <Section title="Pick a day" onBack={() => agents.length > 0 ? setStep("artist") : (preselectedServiceId ? undefined : setStep("service"))}>
+                    {/* Selected artist chip */}
+                    {agents.length > 0 && (
+                      <button
+                        onClick={() => setStep("artist")}
+                        className="mb-3 flex w-full items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--background)] px-3 py-2 text-left hover:border-[var(--brand)] transition"
+                      >
+                        {selectedAgent?.avatarUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={selectedAgent.avatarUrl} alt={selectedAgent.name} className="h-7 w-7 rounded-lg object-cover shrink-0" />
+                        ) : (
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--brand)] text-white text-xs font-bold">
+                            {selectedAgent ? selectedAgent.name[0] : <UserCheck className="h-3.5 w-3.5" />}
+                          </span>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold text-[var(--ink)] truncate">
+                            {selectedAgent ? selectedAgent.name : "Any available artist"}
+                          </p>
+                          <p className="text-[10px] text-[var(--muted)]">Tap to change</p>
+                        </div>
+                        <ArrowRight className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />
+                      </button>
+                    )}
+                    <BookingCalendar
+                      providerProfileId={selectedAgent ? selectedAgent.id : providerProfileId}
+                      serviceDuration={totalDuration}
+                      selectedDate={date}
+                      onSelectDate={(d) => { setDate(d); setSlot(null); setStep("time"); }}
+                    />
+                  </Section>
+                )}
 
                 {/* ── Time ── */}
                 {step === "time" && (
