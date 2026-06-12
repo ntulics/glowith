@@ -213,7 +213,7 @@ export function BookingCalendar({
               disabled={unavailable}
               onClick={() => onSelectDate(d)}
               className={[
-                "relative overflow-hidden rounded-xl border py-2 text-center transition select-none",
+                "relative overflow-hidden rounded-xl border py-4 text-center transition select-none",
                 unavailable
                   ? "cursor-not-allowed border-transparent bg-transparent opacity-30"
                   : sel
