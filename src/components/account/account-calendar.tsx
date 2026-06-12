@@ -39,6 +39,49 @@ type Provider = {
 type BusySlot = { start: string; durationMinutes: number };
 type WorkingHours = { open: string; close: string };
 
+/* ── SA Public Holidays ─────────────────────────────────────────── */
+function easterSunday(y: number): Date {
+  const a = y % 19, b = Math.floor(y / 100), c = y % 100;
+  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const mo = Math.floor((h + l - 7 * m + 114) / 31);
+  const da = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(y, mo - 1, da);
+}
+
+function getSAHolidayName(d: Date): string | null {
+  const y = d.getFullYear(), mo = d.getMonth() + 1, da = d.getDate(), dow = d.getDay();
+  const easter = easterSunday(y);
+  const gf = new Date(easter); gf.setDate(easter.getDate() - 2);
+  const fm = new Date(easter); fm.setDate(easter.getDate() + 1);
+
+  // Fixed holiday: returns name if date matches, or if Monday displacement applies
+  function fixed(hmo: number, hda: number, name: string): string | null {
+    if (mo === hmo && da === hda) return name;
+    // Sunday falls on holiday → observed Monday
+    if (dow === 1 && mo === hmo && da - 1 === hda) return `${name} (observed)`;
+    return null;
+  }
+
+  return (
+    fixed(1, 1, "New Year's Day") ??
+    fixed(3, 21, "Human Rights Day") ??
+    (mo === gf.getMonth() + 1 && da === gf.getDate() ? "Good Friday" : null) ??
+    (mo === fm.getMonth() + 1 && da === fm.getDate() ? "Family Day" : null) ??
+    fixed(4, 27, "Freedom Day") ??
+    fixed(5, 1, "Workers' Day") ??
+    fixed(6, 16, "Youth Day") ??
+    fixed(8, 9, "National Women's Day") ??
+    fixed(9, 24, "Heritage Day") ??
+    fixed(12, 16, "Day of Reconciliation") ??
+    fixed(12, 25, "Christmas Day") ??
+    fixed(12, 26, "Day of Goodwill") ??
+    null
+  );
+}
+
 /* ── Helpers ────────────────────────────────────────────────────── */
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -135,24 +178,33 @@ function MonthGrid({
         ))}
         {cells.map((day, idx) => {
           if (!day) return <div key={idx} />;
-          const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+          const dateObj = new Date(year, month, day);
+          const dateStr = isoDate(dateObj);
           const isToday = dateStr === today;
           const hasBooking = bookingDates.has(dateStr);
           const isSelected = selectedDate ? isoDate(selectedDate) === dateStr : false;
+          const holidayName = getSAHolidayName(dateObj);
           return (
             <button
               key={idx}
-              onClick={() => onSelect(new Date(year, month, day))}
+              onClick={() => onSelect(dateObj)}
+              title={holidayName ?? undefined}
               className={cn(
                 "relative mx-auto flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold transition",
                 isSelected && "bg-[var(--ink)] text-white",
-                !isSelected && isToday && "text-[var(--brand)] font-black",
-                !isSelected && !isToday && "hover:bg-[var(--background)] text-[var(--ink)]"
+                !isSelected && holidayName && "bg-amber-100 text-amber-700 hover:bg-amber-200",
+                !isSelected && !holidayName && isToday && "text-[var(--brand)] font-black",
+                !isSelected && !holidayName && !isToday && "hover:bg-[var(--background)] text-[var(--ink)]"
               )}
             >
               {day}
+              {/* Booking dot */}
               {hasBooking && !isSelected && (
                 <span className="absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-[var(--brand)]" />
+              )}
+              {/* Holiday marker */}
+              {holidayName && !isSelected && !hasBooking && (
+                <span className="absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-amber-400" />
               )}
             </button>
           );
@@ -380,11 +432,18 @@ export function AccountCalendar({ initialBookings }: { initialBookings: Calendar
 
         {/* ── Right: day view ── */}
         <div className="rounded-2xl border border-[var(--line)] bg-white p-5">
-          <h2 className="mb-4 text-base font-black">
-            {selectedDate
-              ? selectedDate.toLocaleDateString("en-ZA", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
-              : "Select a date"}
-          </h2>
+          <div className="mb-4">
+            <h2 className="text-base font-black">
+              {selectedDate
+                ? selectedDate.toLocaleDateString("en-ZA", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
+                : "Select a date"}
+            </h2>
+            {selectedDate && getSAHolidayName(selectedDate) && (
+              <p className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-700">
+                🎉 {getSAHolidayName(selectedDate)}
+              </p>
+            )}
+          </div>
 
           {mode === "my-bookings" ? (
             dayBookings.length === 0 ? (
