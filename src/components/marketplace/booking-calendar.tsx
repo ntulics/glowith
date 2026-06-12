@@ -114,7 +114,7 @@ export function BookingCalendar({
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const gridStart = new Date(today);
   gridStart.setDate(today.getDate() - today.getDay()); // back to Sunday
-  const minEnd = new Date(today); minEnd.setDate(today.getDate() + 13);
+  const minEnd = new Date(today); minEnd.setDate(today.getDate() + 27); // at least 4 weeks
   const gridEnd = new Date(minEnd);
   gridEnd.setDate(minEnd.getDate() + (6 - minEnd.getDay())); // forward to Saturday
 
