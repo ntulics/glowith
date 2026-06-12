@@ -14,10 +14,6 @@ import { StickyBookingBar } from "@/components/marketplace/sticky-booking-bar";
 import { BookingCalendar } from "@/components/marketplace/booking-calendar";
 import { AMENITY_CATEGORIES, AMENITY_MAP } from "@/lib/amenities";
 
-const BOOKING_SLOTS = Array.from({ length: 20 }, (_, i) => {
-  const mins = 8 * 60 + i * 30;
-  return { h: Math.floor(mins / 60), m: mins % 60, label: `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}` };
-});
 function nextBookingDays(n: number, serviceDurationMinutes = 60): Date[] {
   const out: Date[] = [];
   const now = new Date();
@@ -283,6 +279,19 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
   }, [selectedDate, profile.id]);
 
   const selectedServiceDuration = selectedServiceId ? (profile.services.find(s => s.id === selectedServiceId)?.durationMinutes ?? 0) : 0;
+
+  // Slots generated from actual working hours — nothing outside the provider's day is shown
+  const sidebarSlots = (() => {
+    const open = sidebarWorkingHours?.open ?? "09:00";
+    const close = sidebarWorkingHours?.close ?? "17:00";
+    const [oh, om] = open.split(":").map(Number);
+    const [ch, cm] = close.split(":").map(Number);
+    const result = [];
+    for (let m = oh * 60 + om; m < ch * 60 + cm; m += 30) {
+      result.push(`${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`);
+    }
+    return result;
+  })();
 
   function isSlotDisabled(hhmm: string): boolean {
     if (!selectedDate || selectedServiceDuration === 0) return true;
@@ -631,16 +640,16 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
                     <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-[var(--muted)]" /></div>
                   ) : (
                     <div className="grid grid-cols-4 gap-2">
-                      {BOOKING_SLOTS.map((s) => {
-                        const disabled = isSlotDisabled(s.label);
-                        const sel = selectedSlot === s.label;
+                      {sidebarSlots.map((label) => {
+                        const disabled = isSlotDisabled(label);
+                        const sel = selectedSlot === label;
                         return (
-                          <button key={s.label} disabled={disabled} onClick={() => { setSelectedSlot(s.label); setBookingStep("notes"); }}
+                          <button key={label} disabled={disabled} onClick={() => { setSelectedSlot(label); setBookingStep("notes"); }}
                             className={cn("rounded-xl border py-2.5 text-sm font-bold transition",
                               sel ? "border-[var(--brand)] bg-[var(--brand)] text-white"
                                 : disabled ? "cursor-not-allowed border-[var(--line)] bg-[var(--line)]/30 text-[var(--muted)]/40"
                                 : "border-[var(--line)] bg-white hover:border-[var(--brand)]")}>
-                            {s.label}
+                            {label}
                           </button>
                         );
                       })}
@@ -1149,17 +1158,17 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
                             <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-[var(--muted)]" /></div>
                           ) : (
                             <div className="grid grid-cols-3 gap-1.5">
-                              {BOOKING_SLOTS.map((s) => {
-                                const disabled = isSlotDisabled(s.label);
-                                const sel = selectedSlot === s.label;
+                              {sidebarSlots.map((label) => {
+                                const disabled = isSlotDisabled(label);
+                                const sel = selectedSlot === label;
                                 return (
-                                  <button key={s.label} disabled={disabled}
-                                    onClick={() => { setSelectedSlot(s.label); setSelectedExtraIds([]); setExtrasConfirmed(false); setBookingStep("notes"); }}
+                                  <button key={label} disabled={disabled}
+                                    onClick={() => { setSelectedSlot(label); setSelectedExtraIds([]); setExtrasConfirmed(false); setBookingStep("notes"); }}
                                     className={cn("rounded-xl border py-2 text-xs font-bold transition",
                                       sel ? "border-[var(--brand)] bg-[var(--brand)] text-white"
                                         : disabled ? "cursor-not-allowed border-[var(--line)] bg-[var(--line)]/20 text-[var(--muted)]/40"
                                         : "border-[var(--line)] bg-white hover:border-[var(--brand)]")}>
-                                    {s.label}
+                                    {label}
                                   </button>
                                 );
                               })}
