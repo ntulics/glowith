@@ -28,25 +28,18 @@ function roleLabel(categories: string[]): string {
   return "Artist";
 }
 
+// 08:00–18:00 in 30-min steps — actual open/close comes from working hours API
 const SLOTS = Array.from({ length: 20 }, (_, i) => {
   const mins = 8 * 60 + i * 30;
   return { h: Math.floor(mins / 60), m: mins % 60, label: `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}` };
 });
 
-function nextDays(n: number, serviceDurationMinutes = 60) {
+function nextDays(n: number) {
   const out: Date[] = [];
   const now = new Date();
   const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
-
-  // Last bookable start time = 18:00 - serviceDuration. If we're past that, skip today.
-  const lastSlotStart = 18 * 60 - serviceDurationMinutes; // minutes from midnight
-  const nowMins = now.getHours() * 60 + now.getMinutes();
-  const skipToday = nowMins >= lastSlotStart;
-
-  let added = 0;
-  for (let i = 0; added < n; i++) {
-    if (i === 0 && skipToday) continue;
-    const x = new Date(todayStart); x.setDate(todayStart.getDate() + i); out.push(x); added++;
+  for (let i = 0; out.length < n; i++) {
+    const x = new Date(todayStart); x.setDate(todayStart.getDate() + i); out.push(x);
   }
   return out;
 }
@@ -110,6 +103,13 @@ export function BookingFlow({
   const [payError, setPayError] = useState("");
   const payMountedRef = useRef(false);
   const popupRef = useRef<any>(null);
+
+  // Working hours returned by availability API for the selected date
+  const [workingHours, setWorkingHours] = useState<{ open: string; close: string } | null>(null);
+
+  // Per-day capacity data for the date picker
+  type DayMeta = { fill: number; hasSlot: boolean; closed: boolean };
+  const [dayMeta, setDayMeta] = useState<Record<string, DayMeta>>({});
 
   // Artist selection
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -190,7 +190,7 @@ export function BookingFlow({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Fetch agents once per open
+  // Fetch agent count once per open (to know whether to show the artist step at all)
   useEffect(() => {
     if (!open || agents.length > 0 || agentsLoading) return;
     setAgentsLoading(true);
@@ -201,36 +201,87 @@ export function BookingFlow({
       .finally(() => setAgentsLoading(false));
   }, [open, providerProfileId, agents.length, agentsLoading]);
 
-  // Load busy slots
+  // Load busy slots and actual working hours for the selected date
   useEffect(() => {
     if (!date) return;
     setBusyLoading(true);
     const ds = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-    fetch(`/api/bookings/availability?providerProfileId=${activeProviderId}&date=${ds}`)
+    fetch(`/api/bookings/availability?providerProfileId=${providerProfileId}&date=${ds}`)
       .then((r) => r.json())
-      .then((d) => setBusy(d.busy ?? []))
-      .catch(() => setBusy([]))
+      .then((d) => { setBusy(d.busy ?? []); setWorkingHours(d.workingHours ?? null); })
+      .catch(() => { setBusy([]); setWorkingHours(null); })
       .finally(() => setBusyLoading(false));
-  }, [date, activeProviderId]);
+  }, [date, providerProfileId]);
 
-  // When "No preference" is chosen and we have date+time, pick a random available agent
-  async function resolveRandomAgent(): Promise<Agent | null> {
-    if (agents.length === 0) return null;
-    if (!date || !slot) return null;
-    const ds = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  // Prefetch capacity data for the next 14 days when the date step is shown
+  useEffect(() => {
+    if (step !== "date" || totalDuration === 0) return;
+    const days = nextDays(14);
+    days.forEach((d) => {
+      const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      if (dayMeta[ds]) return; // already fetched
+      fetch(`/api/bookings/availability?providerProfileId=${providerProfileId}&date=${ds}`)
+        .then((r) => r.json())
+        .then((data) => {
+          const wh: { open: string; close: string } | null = data.workingHours ?? null;
+          const busySlots: Array<{ start: string; durationMinutes: number }> = data.busy ?? [];
+
+          // Closed day: no working hours or full-day block
+          const closed = !wh || busySlots.some((b) => b.durationMinutes >= 1440);
+          if (closed) {
+            setDayMeta((prev) => ({ ...prev, [ds]: { fill: 1, hasSlot: false, closed: true } }));
+            return;
+          }
+
+          // Total capacity in minutes
+          const [oh, om] = wh.open.split(":").map(Number);
+          const [ch, cm] = wh.close.split(":").map(Number);
+          const totalMins = (ch * 60 + cm) - (oh * 60 + om);
+          if (totalMins <= 0) {
+            setDayMeta((prev) => ({ ...prev, [ds]: { fill: 1, hasSlot: false, closed: true } }));
+            return;
+          }
+
+          const bookedMins = busySlots.reduce((s, b) => s + b.durationMinutes, 0);
+          const fill = Math.min(bookedMins / totalMins, 1);
+
+          // Check if at least one slot of the required duration fits
+          const now = new Date();
+          const openMs = new Date(`${ds}T${wh.open}:00`).getTime();
+          const closeMs = new Date(`${ds}T${wh.close}:00`).getTime();
+          const STEP = 30 * 60000;
+          let hasSlot = false;
+          for (let t = openMs; t + totalDuration * 60000 <= closeMs; t += STEP) {
+            if (t < now.getTime()) continue;
+            const slotEnd = t + totalDuration * 60000;
+            const overlaps = busySlots.some((b) => {
+              const bs = new Date(b.start).getTime();
+              const be = bs + b.durationMinutes * 60000;
+              return t < be && slotEnd > bs;
+            });
+            if (!overlaps) { hasSlot = true; break; }
+          }
+
+          setDayMeta((prev) => ({ ...prev, [ds]: { fill, hasSlot, closed: false } }));
+        })
+        .catch(() => {
+          setDayMeta((prev) => ({ ...prev, [ds]: { fill: 0, hasSlot: true, closed: false } }));
+        });
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, providerProfileId, totalDuration]);
+
+  // Fetch agents filtered by a specific slot so we only show available ones on the artist step
+  async function loadAvailableAgents(ds: string, slotTime: string): Promise<Agent[]> {
     try {
-      const r = await fetch(`/api/providers/agents?providerProfileId=${providerProfileId}&date=${ds}&slot=${slot}&duration=${totalDuration || 60}`);
+      const r = await fetch(`/api/providers/agents?providerProfileId=${providerProfileId}&date=${ds}&slot=${slotTime}&duration=${totalDuration || 60}`);
       const d = await r.json();
-      const available: Agent[] = d.agents ?? [];
-      if (available.length === 0) return null;
-      return available[Math.floor(Math.random() * available.length)];
-    } catch { return null; }
+      return d.agents ?? [];
+    } catch { return []; }
   }
 
   function afterServiceStep() {
-    if (agents.length > 1) {
-      setStep("artist");
-    } else if (hasPreselectedDateTime) {
+    if (hasPreselectedDateTime) {
       setStep(authed === false ? "auth" : "review");
     } else {
       setStep("date");
@@ -239,29 +290,33 @@ export function BookingFlow({
 
   async function afterArtistStep(agent: Agent | null) {
     setSelectedAgent(agent);
-    if (agent === null && agents.length > 0) {
-      // Resolve a random available agent (if date+slot already known)
-      if (date && slot) {
-        const picked = await resolveRandomAgent();
-        setAssignedAgent(picked);
-      }
+    if (agent === null) {
+      // Pick random from the already-filtered available agents list
+      const picked = agents.length > 0 ? agents[Math.floor(Math.random() * agents.length)] : null;
+      setAssignedAgent(picked);
     } else {
       setAssignedAgent(null);
     }
-    if (hasPreselectedDateTime) {
-      setStep(authed === false ? "auth" : "review");
-    } else {
-      setStep("date");
-    }
+    setStep(authed === false ? "auth" : "review");
   }
 
-  // When arriving at review and date+slot just got set (from date/time steps), resolve random agent
+  // After time is selected: if there are agents, load filtered ones then go to artist step
   async function goAfterTime() {
-    if (selectedAgent === undefined || selectedAgent === null) {
-      const picked = await resolveRandomAgent();
-      setAssignedAgent(picked);
+    if (!date || !slot) return;
+    const ds = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    setAgentsLoading(true);
+    const available = await loadAvailableAgents(ds, slot);
+    setAgentsLoading(false);
+    if (available.length > 0) {
+      // Overwrite agents with the filtered available set for the artist step
+      setAgents(available);
+      setSelectedAgent(undefined);
+      setAssignedAgent(null);
+      setStep("artist");
+    } else {
+      // No agents or no multi-agent setup — skip artist step
+      setStep(authed === false ? "auth" : "review");
     }
-    setStep(authed === false ? "auth" : "review");
   }
 
   async function onPaid() {
@@ -326,7 +381,17 @@ export function BookingFlow({
     const start = slotDate(hhmm);
     if (start.getTime() < Date.now()) return true;
     const end = start.getTime() + totalDuration * 60000;
-    if (start.getHours() * 60 + start.getMinutes() + totalDuration > 18 * 60) return true;
+    // Use actual provider close time; fall back to 18:00 if working hours not loaded yet
+    const closeStr = workingHours?.close ?? "18:00";
+    const [closeH, closeM] = closeStr.split(":").map(Number);
+    const closeMs = new Date(date).setHours(closeH, closeM, 0, 0);
+    if (end > closeMs) return true;
+    // Also check open time
+    if (workingHours) {
+      const [openH, openM] = workingHours.open.split(":").map(Number);
+      const openMs = new Date(date).setHours(openH, openM, 0, 0);
+      if (start.getTime() < openMs) return true;
+    }
     return busy.some((b) => {
       const bs = new Date(b.start).getTime(); const be = bs + b.durationMinutes * 60000;
       return start.getTime() < be && end > bs;
@@ -426,8 +491,8 @@ export function BookingFlow({
 
   const stepsOrder: Step[] = [
     ...(preselectedServiceId ? [] : ["service" as Step]),
-    ...(agents.length > 1 ? ["artist" as Step] : []),
     ...(hasPreselectedDateTime ? [] : ["date" as Step, "time" as Step]),
+    ...(agents.length > 1 ? ["artist" as Step] : []),
     ...(authed === false ? ["auth" as Step] : []),
     "review", "pay", "done"
   ];
@@ -643,10 +708,12 @@ export function BookingFlow({
             <AnimatePresence mode="wait">
               <motion.div key={step} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.2 }}>
 
-                {/* ── Artist ── */}
+                {/* ── Artist ── (shown after time selection, agents already filtered by slot) */}
                 {step === "artist" && (
-                  <Section title={`Preferred ${roleLabel(selectedCategories)}?`} onBack={() => setStep("service")}>
-                    <p className="mb-4 text-sm text-[var(--muted)]">Choose a team member or leave as no preference and we&apos;ll assign someone available.</p>
+                  <Section title={`Available ${roleLabel(selectedCategories)}`} onBack={() => setStep("time")}>
+                    <p className="mb-4 text-sm text-[var(--muted)]">
+                      {agents.length === 0 ? "No team members found for this slot." : "These team members are available for your selected time."}
+                    </p>
                     <div className="space-y-2">
                       <button onClick={() => afterArtistStep(null)}
                         className="flex w-full items-center gap-3 rounded-2xl border border-[var(--line)] bg-white p-4 text-left hover:border-[var(--ink)] transition">
@@ -658,9 +725,7 @@ export function BookingFlow({
                           <p className="text-xs text-[var(--muted)]">Best available artist auto-assigned</p>
                         </div>
                       </button>
-                      {agentsLoading ? (
-                        <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-[var(--brand)]" /></div>
-                      ) : agents.map((agent) => (
+                      {agents.map((agent) => (
                         <button key={agent.id} onClick={() => afterArtistStep(agent)}
                           className="flex w-full items-center gap-3 rounded-2xl border border-[var(--line)] bg-white p-4 text-left hover:border-[var(--ink)] transition">
                           {agent.avatarUrl ? (
@@ -681,16 +746,74 @@ export function BookingFlow({
 
                 {/* ── Date ── */}
                 {step === "date" && (
-                  <Section title="Pick a day" onBack={agents.length > 1 ? () => setStep("artist") : (preselectedServiceId ? undefined : () => setStep("service"))}>
+                  <Section title="Pick a day" onBack={preselectedServiceId ? undefined : () => setStep("service")}>
                     <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                      {nextDays(14, totalDuration || 30).map((d) => {
+                      {nextDays(14).map((d) => {
+                        const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+                        const meta = dayMeta[ds];
+                        const unavailable = meta ? (!meta.hasSlot || meta.closed) : false;
+                        const fill = meta?.fill ?? 0;
                         const sel = date && d.toDateString() === date.toDateString();
+
+                        // Fill colour: green → amber → rose as capacity fills
+                        const fillColor = fill < 0.5
+                          ? `rgb(34,197,94,${0.4 + fill * 0.6})`   // green
+                          : fill < 0.85
+                          ? `rgb(251,191,36,${0.5 + fill * 0.5})`  // amber
+                          : `rgb(239,68,68,${0.55 + fill * 0.45})`; // red
+
                         return (
-                          <button key={d.toISOString()} onClick={() => { setDate(d); setSlot(null); setStep("time"); }}
-                            className={`rounded-2xl border p-3 text-center transition ${sel ? "border-[var(--brand)] bg-[var(--brand)]/5" : "border-[var(--line)] bg-white hover:border-[var(--brand)]"}`}>
-                            <span className="block text-[10px] font-bold uppercase text-[var(--muted)]">{d.toLocaleDateString("en-ZA", { weekday: "short" })}</span>
-                            <span className="block text-lg font-black">{d.getDate()}</span>
-                            <span className="block text-[10px] text-[var(--muted)]">{d.toLocaleDateString("en-ZA", { month: "short" })}</span>
+                          <button
+                            key={d.toISOString()}
+                            disabled={unavailable}
+                            onClick={() => { setDate(d); setSlot(null); setStep("time"); }}
+                            className={`relative overflow-hidden rounded-2xl border p-3 text-center transition
+                              ${unavailable
+                                ? "cursor-not-allowed border-[var(--line)] bg-[var(--line)]/20 opacity-50"
+                                : sel
+                                ? "border-[var(--brand)] bg-[var(--brand)]/5"
+                                : "border-[var(--line)] bg-white hover:border-[var(--brand)]"
+                              }`}
+                          >
+                            {/* Capacity fill — water-in-cup effect rising from bottom */}
+                            {!unavailable && meta && fill > 0 && (
+                              <span
+                                className="pointer-events-none absolute inset-x-0 bottom-0 rounded-b-2xl transition-all duration-700"
+                                style={{ height: `${Math.round(fill * 100)}%`, background: fillColor, opacity: 0.18 }}
+                              />
+                            )}
+
+                            <span className={`relative block text-[10px] font-bold uppercase ${unavailable ? "text-[var(--muted)]/60" : "text-[var(--muted)]"}`}>
+                              {d.toLocaleDateString("en-ZA", { weekday: "short" })}
+                            </span>
+
+                            {/* Date number — strikethrough when unavailable */}
+                            <span className={`relative block text-lg font-black ${unavailable ? "line-through text-[var(--muted)]/50" : ""}`}>
+                              {d.getDate()}
+                            </span>
+
+                            <span className={`relative block text-[10px] ${unavailable ? "text-[var(--muted)]/50" : "text-[var(--muted)]"}`}>
+                              {d.toLocaleDateString("en-ZA", { month: "short" })}
+                            </span>
+
+                            {/* Capacity dot indicator below the date */}
+                            {!unavailable && meta && (
+                              <span className="relative mt-1.5 block">
+                                <span className="mx-auto block h-1 w-8 overflow-hidden rounded-full bg-[var(--line)]">
+                                  <span
+                                    className="block h-full rounded-full transition-all duration-700"
+                                    style={{ width: `${Math.round(fill * 100)}%`, background: fillColor }}
+                                  />
+                                </span>
+                              </span>
+                            )}
+
+                            {/* Loading shimmer while meta not yet fetched */}
+                            {!meta && (
+                              <span className="relative mt-1.5 block">
+                                <span className="mx-auto block h-1 w-8 animate-pulse rounded-full bg-[var(--line)]" />
+                              </span>
+                            )}
                           </button>
                         );
                       })}
@@ -718,13 +841,13 @@ export function BookingFlow({
                       </div>
                     )}
                     <p className="mt-3 text-center text-xs text-[var(--muted)]">Duration: {fmtDur(totalDuration)}</p>
-                    <NextButton disabled={!slot} onClick={goAfterTime} />
+                    <NextButton disabled={!slot || agentsLoading} onClick={goAfterTime} />
                   </Section>
                 )}
 
                 {/* ── Auth ── */}
                 {step === "auth" && (
-                  <Section title="Sign in to confirm" onBack={() => setStep(hasPreselectedDateTime ? (agents.length > 1 ? "artist" : "service") : "time")}>
+                  <Section title="Sign in to confirm" onBack={() => setStep(hasPreselectedDateTime ? "service" : (agents.length > 1 ? "artist" : "time"))}>
                     <div className="mb-3 flex gap-2">
                       <button onClick={() => setAuthMode("signin")} className={`flex-1 rounded-xl border py-2 text-sm font-bold ${authMode === "signin" ? "border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]" : "border-[var(--line)]"}`}>Sign in</button>
                       <button onClick={() => setAuthMode("register")} className={`flex-1 rounded-xl border py-2 text-sm font-bold ${authMode === "register" ? "border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]" : "border-[var(--line)]"}`}>Create account</button>
