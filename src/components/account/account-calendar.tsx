@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BookingFlow } from "@/components/marketplace/booking-flow";
 import { cn } from "@/lib/utils";
 import {
@@ -11,7 +11,6 @@ import {
   Clock,
   Loader2,
   Search,
-  X
 } from "lucide-react";
 
 /* ── Types ──────────────────────────────────────────────────────── */
@@ -38,6 +37,7 @@ type Provider = {
 };
 
 type BusySlot = { start: string; durationMinutes: number };
+type WorkingHours = { open: string; close: string };
 
 /* ── Helpers ────────────────────────────────────────────────────── */
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -45,6 +45,49 @@ const MONTHS = ["January","February","March","April","May","June","July","August
 
 function isoDate(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function buildSlots(wh: WorkingHours, serviceDuration: number): string[] {
+  const [oh, om] = wh.open.split(":").map(Number);
+  const [ch, cm] = wh.close.split(":").map(Number);
+  const closeMins = ch * 60 + cm;
+  const dur = serviceDuration > 0 ? serviceDuration : 30;
+  const result: string[] = [];
+  for (let m = oh * 60 + om; m < closeMins; m += 30) {
+    if (m + dur <= closeMins) {
+      result.push(`${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`);
+    }
+  }
+  return result;
+}
+
+function hasAvailableSlot(wh: WorkingHours, busy: BusySlot[], date: Date, minDuration = 30): boolean {
+  const slots = buildSlots(wh, minDuration);
+  const now = Date.now();
+  return slots.some((label) => {
+    const [h, m] = label.split(":").map(Number);
+    const start = new Date(date); start.setHours(h, m, 0, 0);
+    if (start.getTime() <= now) return false;
+    const end = start.getTime() + minDuration * 60000;
+    return !busy.some((b) => {
+      const bs = new Date(b.start).getTime();
+      const be = bs + b.durationMinutes * 60000;
+      return start.getTime() < be && end > bs;
+    });
+  });
+}
+
+function slotDisabled(hhmm: string, busy: BusySlot[], totalDuration: number, date: Date): boolean {
+  if (totalDuration === 0) return true;
+  const [h, m] = hhmm.split(":").map(Number);
+  const start = new Date(date); start.setHours(h, m, 0, 0);
+  if (start.getTime() < Date.now()) return true;
+  const end = start.getTime() + totalDuration * 60000;
+  return busy.some((b) => {
+    const bs = new Date(b.start).getTime();
+    const be = bs + b.durationMinutes * 60000;
+    return start.getTime() < be && end > bs;
+  });
 }
 
 const STATUS_COLOR: Record<string, string> = {
@@ -65,26 +108,6 @@ const STATUS_LABEL: Record<string, { text: string; cls: string }> = {
   NO_SHOW: { text: "No-show", cls: "text-orange-700 bg-orange-50" }
 };
 
-const SLOTS = Array.from({ length: 20 }, (_, i) => {
-  const mins = 8 * 60 + i * 30;
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return { h, m, label: `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}` };
-});
-
-function slotDisabled(hhmm: string, busy: BusySlot[], totalDuration: number, date: Date): boolean {
-  if (totalDuration === 0) return true;
-  const [h, m] = hhmm.split(":").map(Number);
-  const start = new Date(date); start.setHours(h, m, 0, 0);
-  if (start.getTime() < Date.now()) return true;
-  const end = start.getTime() + totalDuration * 60000;
-  return busy.some((b) => {
-    const bs = new Date(b.start).getTime();
-    const be = bs + b.durationMinutes * 60000;
-    return start.getTime() < be && end > bs;
-  });
-}
-
 /* ── Mini Month Grid ────────────────────────────────────────────── */
 function MonthGrid({
   year, month, bookingDates, selectedDate, onSelect
@@ -102,7 +125,6 @@ function MonthGrid({
     ...Array(firstDay).fill(null),
     ...Array.from({ length: daysInMonth }, (_, i) => i + 1)
   ];
-
   while (cells.length % 7 !== 0) cells.push(null);
 
   return (
@@ -148,15 +170,19 @@ export function AccountCalendar({ initialBookings }: { initialBookings: Calendar
   const [selectedDate, setSelectedDate] = useState<Date | null>(today);
   const [mode, setMode] = useState<"my-bookings" | "book-provider">("my-bookings");
 
-  // Provider search state
   const [allProviders, setAllProviders] = useState<Provider[]>([]);
   const [providerSearch, setProviderSearch] = useState("");
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
   const [busy, setBusy] = useState<BusySlot[]>([]);
+  const [workingHours, setWorkingHours] = useState<WorkingHours | null>(null);
   const [busyLoading, setBusyLoading] = useState(false);
   const [bookingSlot, setBookingSlot] = useState<string | null>(null);
   const [bookingDate, setBookingDate] = useState<Date | null>(null);
   const [loadingProviders, setLoadingProviders] = useState(false);
+
+  // Provider IDs that have at least one open slot on the selected date (null = not yet checked)
+  const [availableProviderIds, setAvailableProviderIds] = useState<Set<string> | null>(null);
+  const [checkingAvailability, setCheckingAvailability] = useState(false);
 
   /* Load providers once when switching to book mode */
   useEffect(() => {
@@ -169,18 +195,44 @@ export function AccountCalendar({ initialBookings }: { initialBookings: Calendar
       .finally(() => setLoadingProviders(false));
   }, [mode, allProviders.length]);
 
-  /* Load busy slots when provider + date changes */
+  /* When date or provider list changes in book mode, check who has availability */
   useEffect(() => {
-    if (!selectedProvider || !selectedDate) { setBusy([]); return; }
+    if (mode !== "book-provider" || !selectedDate || allProviders.length === 0) {
+      setAvailableProviderIds(null);
+      return;
+    }
+    setAvailableProviderIds(null);
+    setCheckingAvailability(true);
+    const ds = isoDate(selectedDate);
+    const dateSnap = new Date(selectedDate);
+    Promise.all(
+      allProviders.map((p) =>
+        fetch(`/api/bookings/availability?providerProfileId=${p.id}&date=${ds}`)
+          .then((r) => r.json())
+          .then((d) => {
+            const wh: WorkingHours | null = d.workingHours ?? null;
+            const busyList: BusySlot[] = d.busy ?? [];
+            if (!wh) return null;
+            return hasAvailableSlot(wh, busyList, dateSnap) ? p.id : null;
+          })
+          .catch(() => null)
+      )
+    ).then((ids) => {
+      setAvailableProviderIds(new Set(ids.filter(Boolean) as string[]));
+    }).finally(() => setCheckingAvailability(false));
+  }, [selectedDate, mode, allProviders]);
+
+  /* Load busy slots + working hours when provider + date changes */
+  useEffect(() => {
+    if (!selectedProvider || !selectedDate) { setBusy([]); setWorkingHours(null); return; }
     setBusyLoading(true);
     fetch(`/api/bookings/availability?providerProfileId=${selectedProvider.id}&date=${isoDate(selectedDate)}`)
       .then((r) => r.json())
-      .then((d) => setBusy(d.busy ?? []))
-      .catch(() => setBusy([]))
+      .then((d) => { setBusy(d.busy ?? []); setWorkingHours(d.workingHours ?? null); })
+      .catch(() => { setBusy([]); setWorkingHours(null); })
       .finally(() => setBusyLoading(false));
   }, [selectedProvider, selectedDate]);
 
-  /* Calendar navigation */
   function prevMonth() {
     if (month === 0) { setMonth(11); setYear((y) => y - 1); }
     else setMonth((m) => m - 1);
@@ -190,30 +242,36 @@ export function AccountCalendar({ initialBookings }: { initialBookings: Calendar
     else setMonth((m) => m + 1);
   }
 
-  /* Booking dots */
   const bookingDates = useMemo(() => {
     const s = new Set<string>();
     initialBookings.forEach((b) => s.add(b.startsAt.slice(0, 10)));
     return s;
   }, [initialBookings]);
 
-  /* Day's bookings */
   const dayBookings = useMemo(() => {
     if (!selectedDate) return [];
     const ds = isoDate(selectedDate);
     return initialBookings.filter((b) => b.startsAt.startsWith(ds));
   }, [selectedDate, initialBookings]);
 
-  /* Filtered providers */
   const filteredProviders = useMemo(() => {
-    if (!providerSearch.trim()) return allProviders.slice(0, 20);
-    const q = providerSearch.toLowerCase();
-    return allProviders.filter((p) =>
-      p.name.toLowerCase().includes(q) || p.category.toLowerCase().includes(q)
-    ).slice(0, 20);
-  }, [allProviders, providerSearch]);
+    let list = availableProviderIds !== null
+      ? allProviders.filter((p) => availableProviderIds.has(p.id))
+      : allProviders;
+    if (providerSearch.trim()) {
+      const q = providerSearch.toLowerCase();
+      list = list.filter((p) => p.name.toLowerCase().includes(q) || p.category.toLowerCase().includes(q));
+    }
+    return list.slice(0, 20);
+  }, [allProviders, providerSearch, availableProviderIds]);
 
   const totalDuration = selectedProvider?.services.reduce((a, s) => a + s.durationMinutes, 0) ?? 0;
+
+  // Slots derived from actual working hours — only times where the service fits
+  const computedSlots = useMemo(() => {
+    if (!workingHours) return [];
+    return buildSlots(workingHours, totalDuration > 0 ? totalDuration : 60);
+  }, [workingHours, totalDuration]);
 
   return (
     <div>
@@ -226,19 +284,15 @@ export function AccountCalendar({ initialBookings }: { initialBookings: Calendar
       <div className="mb-6 flex gap-1 rounded-2xl border border-[var(--line)] bg-white p-1 max-w-sm">
         <button
           onClick={() => setMode("my-bookings")}
-          className={cn(
-            "flex-1 rounded-xl py-2 text-sm font-semibold transition",
-            mode === "my-bookings" ? "bg-[var(--ink)] text-white" : "text-[var(--muted)] hover:text-[var(--ink)]"
-          )}
+          className={cn("flex-1 rounded-xl py-2 text-sm font-semibold transition",
+            mode === "my-bookings" ? "bg-[var(--ink)] text-white" : "text-[var(--muted)] hover:text-[var(--ink)]")}
         >
           My bookings
         </button>
         <button
           onClick={() => setMode("book-provider")}
-          className={cn(
-            "flex-1 rounded-xl py-2 text-sm font-semibold transition",
-            mode === "book-provider" ? "bg-[var(--ink)] text-white" : "text-[var(--muted)] hover:text-[var(--ink)]"
-          )}
+          className={cn("flex-1 rounded-xl py-2 text-sm font-semibold transition",
+            mode === "book-provider" ? "bg-[var(--ink)] text-white" : "text-[var(--muted)] hover:text-[var(--ink)]")}
         >
           Book a provider
         </button>
@@ -247,7 +301,6 @@ export function AccountCalendar({ initialBookings }: { initialBookings: Calendar
       <div className="grid gap-6 lg:grid-cols-[340px_1fr]">
         {/* ── Left: calendar + provider picker ── */}
         <div className="space-y-5">
-          {/* Month nav */}
           <div className="rounded-2xl border border-[var(--line)] bg-white p-4">
             <div className="mb-3 flex items-center justify-between">
               <button onClick={prevMonth} className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--line)] hover:bg-[var(--background)] transition">
@@ -263,14 +316,19 @@ export function AccountCalendar({ initialBookings }: { initialBookings: Calendar
               month={month}
               bookingDates={mode === "my-bookings" ? bookingDates : new Set()}
               selectedDate={selectedDate}
-              onSelect={setSelectedDate}
+              onSelect={(d) => { setSelectedDate(d); setSelectedProvider(null); }}
             />
           </div>
 
           {/* Provider picker (book mode only) */}
           {mode === "book-provider" && (
             <div className="rounded-2xl border border-[var(--line)] bg-white p-4">
-              <p className="mb-3 text-sm font-black">Select a provider</p>
+              <p className="mb-1 text-sm font-black">Select a provider</p>
+              {selectedDate && (
+                <p className="mb-3 text-xs text-[var(--muted)]">
+                  Showing providers available on {selectedDate.toLocaleDateString("en-ZA", { weekday: "short", day: "numeric", month: "short" })}
+                </p>
+              )}
               <div className="mb-3 flex items-center gap-2 rounded-xl border border-[var(--line)] px-3 py-2">
                 <Search className="h-4 w-4 shrink-0 text-[var(--muted)]" />
                 <input
@@ -280,8 +338,20 @@ export function AccountCalendar({ initialBookings }: { initialBookings: Calendar
                   className="min-w-0 flex-1 bg-transparent text-sm outline-none"
                 />
               </div>
-              {loadingProviders ? (
-                <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin text-[var(--brand)]" /></div>
+              {(loadingProviders || checkingAvailability) ? (
+                <div className="flex items-center justify-center gap-2 py-4 text-xs text-[var(--muted)]">
+                  <Loader2 className="h-4 w-4 animate-spin text-[var(--brand)]" />
+                  {checkingAvailability ? "Checking availability…" : "Loading…"}
+                </div>
+              ) : filteredProviders.length === 0 ? (
+                <div className="py-6 text-center">
+                  <p className="text-sm font-bold text-[var(--muted)]">No providers available</p>
+                  {selectedDate && (
+                    <p className="mt-1 text-xs text-[var(--muted)]">
+                      on {selectedDate.toLocaleDateString("en-ZA", { weekday: "long", day: "numeric", month: "long" })}
+                    </p>
+                  )}
+                </div>
               ) : (
                 <ul className="max-h-56 overflow-y-auto space-y-1">
                   {filteredProviders.map((p) => (
@@ -302,9 +372,6 @@ export function AccountCalendar({ initialBookings }: { initialBookings: Calendar
                       </button>
                     </li>
                   ))}
-                  {filteredProviders.length === 0 && (
-                    <p className="py-4 text-center text-sm text-[var(--muted)]">No providers found</p>
-                  )}
                 </ul>
               )}
             </div>
@@ -364,29 +431,37 @@ export function AccountCalendar({ initialBookings }: { initialBookings: Calendar
               </div>
             )
           ) : (
-            /* Book-provider: show time slots */
             !selectedProvider ? (
               <div className="flex flex-col items-center justify-center py-12 text-center">
                 <CalendarCheck className="mb-3 h-10 w-10 text-[var(--muted)]/40" />
-                <p className="text-sm font-bold text-[var(--muted)]">Select a provider on the left to see availability</p>
+                <p className="text-sm font-bold text-[var(--muted)]">
+                  {availableProviderIds?.size === 0
+                    ? "No providers available on this day"
+                    : "Select an available provider on the left"}
+                </p>
               </div>
-            ) : !selectedDate ? (
-              <p className="text-sm text-[var(--muted)]">Select a date</p>
             ) : busyLoading ? (
               <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-[var(--brand)]" /></div>
+            ) : computedSlots.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <CalendarDays className="mb-3 h-10 w-10 text-[var(--muted)]/40" />
+                <p className="text-sm font-bold text-[var(--muted)]">
+                  {workingHours ? "No available slots on this day" : "Provider not available on this day"}
+                </p>
+              </div>
             ) : (
               <div>
                 <p className="mb-4 text-sm text-[var(--muted)]">
                   Availability for <strong>{selectedProvider.name}</strong> — click an open slot to book
                 </p>
                 <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
-                  {SLOTS.map((s) => {
-                    const disabled = slotDisabled(s.label, busy, totalDuration > 0 ? totalDuration : 60, selectedDate);
+                  {computedSlots.map((label) => {
+                    const disabled = slotDisabled(label, busy, totalDuration > 0 ? totalDuration : 60, selectedDate!);
                     return (
                       <button
-                        key={s.label}
+                        key={label}
                         disabled={disabled}
-                        onClick={() => { setBookingSlot(s.label); setBookingDate(selectedDate ? new Date(selectedDate) : null); }}
+                        onClick={() => { setBookingSlot(label); setBookingDate(selectedDate ? new Date(selectedDate) : null); }}
                         className={cn(
                           "rounded-xl border py-2.5 text-sm font-bold transition",
                           disabled
@@ -394,7 +469,7 @@ export function AccountCalendar({ initialBookings }: { initialBookings: Calendar
                             : "border-[var(--brand)]/30 bg-[var(--brand)]/5 text-[var(--brand)] hover:bg-[var(--brand)] hover:text-white"
                         )}
                       >
-                        {s.label}
+                        {label}
                       </button>
                     );
                   })}
@@ -405,7 +480,6 @@ export function AccountCalendar({ initialBookings }: { initialBookings: Calendar
         </div>
       </div>
 
-      {/* Drawer booking — calendar stays visible, flow slides in from right */}
       {bookingSlot && selectedProvider && bookingDate && (
         <BookingFlow
           open
