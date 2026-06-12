@@ -286,9 +286,12 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
     const close = sidebarWorkingHours?.close ?? "17:00";
     const [oh, om] = open.split(":").map(Number);
     const [ch, cm] = close.split(":").map(Number);
+    const closeMins = ch * 60 + cm;
     const result = [];
-    for (let m = oh * 60 + om; m < ch * 60 + cm; m += 30) {
-      result.push(`${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`);
+    for (let m = oh * 60 + om; m < closeMins; m += 30) {
+      if (selectedServiceDuration === 0 || m + selectedServiceDuration <= closeMins) {
+        result.push(`${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`);
+      }
     }
     return result;
   })();

@@ -130,12 +130,15 @@ export function BookingFlow({
     const close = workingHours?.close ?? "17:00";
     const [oh, om] = open.split(":").map(Number);
     const [ch, cm] = close.split(":").map(Number);
+    const closeMins = ch * 60 + cm;
     const result = [];
-    for (let m = oh * 60 + om; m < ch * 60 + cm; m += 30) {
-      result.push({ h: Math.floor(m / 60), m: m % 60, label: `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}` });
+    for (let m = oh * 60 + om; m < closeMins; m += 30) {
+      if (totalDuration === 0 || m + totalDuration <= closeMins) {
+        result.push({ h: Math.floor(m / 60), m: m % 60, label: `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}` });
+      }
     }
     return result;
-  }, [workingHours, date]);
+  }, [workingHours, totalDuration]);
 
   function toggleService(id: string) {
     setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
