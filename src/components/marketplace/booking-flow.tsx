@@ -833,82 +833,108 @@ export function BookingFlow({
                 )}
 
                 {/* ── Date ── */}
-                {step === "date" && (
-                  <Section title="Pick a day" onBack={preselectedServiceId ? undefined : () => setStep("service")}>
-                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                      {nextDays(14).map((d) => {
-                        const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-                        const meta = dayMeta[ds];
-                        // isDayClosed is synchronous — no race condition on weekends/holidays
-                        const unavailable = isDayClosed(d) || (meta ? (!meta.hasSlot || meta.closed) : false);
-                        const fill = meta?.fill ?? 0;
-                        const sel = date && d.toDateString() === date.toDateString();
+                {step === "date" && (() => {
+                  // Build a proper calendar grid: Sun–Sat columns, starting from Sunday of this week.
+                  // Show enough weeks to always include at least 14 days from today.
+                  const today = new Date(); today.setHours(0, 0, 0, 0);
+                  const gridStart = new Date(today);
+                  gridStart.setDate(today.getDate() - today.getDay()); // back to Sunday
+                  const minEnd = new Date(today); minEnd.setDate(today.getDate() + 13);
+                  const gridEnd = new Date(minEnd);
+                  gridEnd.setDate(minEnd.getDate() + (6 - minEnd.getDay())); // forward to Saturday
+                  const calDays: Date[] = [];
+                  for (const cur = new Date(gridStart); cur <= gridEnd; cur.setDate(cur.getDate() + 1)) {
+                    calDays.push(new Date(cur));
+                  }
+                  const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+                  return (
+                    <Section title="Pick a day" onBack={preselectedServiceId ? undefined : () => setStep("service")}>
+                      {/* Month label */}
+                      <p className="mb-2 text-xs font-bold uppercase tracking-wider text-[var(--muted)]">
+                        {today.toLocaleDateString("en-ZA", { month: "long", year: "numeric" })}
+                      </p>
+                      {/* Day-of-week headers */}
+                      <div className="mb-1 grid grid-cols-7">
+                        {DOW.map((d) => (
+                          <div key={d} className="py-1 text-center text-[10px] font-bold uppercase text-[var(--muted)]">{d}</div>
+                        ))}
+                      </div>
+                      {/* Calendar cells */}
+                      <div className="grid grid-cols-7 gap-1">
+                        {calDays.map((d) => {
+                          const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+                          const isPast = d < today;
+                          const meta = dayMeta[ds];
+                          const unavailable = isPast || isDayClosed(d) || (meta ? (!meta.hasSlot || meta.closed) : false);
+                          const fill = meta?.fill ?? 0;
+                          const sel = date && d.toDateString() === date.toDateString();
+                          const isToday = d.toDateString() === today.toDateString();
 
-                        // Fill colour: green → amber → rose as capacity fills
-                        const fillColor = fill < 0.5
-                          ? `rgb(34,197,94,${0.4 + fill * 0.6})`   // green
-                          : fill < 0.85
-                          ? `rgb(251,191,36,${0.5 + fill * 0.5})`  // amber
-                          : `rgb(239,68,68,${0.55 + fill * 0.45})`; // red
+                          const fillColor = fill < 0.5
+                            ? `rgb(34,197,94,${0.35 + fill * 0.65})`
+                            : fill < 0.85
+                            ? `rgb(251,191,36,${0.45 + fill * 0.55})`
+                            : `rgb(239,68,68,${0.5 + fill * 0.5})`;
 
-                        return (
-                          <button
-                            key={d.toISOString()}
-                            disabled={unavailable}
-                            onClick={() => { setDate(d); setSlot(null); setStep("time"); }}
-                            className={`relative overflow-hidden rounded-2xl border p-3 text-center transition
-                              ${unavailable
-                                ? "cursor-not-allowed border-[var(--line)] bg-[var(--line)]/20 opacity-50"
-                                : sel
-                                ? "border-[var(--brand)] bg-[var(--brand)]/5"
-                                : "border-[var(--line)] bg-white hover:border-[var(--brand)]"
-                              }`}
-                          >
-                            {/* Capacity fill — water-in-cup effect rising from bottom */}
-                            {!unavailable && meta && fill > 0 && (
-                              <span
-                                className="pointer-events-none absolute inset-x-0 bottom-0 rounded-b-2xl transition-all duration-700"
-                                style={{ height: `${Math.round(fill * 100)}%`, background: fillColor, opacity: 0.18 }}
-                              />
-                            )}
+                          return (
+                            <button
+                              key={ds}
+                              disabled={unavailable}
+                              onClick={() => { setDate(d); setSlot(null); setStep("time"); }}
+                              className={`relative overflow-hidden rounded-xl border py-2 text-center transition
+                                ${unavailable
+                                  ? "cursor-not-allowed border-transparent bg-transparent opacity-35"
+                                  : sel
+                                  ? "border-[var(--brand)] bg-[var(--brand)]/10"
+                                  : "border-[var(--line)] bg-white hover:border-[var(--brand)] hover:bg-[var(--brand)]/5"
+                                }`}
+                            >
+                              {/* Water-fill capacity background */}
+                              {!unavailable && meta && fill > 0 && (
+                                <span
+                                  className="pointer-events-none absolute inset-x-0 bottom-0 rounded-b-xl transition-all duration-700"
+                                  style={{ height: `${Math.round(fill * 100)}%`, background: fillColor, opacity: 0.15 }}
+                                />
+                              )}
 
-                            <span className={`relative block text-[10px] font-bold uppercase ${unavailable ? "text-[var(--muted)]/60" : "text-[var(--muted)]"}`}>
-                              {d.toLocaleDateString("en-ZA", { weekday: "short" })}
-                            </span>
+                              {/* Date number */}
+                              <span className={`relative block text-sm font-black leading-none
+                                ${sel ? "text-[var(--brand)]" : unavailable ? "line-through text-[var(--muted)]/40" : isToday ? "text-[var(--brand)]" : "text-[var(--ink)]"}`}>
+                                {d.getDate()}
+                              </span>
 
-                            {/* Date number — strikethrough when unavailable */}
-                            <span className={`relative block text-lg font-black ${unavailable ? "line-through text-[var(--muted)]/50" : ""}`}>
-                              {d.getDate()}
-                            </span>
-
-                            <span className={`relative block text-[10px] ${unavailable ? "text-[var(--muted)]/50" : "text-[var(--muted)]"}`}>
-                              {d.toLocaleDateString("en-ZA", { month: "short" })}
-                            </span>
-
-                            {/* Capacity dot indicator below the date */}
-                            {!unavailable && meta && (
-                              <span className="relative mt-1.5 block">
-                                <span className="mx-auto block h-1 w-8 overflow-hidden rounded-full bg-[var(--line)]">
-                                  <span
-                                    className="block h-full rounded-full transition-all duration-700"
-                                    style={{ width: `${Math.round(fill * 100)}%`, background: fillColor }}
-                                  />
+                              {/* Today dot */}
+                              {isToday && !sel && (
+                                <span className="relative mt-0.5 block">
+                                  <span className="mx-auto block h-1 w-1 rounded-full bg-[var(--brand)]" />
                                 </span>
-                              </span>
-                            )}
+                              )}
 
-                            {/* Loading shimmer while meta not yet fetched */}
-                            {!meta && (
-                              <span className="relative mt-1.5 block">
-                                <span className="mx-auto block h-1 w-8 animate-pulse rounded-full bg-[var(--line)]" />
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </Section>
-                )}
+                              {/* Capacity fill bar */}
+                              {!unavailable && meta && (
+                                <span className="relative mt-1 block px-1">
+                                  <span className="block h-0.5 w-full overflow-hidden rounded-full bg-[var(--line)]">
+                                    <span
+                                      className="block h-full rounded-full transition-all duration-700"
+                                      style={{ width: `${Math.round(fill * 100)}%`, background: fillColor }}
+                                    />
+                                  </span>
+                                </span>
+                              )}
+
+                              {/* Loading shimmer */}
+                              {!meta && !unavailable && (
+                                <span className="relative mt-1 block px-1">
+                                  <span className="block h-0.5 w-full animate-pulse rounded-full bg-[var(--line)]" />
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </Section>
+                  );
+                })()}
 
                 {/* ── Time ── */}
                 {step === "time" && (
