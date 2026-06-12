@@ -3,9 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ChevronLeft, ChevronRight, X, Check, UserX, ClipboardCheck,
-  XCircle, Clock, CalendarDays, BadgeCheck, Mail, Loader2, Pencil, Ban
+  XCircle, Clock, CalendarDays, BadgeCheck, Mail, Loader2, Ban,
+  Plus, Search, UserPlus
 } from "lucide-react";
-import { format, startOfWeek, addDays, isSameDay, addWeeks, subWeeks, parseISO, addMinutes } from "date-fns";
+import {
+  format, startOfWeek, addDays, isSameDay, addWeeks, subWeeks,
+  parseISO, addMinutes
+} from "date-fns";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 
@@ -38,6 +42,9 @@ type BlockedSlot = {
   reason: string | null;
 };
 
+type ServiceOption = { id: string; name: string; durationMinutes: number; priceCents: number };
+type ClientOption = { id: string; name: string; email: string; image: string | null };
+
 type PanelState =
   | { type: "booking"; booking: Booking }
   | { type: "blocked"; slot: BlockedSlot }
@@ -55,25 +62,22 @@ const STATUS_COLORS: Record<string, string> = {
   CANCELLED: "#9CA3AF",
   PENDING_DEPOSIT: "#D97706",
 };
-
 const STATUS_LABEL: Record<string, string> = {
   CONFIRMED: "Confirmed",
   COMPLETED: "Completed",
   CANCELLED: "Cancelled",
   PENDING_DEPOSIT: "Awaiting deposit",
 };
-
 const DAY_NAMES = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+const PX_PER_HOUR = 80; // taller rows = fills screen, less blank space
 
 function formatCents(c: number) {
   return new Intl.NumberFormat("en-ZA", { style: "currency", currency: "ZAR", maximumFractionDigits: 0 }).format(c / 100);
 }
-
 function timeToMin(t: string) {
   const [h, m] = t.split(":").map(Number);
   return h * 60 + m;
 }
-
 function categoryColor(service: string): string {
   const s = service.toLowerCase();
   if (s.includes("hair") || s.includes("cut") || s.includes("trim")) return "#D94472";
@@ -90,17 +94,13 @@ type LayoutItem = { id: string; startMin: number; endMin: number; col: number; c
 function layoutItems(items: { id: string; startMin: number; endMin: number }[]): LayoutItem[] {
   const sorted = [...items].sort((a, b) => a.startMin - b.startMin);
   const result: LayoutItem[] = [];
-  // Track running groups of overlapping items
   const groups: LayoutItem[][] = [];
 
   for (const item of sorted) {
-    // Find a group this overlaps with
     let placed = false;
     for (const group of groups) {
-      // Check if item overlaps any in group
       const overlaps = group.some(g => item.startMin < g.endMin && item.endMin > g.startMin);
       if (overlaps) {
-        // Find first free column
         const usedCols = new Set(group.map(g => g.col));
         let col = 0;
         while (usedCols.has(col)) col++;
@@ -117,13 +117,10 @@ function layoutItems(items: { id: string; startMin: number; endMin: number }[]):
       result.push(layout);
     }
   }
-
-  // Second pass: set cols = max col+1 in each overlapping cluster
   for (const group of groups) {
     const maxCol = Math.max(...group.map(g => g.col)) + 1;
     group.forEach(g => { g.cols = maxCol; });
   }
-
   return result;
 }
 
@@ -137,41 +134,58 @@ export function CalendarView() {
   const [loading, setLoading] = useState(true);
   const [panel, setPanel] = useState<PanelState | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  // Booking detail state
   const [checkInCode, setCheckInCode] = useState("");
   const [checkInError, setCheckInError] = useState("");
   const [notesValue, setNotesValue] = useState("");
   const [notesDirty, setNotesDirty] = useState(false);
-  // New block form
+
+  // New-slot panel state
+  const [newMode, setNewMode] = useState<"pick" | "block" | "booking">("pick");
   const [blockReason, setBlockReason] = useState("");
   const [blockDuration, setBlockDuration] = useState(60);
-  // Edit booking
-  const [editMode, setEditMode] = useState(false);
+
+  // Manual booking form state
+  const [clientQuery, setClientQuery] = useState("");
+  const [clientResults, setClientResults] = useState<ClientOption[]>([]);
+  const [clientSearching, setClientSearching] = useState(false);
+  const [selectedClient, setSelectedClient] = useState<ClientOption | null>(null);
+  const [services, setServices] = useState<ServiceOption[]>([]);
+  const [selectedServiceId, setSelectedServiceId] = useState("");
+  const [bookingNotes, setBookingNotes] = useState("");
+  const [bookingError, setBookingError] = useState("");
+  const clientTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Compute grid from working hours — only show working days
+  const enabledWH = workingHours.filter(w => w.enabled);
+  const gridStart = enabledWH.length ? Math.min(...enabledWH.map(w => Math.floor(timeToMin(w.from) / 60))) : 8;
+  const gridEnd = enabledWH.length ? Math.max(...enabledWH.map(w => Math.ceil(timeToMin(w.to) / 60))) : 20;
+  const HOURS = Array.from({ length: gridEnd - gridStart }, (_, i) => gridStart + i);
 
   const weekStart = startOfWeek(week, { weekStartsOn: 1 });
-  const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  const allDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  // Only show working days (skip days marked off)
+  const days = allDays.filter(d => {
+    const name = DAY_NAMES[d.getDay() === 0 ? 6 : d.getDay() - 1];
+    return workingHours.find(w => w.day === name)?.enabled ?? true;
+  });
 
-  // Compute visible hour range from working hours
-  const enabledWH = workingHours.filter(w => w.enabled);
-  const gridStart = enabledWH.length
-    ? Math.min(...enabledWH.map(w => Math.floor(timeToMin(w.from) / 60)))
-    : 8;
-  const gridEnd = enabledWH.length
-    ? Math.max(...enabledWH.map(w => Math.ceil(timeToMin(w.to) / 60)))
-    : 20;
-  const HOURS = Array.from({ length: gridEnd - gridStart }, (_, i) => gridStart + i);
-  const PX_PER_HOUR = 64;
+  // ── Data loading ─────────────────────────────────────────────────────────
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [bookRes, whRes, blockRes] = await Promise.all([
+      const [bookRes, whRes, blockRes, svcRes] = await Promise.all([
         fetch("/api/dashboard/bookings"),
         fetch("/api/dashboard/settings"),
         fetch("/api/dashboard/blocked-slots"),
+        fetch("/api/dashboard/services"),
       ]);
       const bookData = await bookRes.json();
       const whData = await whRes.json();
       const blockData = await blockRes.json();
+      const svcData = await svcRes.json();
 
       if (Array.isArray(bookData.bookings)) {
         setBookings(bookData.bookings.map((b: any) => ({
@@ -195,8 +209,13 @@ export function CalendarView() {
       if (whData.workingHoursJson) {
         try { setWorkingHours(JSON.parse(whData.workingHoursJson)); } catch {}
       }
-      if (Array.isArray(blockData.slots)) {
-        setBlockedSlots(blockData.slots);
+      if (Array.isArray(blockData.slots)) setBlockedSlots(blockData.slots);
+      if (Array.isArray(svcData.services)) {
+        setServices(svcData.services.map((s: any) => ({
+          id: s.id, name: s.name,
+          durationMinutes: s.durationMinutes,
+          priceCents: s.priceCents
+        })));
       }
     } finally {
       setLoading(false);
@@ -205,59 +224,78 @@ export function CalendarView() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Reset side effects when panel changes
+  // Reset panel state on change
   useEffect(() => {
     if (panel?.type === "booking") {
       setNotesValue(panel.booking.notes ?? "");
       setNotesDirty(false);
       setCheckInCode("");
       setCheckInError("");
-      setEditMode(false);
     }
     if (panel?.type === "new") {
+      setNewMode("pick");
       setBlockReason("");
       setBlockDuration(60);
+      setSelectedClient(null);
+      setClientQuery("");
+      setClientResults([]);
+      setSelectedServiceId(services[0]?.id ?? "");
+      setBookingNotes("");
+      setBookingError("");
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panel?.type === "booking" ? (panel as any).booking.id : panel?.type]);
+
+  // Client search debounce
+  useEffect(() => {
+    if (clientTimer.current) clearTimeout(clientTimer.current);
+    if (!clientQuery.trim()) { setClientResults([]); return; }
+    setClientSearching(true);
+    clientTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/dashboard/clients?q=${encodeURIComponent(clientQuery)}`);
+        const data = await res.json();
+        setClientResults(data.clients ?? []);
+      } finally {
+        setClientSearching(false);
+      }
+    }, 300);
+  }, [clientQuery]);
+
+  // ── Grid helpers ─────────────────────────────────────────────────────────
+
+  function slotTop(time: string | Date) {
+    const d = typeof time === "string" ? parseISO(time) : time;
+    return (d.getHours() + d.getMinutes() / 60 - gridStart) * PX_PER_HOUR;
+  }
+  function slotHeight(mins: number) { return (mins / 60) * PX_PER_HOUR; }
 
   function bookingsForDay(day: Date) {
     return bookings.filter(b => !["CANCELLED","PENDING_DEPOSIT"].includes(b.status) && isSameDay(parseISO(b.startsAt), day));
   }
-
   function cancelledForDay(day: Date) {
     return bookings.filter(b => b.status === "CANCELLED" && isSameDay(parseISO(b.startsAt), day));
   }
-
   function blockedForDay(day: Date) {
     return blockedSlots.filter(s => isSameDay(parseISO(s.startsAt), day));
   }
-
-  function workingHoursForDay(day: Date): WorkingHour | undefined {
-    const dayName = DAY_NAMES[day.getDay() === 0 ? 6 : day.getDay() - 1];
-    return workingHours.find(w => w.day === dayName);
-  }
-
-  function slotTop(time: string | Date): number {
-    const d = typeof time === "string" ? parseISO(time) : time;
-    const mins = d.getHours() * 60 + d.getMinutes();
-    return (mins / 60 - gridStart) * PX_PER_HOUR;
-  }
-
-  function slotHeight(minutes: number): number {
-    return (minutes / 60) * PX_PER_HOUR;
+  function whForDay(day: Date): WorkingHour | undefined {
+    const name = DAY_NAMES[day.getDay() === 0 ? 6 : day.getDay() - 1];
+    return workingHours.find(w => w.day === name);
   }
 
   function handleGridClick(e: React.MouseEvent<HTMLDivElement>, day: Date) {
+    if ((e.target as HTMLElement).closest("button,a")) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const y = e.clientY - rect.top;
-    const hour = gridStart + y / PX_PER_HOUR;
-    const roundedMin = Math.round((hour * 60) / 15) * 15;
+    const rawMin = (gridStart + y / PX_PER_HOUR) * 60;
+    const roundedMin = Math.round(rawMin / 15) * 15;
     const startsAt = new Date(day);
     startsAt.setHours(Math.floor(roundedMin / 60), roundedMin % 60, 0, 0);
     setPanel({ type: "new", startsAt });
   }
 
-  // ── Booking actions ──────────────────────────────────────────────────────
+  // ── Actions ──────────────────────────────────────────────────────────────
 
   async function doAttendance(action: string, extra?: Record<string, unknown>) {
     if (panel?.type !== "booking") return;
@@ -270,16 +308,12 @@ export function CalendarView() {
         body: JSON.stringify({ action, ...extra }),
       });
       const data = await res.json();
-      if (!res.ok) {
-        if (action === "check_in") setCheckInError(data.error ?? "Check-in failed");
-        return;
-      }
+      if (!res.ok) { if (action === "check_in") setCheckInError(data.error ?? "Check-in failed"); return; }
       await load();
-      const updated = bookings.find(b => b.id === panel.booking.id);
-      if (updated) setPanel({ type: "booking", booking: { ...updated, ...data.booking } });
-    } finally {
-      setActionLoading(null);
-    }
+      setPanel(prev => prev?.type === "booking"
+        ? { type: "booking", booking: { ...prev.booking, ...data.booking } }
+        : prev);
+    } finally { setActionLoading(null); }
   }
 
   async function cancelBooking() {
@@ -293,9 +327,7 @@ export function CalendarView() {
       });
       await load();
       setPanel(null);
-    } finally {
-      setActionLoading(null);
-    }
+    } finally { setActionLoading(null); }
   }
 
   async function saveNotes() {
@@ -308,9 +340,7 @@ export function CalendarView() {
         body: JSON.stringify({ notes: notesValue }),
       });
       setNotesDirty(false);
-    } finally {
-      setActionLoading(null);
-    }
+    } finally { setActionLoading(null); }
   }
 
   async function createBlock() {
@@ -323,13 +353,32 @@ export function CalendarView() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ startsAt: panel.startsAt.toISOString(), endsAt: endsAt.toISOString(), reason: blockReason || null }),
       });
-      if (res.ok) {
-        await load();
-        setPanel(null);
-      }
-    } finally {
-      setActionLoading(null);
-    }
+      if (res.ok) { await load(); setPanel(null); }
+    } finally { setActionLoading(null); }
+  }
+
+  async function createManualBooking() {
+    if (panel?.type !== "new") return;
+    setBookingError("");
+    if (!selectedClient) { setBookingError("Select a client"); return; }
+    if (!selectedServiceId) { setBookingError("Select a service"); return; }
+    setActionLoading("booking");
+    try {
+      const res = await fetch("/api/dashboard/bookings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId: selectedClient.id,
+          serviceId: selectedServiceId,
+          startsAt: panel.startsAt.toISOString(),
+          notes: bookingNotes || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setBookingError(data.error ?? "Failed to create booking"); return; }
+      await load();
+      setPanel(null);
+    } finally { setActionLoading(null); }
   }
 
   async function deleteBlock() {
@@ -339,33 +388,34 @@ export function CalendarView() {
       await fetch(`/api/dashboard/blocked-slots/${panel.slot.id}`, { method: "DELETE" });
       await load();
       setPanel(null);
-    } finally {
-      setActionLoading(null);
-    }
+    } finally { setActionLoading(null); }
   }
 
   // ── Derived ──────────────────────────────────────────────────────────────
 
-  const booking = panel?.type === "booking" ? panel.booking : null;
-  const isActive = booking?.status === "CONFIRMED";
-  const isCheckedIn = !!booking?.checkedInAt;
-  const canNoShow = isActive && booking?.startsAt
-    ? Date.now() >= parseISO(booking.startsAt).getTime() + 5 * 60 * 1000
+  const bk = panel?.type === "booking" ? panel.booking : null;
+  const isActive = bk?.status === "CONFIRMED";
+  const isCheckedIn = !!bk?.checkedInAt;
+  const canNoShow = isActive && bk?.startsAt
+    ? Date.now() >= parseISO(bk.startsAt).getTime() + 5 * 60 * 1000
     : false;
+  const selectedService = services.find(s => s.id === selectedServiceId);
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="flex h-full overflow-hidden">
-      {/* ── Main calendar ── */}
+
+      {/* ── Main calendar ─────────────────────────────────────────────────── */}
       <div className="flex flex-1 flex-col overflow-hidden">
+
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-gray-100 bg-white px-6 py-4">
-          <h1 className="text-xl font-black">Calendar</h1>
+        <div className="flex items-center justify-between border-b border-gray-100 bg-white px-6 py-3">
+          <h1 className="text-lg font-black">Calendar</h1>
           <div className="flex items-center gap-2">
             <button onClick={() => setWeek(subWeeks(week, 1))} className="rounded-lg border border-gray-200 p-1.5 hover:bg-gray-50">
               <ChevronLeft className="h-4 w-4" />
             </button>
-            <span className="min-w-[160px] text-center text-sm font-bold">
+            <span className="min-w-[155px] text-center text-sm font-bold">
               {format(weekStart, "d MMM")} – {format(addDays(weekStart, 6), "d MMM yyyy")}
             </span>
             <button onClick={() => setWeek(addWeeks(week, 1))} className="rounded-lg border border-gray-200 p-1.5 hover:bg-gray-50">
@@ -374,29 +424,26 @@ export function CalendarView() {
             <button onClick={() => setWeek(new Date())} className="rounded-xl border border-gray-200 px-3 py-1.5 text-sm font-semibold hover:bg-gray-50">
               Today
             </button>
-            {loading && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
+            {loading && <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />}
           </div>
         </div>
 
         <div className="flex flex-1 overflow-hidden bg-white">
           {/* Time gutter */}
-          <div className="w-16 shrink-0 border-r border-gray-100">
-            <div className="h-12 border-b border-gray-100" />
-            {HOURS.map((h) => (
+          <div className="w-14 shrink-0 border-r border-gray-100">
+            <div className="h-10 border-b border-gray-100" />
+            {HOURS.map(h => (
               <div key={h} className="relative border-b border-gray-50" style={{ height: PX_PER_HOUR }}>
                 <span className="absolute -top-2 right-2 text-[10px] text-gray-400">{h}:00</span>
               </div>
             ))}
           </div>
 
-          {/* Day columns */}
+          {/* Day columns — only working days */}
           <div className="flex flex-1 overflow-x-auto">
-            {days.map((day) => {
+            {days.map(day => {
               const isToday = isSameDay(day, new Date());
-              const wh = workingHoursForDay(day);
-              const isDayOff = !wh?.enabled;
-
-              // Build layout items for active bookings
+              const wh = whForDay(day);
               const activeBookings = bookingsForDay(day);
               const layoutData = layoutItems(activeBookings.map(b => {
                 const s = parseISO(b.startsAt);
@@ -405,44 +452,27 @@ export function CalendarView() {
               }));
               const layoutMap = new Map(layoutData.map(l => [l.id, l]));
 
-              const cancelled = cancelledForDay(day);
-              const blocked = blockedForDay(day);
-
               return (
-                <div key={day.toISOString()} className="flex min-w-[110px] flex-1 flex-col border-r border-gray-100 last:border-r-0">
+                <div key={day.toISOString()} className="flex min-w-[100px] flex-1 flex-col border-r border-gray-100 last:border-r-0">
                   {/* Day header */}
-                  <div className="flex h-12 flex-col items-center justify-center border-b border-gray-100">
+                  <div className="flex h-10 flex-col items-center justify-center border-b border-gray-100">
                     <p className="text-[10px] font-semibold uppercase text-gray-400">{format(day, "EEE")}</p>
-                    <p className={`text-sm font-black ${isToday ? "flex h-6 w-6 items-center justify-center rounded-full bg-[#D94472] text-white" : ""}`}>
+                    <p className={`text-xs font-black ${isToday ? "flex h-5 w-5 items-center justify-center rounded-full bg-[#D94472] text-white" : ""}`}>
                       {format(day, "d")}
                     </p>
                   </div>
 
-                  {/* Time grid */}
-                  <div
-                    className="relative flex-1 select-none"
-                    onClick={(e) => {
-                      if ((e.target as HTMLElement).closest("button")) return;
-                      if (!isDayOff) handleGridClick(e, day);
-                    }}
-                  >
-                    {/* Hour rows */}
-                    {HOURS.map((h) => (
+                  {/* Grid — clickable */}
+                  <div className="relative flex-1" onClick={e => handleGridClick(e, day)}>
+                    {HOURS.map(h => (
                       <div
                         key={h}
-                        className={cn("border-b border-gray-50 hover:bg-gray-50/50 cursor-pointer", isDayOff && "bg-gray-50 cursor-not-allowed")}
+                        className="cursor-pointer border-b border-gray-50 hover:bg-blue-50/20"
                         style={{ height: PX_PER_HOUR }}
                       />
                     ))}
 
-                    {/* Day-off overlay */}
-                    {isDayOff && (
-                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                        <span className="text-xs text-gray-300 font-semibold rotate-90">Day off</span>
-                      </div>
-                    )}
-
-                    {/* Working hours shading — before open and after close */}
+                    {/* Working hours shading outside open hours */}
                     {wh?.enabled && (() => {
                       const openMin = timeToMin(wh.from);
                       const closeMin = timeToMin(wh.to);
@@ -451,84 +481,76 @@ export function CalendarView() {
                       const totalH = HOURS.length * PX_PER_HOUR;
                       return (
                         <>
-                          {openTop > 0 && (
-                            <div className="absolute inset-x-0 top-0 bg-gray-100/60 pointer-events-none" style={{ height: openTop }} />
-                          )}
-                          {closeTop < totalH && (
-                            <div className="absolute inset-x-0 bg-gray-100/60 pointer-events-none" style={{ top: closeTop, bottom: 0 }} />
-                          )}
+                          {openTop > 0 && <div className="pointer-events-none absolute inset-x-0 top-0 bg-gray-100/50" style={{ height: openTop }} />}
+                          {closeTop < totalH && <div className="pointer-events-none absolute inset-x-0 bg-gray-100/50" style={{ top: closeTop, bottom: 0 }} />}
                         </>
                       );
                     })()}
 
                     {/* Blocked slots */}
-                    {blocked.map(slot => {
+                    {blockedForDay(day).map(slot => {
                       const top = slotTop(slot.startsAt);
                       const dMin = (parseISO(slot.endsAt).getTime() - parseISO(slot.startsAt).getTime()) / 60000;
-                      const height = slotHeight(dMin);
                       return (
-                        <button
-                          key={slot.id}
-                          onClick={() => setPanel({ type: "blocked", slot })}
-                          style={{ top: Math.max(0, top), height: Math.max(height, 24) }}
-                          className="absolute inset-x-1 overflow-hidden rounded-lg border border-gray-300 bg-gray-100 px-1.5 py-1 text-left hover:bg-gray-200"
-                        >
-                          <p className="truncate text-[10px] font-bold text-gray-500 flex items-center gap-1">
-                            <Ban className="h-2.5 w-2.5" /> Blocked
+                        <button key={slot.id} onClick={e => { e.stopPropagation(); setPanel({ type: "blocked", slot }); }}
+                          style={{ top: Math.max(0, top), height: Math.max(slotHeight(dMin), 18) }}
+                          className="absolute inset-x-0.5 overflow-hidden rounded border border-gray-300 bg-gray-100 px-1 text-left hover:bg-gray-200">
+                          <p className="flex items-center gap-0.5 truncate text-[9px] font-bold text-gray-500">
+                            <Ban className="h-2 w-2 shrink-0" /> {slot.reason || "Blocked"}
                           </p>
-                          {slot.reason && <p className="truncate text-[10px] text-gray-400">{slot.reason}</p>}
                         </button>
                       );
                     })}
 
-                    {/* Active bookings (with overlap layout) */}
+                    {/* Active bookings */}
                     {activeBookings.map(b => {
                       const layout = layoutMap.get(b.id)!;
                       const top = slotTop(b.startsAt);
-                      const height = slotHeight(b.durationMinutes);
+                      const height = Math.max(slotHeight(b.durationMinutes), 22);
                       const color = categoryColor(b.service);
                       const colW = 100 / layout.cols;
                       const isSelected = panel?.type === "booking" && panel.booking.id === b.id;
+                      const compact = height < 44;
 
                       return (
-                        <button
-                          key={b.id}
-                          onClick={() => setPanel({ type: "booking", booking: b })}
+                        <button key={b.id}
+                          onClick={e => { e.stopPropagation(); setPanel({ type: "booking", booking: b }); }}
                           style={{
                             top: Math.max(0, top),
-                            height: Math.max(height, 28),
+                            height,
                             left: `${layout.col * colW}%`,
-                            width: `${colW}%`,
-                            backgroundColor: color + "20",
+                            width: `calc(${colW}% - 2px)`,
+                            backgroundColor: color + "18",
                             borderLeftColor: color,
                           }}
-                          className={cn(
-                            "absolute overflow-hidden rounded-r-lg border-l-2 px-1.5 py-1 text-left transition-all hover:brightness-95",
-                            isSelected && "brightness-90"
+                          className={cn("absolute overflow-hidden rounded-r border-l-2 px-1 text-left transition-all hover:brightness-95", isSelected && "brightness-90")}>
+                          {compact ? (
+                            <p className="truncate text-[9px] font-bold leading-tight" style={{ color }}>
+                              {format(parseISO(b.startsAt), "h:mm")} {b.service}
+                            </p>
+                          ) : (
+                            <>
+                              <p className="truncate text-[10px] font-bold leading-tight" style={{ color }}>
+                                {format(parseISO(b.startsAt), "h:mm a")} · {b.service}
+                              </p>
+                              <p className="truncate text-[9px] leading-tight text-gray-500">{b.clientName}</p>
+                              {b.checkedInAt && !b.noShowAt && <span className="text-[8px] font-bold text-green-600">✓ In</span>}
+                              {b.noShowAt && <span className="text-[8px] font-bold text-red-500">✗ NS</span>}
+                            </>
                           )}
-                        >
-                          <p className="truncate text-[10px] font-bold" style={{ color }}>
-                            {format(parseISO(b.startsAt), "h:mm a")} {b.service}
-                          </p>
-                          <p className="truncate text-[10px] text-gray-500">{b.clientName}</p>
-                          {b.checkedInAt && !b.noShowAt && <span className="text-[9px] font-semibold text-green-600">✓ In</span>}
-                          {b.noShowAt && <span className="text-[9px] font-semibold text-red-500">No-show</span>}
-                          {b.completedAt && !b.noShowAt && <span className="text-[9px] font-semibold text-blue-600">✓ Done</span>}
                         </button>
                       );
                     })}
 
-                    {/* Cancelled (faded, small) */}
-                    {cancelled.map(b => {
+                    {/* Cancelled (tiny, faded) */}
+                    {cancelledForDay(day).map(b => {
                       const top = slotTop(b.startsAt);
                       return (
-                        <button
-                          key={b.id}
-                          onClick={() => setPanel({ type: "booking", booking: b })}
-                          style={{ top: Math.max(0, top), height: 22, borderLeftColor: "#9CA3AF" }}
-                          className="absolute inset-x-1 overflow-hidden rounded-r border-l-2 bg-gray-100 px-1.5 text-left opacity-50 hover:opacity-75"
-                        >
-                          <p className="truncate text-[9px] font-semibold text-gray-500">{b.service} – cancelled</p>
+                        <button key={b.id}
+                          onClick={e => { e.stopPropagation(); setPanel({ type: "booking", booking: b }); }}
+                          style={{ top: Math.max(0, top), height: 16, borderLeftColor: "#9CA3AF" }}
+                          className="absolute inset-x-0.5 overflow-hidden rounded-r border-l-2 bg-gray-100 px-1 text-left opacity-50 hover:opacity-75">
+                          <p className="truncate text-[8px] text-gray-500">{b.service}</p>
                         </button>
                       );
                     })}
@@ -540,101 +562,75 @@ export function CalendarView() {
         </div>
       </div>
 
-      {/* ── Side panel ── */}
+      {/* ── Side panel ───────────────────────────────────────────────────────── */}
       {panel && (
-        <div className="flex w-80 shrink-0 flex-col overflow-y-auto border-l border-gray-100 bg-white" onClick={e => e.stopPropagation()}>
+        <div className="flex w-76 shrink-0 flex-col overflow-y-auto border-l border-gray-100 bg-white" style={{ width: 296 }} onClick={e => e.stopPropagation()}>
+
           {/* ── Booking detail ── */}
-          {panel.type === "booking" && (() => {
-            const b = panel.booking;
-            const active = b.status === "CONFIRMED";
-            const checkedIn = !!b.checkedInAt;
-            const noShow = !!b.noShowAt;
-            const canNS = active && Date.now() >= parseISO(b.startsAt).getTime() + 5 * 60 * 1000;
+          {panel.type === "booking" && bk && (() => {
+            const active = bk.status === "CONFIRMED";
+            const checkedIn = !!bk.checkedInAt;
+            const noShow = !!bk.noShowAt;
+            const canNS = active && Date.now() >= parseISO(bk.startsAt).getTime() + 5 * 60 * 1000;
 
             return (
               <>
                 <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-                  <h2 className="text-sm font-black">Appointment details</h2>
-                  <div className="flex items-center gap-1">
-                    {active && (
-                      <button onClick={() => setEditMode(m => !m)} className={cn("rounded-lg p-1.5 hover:bg-gray-100", editMode && "bg-gray-100")}>
-                        <Pencil className="h-3.5 w-3.5 text-gray-500" />
-                      </button>
-                    )}
-                    <button onClick={() => setPanel(null)} className="rounded-lg p-1 hover:bg-gray-100">
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
+                  <h2 className="text-sm font-black">Appointment</h2>
+                  <button onClick={() => setPanel(null)} className="rounded-lg p-1 hover:bg-gray-100"><X className="h-4 w-4" /></button>
                 </div>
+                <div className="flex flex-col gap-3 p-4">
+                  {/* Status badge */}
+                  <span className="inline-flex w-fit items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold"
+                    style={{ backgroundColor: (STATUS_COLORS[bk.status] ?? "#9CA3AF") + "20", color: STATUS_COLORS[bk.status] ?? "#9CA3AF" }}>
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: STATUS_COLORS[bk.status] ?? "#9CA3AF" }} />
+                    {STATUS_LABEL[bk.status] ?? bk.status}
+                  </span>
 
-                <div className="flex flex-col gap-4 p-4">
-                  {/* Status */}
-                  <div
-                    className="inline-flex w-fit items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold"
-                    style={{ backgroundColor: (STATUS_COLORS[b.status] ?? "#9CA3AF") + "20", color: STATUS_COLORS[b.status] ?? "#9CA3AF" }}
-                  >
-                    <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: STATUS_COLORS[b.status] ?? "#9CA3AF" }} />
-                    {STATUS_LABEL[b.status] ?? b.status}
-                  </div>
-
-                  {/* Service */}
-                  <div className="rounded-xl border border-gray-100 p-3 space-y-1.5">
-                    <p className="font-black text-sm">{b.service}</p>
-                    {b.agentName && <p className="text-xs text-gray-500">with {b.agentName}</p>}
-                    <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500">
-                      <span className="flex items-center gap-1"><CalendarDays className="h-3 w-3" />{format(parseISO(b.startsAt), "EEE, d MMM yyyy")}</span>
-                      <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{format(parseISO(b.startsAt), "h:mm a")} · {b.durationMinutes}min</span>
-                    </div>
+                  {/* Service + time */}
+                  <div className="rounded-xl border border-gray-100 p-3 space-y-1">
+                    <p className="font-black text-sm">{bk.service}</p>
+                    {bk.agentName && <p className="text-xs text-gray-400">with {bk.agentName}</p>}
+                    <p className="flex items-center gap-1 text-xs text-gray-500">
+                      <CalendarDays className="h-3 w-3" />{format(parseISO(bk.startsAt), "EEE, d MMM · h:mm a")}
+                    </p>
+                    <p className="flex items-center gap-1 text-xs text-gray-500">
+                      <Clock className="h-3 w-3" />{bk.durationMinutes} min
+                    </p>
                   </div>
 
                   {/* Client */}
                   <div className="rounded-xl border border-gray-100 p-3 space-y-2">
-                    <p className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Client</p>
                     <div className="flex items-center gap-2">
-                      {b.clientImage ? (
-                        <Image src={b.clientImage} alt="" width={32} height={32} className="rounded-full object-cover" />
+                      {bk.clientImage ? (
+                        <Image src={bk.clientImage} alt="" width={28} height={28} className="rounded-full object-cover" />
                       ) : (
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#f3e8e4] text-xs font-bold text-[#D94472]">
-                          {b.clientName[0]}
-                        </div>
+                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#f3e8e4] text-xs font-bold text-[#D94472]">{bk.clientName[0]}</div>
                       )}
-                      <div>
-                        <p className="text-sm font-bold">{b.clientName}</p>
-                        <p className="flex items-center gap-1 text-xs text-gray-500"><Mail className="h-3 w-3" />{b.clientEmail}</p>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold">{bk.clientName}</p>
+                        <p className="flex items-center gap-1 truncate text-xs text-gray-400"><Mail className="h-3 w-3 shrink-0" />{bk.clientEmail}</p>
                       </div>
                     </div>
-                    {checkedIn && !noShow && (
-                      <p className="text-xs text-green-600 font-semibold flex items-center gap-1">
-                        <BadgeCheck className="h-3 w-3" />Checked in at {format(parseISO(b.checkedInAt!), "h:mm a")}
-                      </p>
-                    )}
-                    {noShow && (
-                      <p className="text-xs text-red-500 font-semibold flex items-center gap-1">
-                        <UserX className="h-3 w-3" />No-show at {format(parseISO(b.noShowAt!), "h:mm a")}
-                      </p>
-                    )}
+                    {checkedIn && !noShow && <p className="text-xs font-semibold text-green-600 flex items-center gap-1"><BadgeCheck className="h-3 w-3" />In at {format(parseISO(bk.checkedInAt!), "h:mm a")}</p>}
+                    {noShow && <p className="text-xs font-semibold text-red-500 flex items-center gap-1"><UserX className="h-3 w-3" />No-show</p>}
                   </div>
 
                   {/* Payment */}
-                  <div className="rounded-xl border border-gray-100 p-3 space-y-1.5">
-                    <p className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Payment</p>
-                    <div className="flex justify-between text-xs"><span className="text-gray-500">Service price</span><span className="font-semibold">{formatCents(b.priceCents)}</span></div>
-                    <div className="flex justify-between text-xs"><span className="text-gray-500">Deposit paid</span><span className="font-semibold text-green-600">{formatCents(b.depositCents)}</span></div>
-                    <div className="flex justify-between text-xs border-t border-gray-100 pt-1.5"><span className="font-bold">Balance due</span><span className="font-bold">{formatCents(Math.max(0, b.priceCents - b.depositCents))}</span></div>
+                  <div className="rounded-xl border border-gray-100 p-3 space-y-1 text-xs">
+                    <div className="flex justify-between"><span className="text-gray-500">Price</span><span className="font-semibold">{formatCents(bk.priceCents)}</span></div>
+                    <div className="flex justify-between"><span className="text-gray-500">Deposit paid</span><span className="font-semibold text-green-600">{formatCents(bk.depositCents)}</span></div>
+                    <div className="flex justify-between border-t border-gray-100 pt-1 font-bold"><span>Balance due</span><span>{formatCents(Math.max(0, bk.priceCents - bk.depositCents))}</span></div>
                   </div>
 
                   {/* Notes */}
-                  <div className="space-y-1.5">
-                    <p className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Notes</p>
-                    <textarea
-                      value={notesValue}
-                      onChange={e => { setNotesValue(e.target.value); setNotesDirty(true); }}
-                      placeholder="Add appointment notes…"
-                      rows={3}
-                      className="w-full resize-none rounded-xl border border-gray-200 px-3 py-2 text-xs focus:border-[#D94472] focus:outline-none"
-                    />
+                  <div>
+                    <textarea value={notesValue} onChange={e => { setNotesValue(e.target.value); setNotesDirty(true); }}
+                      placeholder="Appointment notes…" rows={2}
+                      className="w-full resize-none rounded-xl border border-gray-200 px-3 py-2 text-xs focus:border-[#D94472] focus:outline-none" />
                     {notesDirty && (
-                      <button onClick={saveNotes} disabled={actionLoading === "notes"} className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-bold text-white hover:bg-gray-700 disabled:opacity-50">
+                      <button onClick={saveNotes} disabled={actionLoading === "notes"}
+                        className="mt-1 rounded-lg bg-gray-900 px-3 py-1 text-xs font-bold text-white disabled:opacity-50">
                         {actionLoading === "notes" ? "Saving…" : "Save notes"}
                       </button>
                     )}
@@ -642,54 +638,40 @@ export function CalendarView() {
 
                   {/* Actions */}
                   {active && (
-                    <div className="space-y-2">
-                      <p className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Actions</p>
-
+                    <div className="space-y-2 pt-1">
                       {!checkedIn && (
-                        <div className="space-y-1.5">
-                          <input
-                            type="text" placeholder="Enter check-in code"
-                            value={checkInCode}
+                        <>
+                          <input type="text" placeholder="Check-in code" value={checkInCode}
                             onChange={e => { setCheckInCode(e.target.value.replace(/\D/g, "").slice(0, 6)); setCheckInError(""); }}
-                            className="w-full rounded-xl border border-gray-200 px-3 py-2 text-center text-sm font-mono font-bold tracking-widest focus:border-[#D94472] focus:outline-none"
-                            maxLength={6}
-                          />
+                            className="w-full rounded-xl border border-gray-200 px-3 py-1.5 text-center text-sm font-mono font-bold tracking-widest focus:border-[#D94472] focus:outline-none" maxLength={6} />
                           {checkInError && <p className="text-xs text-red-500">{checkInError}</p>}
-                          <button
-                            onClick={() => doAttendance("check_in", { confirmationCode: checkInCode })}
+                          <button onClick={() => doAttendance("check_in", { confirmationCode: checkInCode })}
                             disabled={checkInCode.length < 4 || actionLoading === "check_in"}
-                            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#D94472] py-2 text-sm font-bold text-white hover:bg-[#c03d66] disabled:opacity-40"
-                          >
-                            {actionLoading === "check_in" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                            Check in customer
+                            className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-[#D94472] py-2 text-sm font-bold text-white hover:bg-[#c03d66] disabled:opacity-40">
+                            {actionLoading === "check_in" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                            Check in
                           </button>
-                        </div>
+                        </>
                       )}
-
-                      {checkedIn && !b.completedAt && (
+                      {checkedIn && !bk.completedAt && (
                         <button onClick={() => doAttendance("complete")} disabled={actionLoading === "complete"}
-                          className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 py-2 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-40">
-                          {actionLoading === "complete" ? <Loader2 className="h-4 w-4 animate-spin" /> : <ClipboardCheck className="h-4 w-4" />}
+                          className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-green-600 py-2 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-40">
+                          {actionLoading === "complete" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ClipboardCheck className="h-3.5 w-3.5" />}
                           Mark complete
                         </button>
                       )}
-
                       {canNS && !checkedIn && (
                         <button onClick={() => doAttendance("no_show")} disabled={actionLoading === "no_show"}
-                          className="flex w-full items-center justify-center gap-2 rounded-xl border border-orange-200 py-2 text-sm font-bold text-orange-600 hover:bg-orange-50 disabled:opacity-40">
-                          {actionLoading === "no_show" ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserX className="h-4 w-4" />}
-                          Mark no-show
+                          className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-orange-200 py-2 text-sm font-bold text-orange-600 hover:bg-orange-50 disabled:opacity-40">
+                          {actionLoading === "no_show" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserX className="h-3.5 w-3.5" />}
+                          No-show
                         </button>
                       )}
-
-                      {!canNS && !checkedIn && (
-                        <p className="text-[10px] text-gray-400 text-center">No-show available 5 min after start time</p>
-                      )}
-
+                      {!canNS && !checkedIn && <p className="text-center text-[10px] text-gray-400">No-show available 5 min after start</p>}
                       <button onClick={cancelBooking} disabled={actionLoading === "cancel"}
-                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-100 py-2 text-sm font-bold text-red-500 hover:bg-red-50 disabled:opacity-40">
-                        {actionLoading === "cancel" ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
-                        Cancel appointment
+                        className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-red-100 py-2 text-sm font-bold text-red-500 hover:bg-red-50 disabled:opacity-40">
+                        {actionLoading === "cancel" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5" />}
+                        Cancel
                       </button>
                     </div>
                   )}
@@ -698,48 +680,158 @@ export function CalendarView() {
             );
           })()}
 
-          {/* ── New slot panel ── */}
+          {/* ── New slot — pick mode ── */}
           {panel.type === "new" && (
             <>
               <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-                <h2 className="text-sm font-black">Block time slot</h2>
-                <button onClick={() => setPanel(null)} className="rounded-lg p-1 hover:bg-gray-100"><X className="h-4 w-4" /></button>
+                <h2 className="text-sm font-black">
+                  {newMode === "pick" ? format(panel.startsAt, "h:mm a · EEE d MMM") : newMode === "booking" ? "New booking" : "Block slot"}
+                </h2>
+                <div className="flex items-center gap-1">
+                  {newMode !== "pick" && (
+                    <button onClick={() => setNewMode("pick")} className="rounded-lg p-1 text-xs text-gray-400 hover:bg-gray-100">← Back</button>
+                  )}
+                  <button onClick={() => setPanel(null)} className="rounded-lg p-1 hover:bg-gray-100"><X className="h-4 w-4" /></button>
+                </div>
               </div>
-              <div className="flex flex-col gap-4 p-4">
-                <div className="rounded-xl border border-gray-100 p-3 space-y-1">
-                  <p className="text-xs text-gray-500 flex items-center gap-1"><CalendarDays className="h-3 w-3" />{format(panel.startsAt, "EEE, d MMM yyyy")}</p>
-                  <p className="text-xs text-gray-500 flex items-center gap-1"><Clock className="h-3 w-3" />Starting at {format(panel.startsAt, "h:mm a")}</p>
-                </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Duration</label>
-                  <select
-                    value={blockDuration}
-                    onChange={e => setBlockDuration(Number(e.target.value))}
-                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-[#D94472] focus:outline-none"
-                  >
-                    {[15, 30, 45, 60, 90, 120, 180, 240, 480].map(m => (
-                      <option key={m} value={m}>{m < 60 ? `${m} min` : `${m / 60}h${m % 60 ? ` ${m % 60}min` : ""}`}</option>
-                    ))}
-                  </select>
+              {newMode === "pick" && (
+                <div className="flex flex-col gap-3 p-4">
+                  <p className="text-xs text-gray-400">What would you like to do at this time?</p>
+                  <button onClick={() => setNewMode("booking")}
+                    className="flex items-center gap-3 rounded-xl border border-gray-200 p-4 text-left hover:border-[#D94472] hover:bg-[#D94472]/5 transition-colors">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#D94472]/10">
+                      <UserPlus className="h-4 w-4 text-[#D94472]" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold">New booking</p>
+                      <p className="text-xs text-gray-400">Book a client for a service</p>
+                    </div>
+                  </button>
+                  <button onClick={() => setNewMode("block")}
+                    className="flex items-center gap-3 rounded-xl border border-gray-200 p-4 text-left hover:border-gray-400 hover:bg-gray-50 transition-colors">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gray-100">
+                      <Ban className="h-4 w-4 text-gray-500" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold">Block time</p>
+                      <p className="text-xs text-gray-400">Mark as unavailable</p>
+                    </div>
+                  </button>
                 </div>
+              )}
 
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Reason (optional)</label>
-                  <input
-                    value={blockReason}
-                    onChange={e => setBlockReason(e.target.value)}
-                    placeholder="e.g. Lunch break, Staff meeting…"
-                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-[#D94472] focus:outline-none"
-                  />
+              {newMode === "block" && (
+                <div className="flex flex-col gap-3 p-4">
+                  <div className="rounded-xl border border-gray-100 p-3 text-xs text-gray-500">
+                    Starting {format(panel.startsAt, "h:mm a · EEE d MMM yyyy")}
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">Duration</label>
+                    <select value={blockDuration} onChange={e => setBlockDuration(Number(e.target.value))}
+                      className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-[#D94472] focus:outline-none">
+                      {[15,30,45,60,90,120,180,240,480].map(m => (
+                        <option key={m} value={m}>{m < 60 ? `${m} min` : `${m/60}h${m%60 ? ` ${m%60}min` : ""}`}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">Reason (optional)</label>
+                    <input value={blockReason} onChange={e => setBlockReason(e.target.value)}
+                      placeholder="Lunch, meeting, break…"
+                      className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-[#D94472] focus:outline-none" />
+                  </div>
+                  <button onClick={createBlock} disabled={actionLoading === "block"}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 py-2.5 text-sm font-bold text-white hover:bg-gray-700 disabled:opacity-40">
+                    {actionLoading === "block" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
+                    Block slot
+                  </button>
                 </div>
+              )}
 
-                <button onClick={createBlock} disabled={actionLoading === "block"}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 py-2.5 text-sm font-bold text-white hover:bg-gray-700 disabled:opacity-40">
-                  {actionLoading === "block" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
-                  Block this slot
-                </button>
-              </div>
+              {newMode === "booking" && (
+                <div className="flex flex-col gap-3 p-4">
+                  <div className="rounded-xl border border-gray-100 p-3 text-xs text-gray-500">
+                    {format(panel.startsAt, "h:mm a · EEE d MMM yyyy")}
+                    {selectedService && <span className="ml-1 text-gray-400">({selectedService.durationMinutes} min)</span>}
+                  </div>
+
+                  {/* Service */}
+                  <div>
+                    <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">Service</label>
+                    <select value={selectedServiceId} onChange={e => setSelectedServiceId(e.target.value)}
+                      className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-[#D94472] focus:outline-none">
+                      <option value="">Select service…</option>
+                      {services.map(s => (
+                        <option key={s.id} value={s.id}>{s.name} · {formatCents(s.priceCents)} ({s.durationMinutes}min)</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Client search */}
+                  <div>
+                    <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">Client</label>
+                    {selectedClient ? (
+                      <div className="flex items-center justify-between rounded-xl border border-[#D94472]/30 bg-[#D94472]/5 px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#D94472]/20 text-[10px] font-bold text-[#D94472]">{selectedClient.name[0]}</div>
+                          <div>
+                            <p className="text-xs font-bold">{selectedClient.name}</p>
+                            <p className="text-[10px] text-gray-400">{selectedClient.email}</p>
+                          </div>
+                        </div>
+                        <button onClick={() => { setSelectedClient(null); setClientQuery(""); }} className="text-gray-400 hover:text-gray-600"><X className="h-3.5 w-3.5" /></button>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+                        <input
+                          value={clientQuery}
+                          onChange={e => setClientQuery(e.target.value)}
+                          placeholder="Search by name or email…"
+                          className="w-full rounded-xl border border-gray-200 py-2 pl-8 pr-3 text-sm focus:border-[#D94472] focus:outline-none"
+                        />
+                        {clientSearching && <Loader2 className="absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-gray-400" />}
+                        {clientResults.length > 0 && (
+                          <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg">
+                            {clientResults.map(c => (
+                              <button key={c.id} onClick={() => { setSelectedClient(c); setClientQuery(""); setClientResults([]); }}
+                                className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-gray-50">
+                                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#f3e8e4] text-[10px] font-bold text-[#D94472]">{c.name[0]}</div>
+                                <div className="min-w-0">
+                                  <p className="truncate text-xs font-semibold">{c.name}</p>
+                                  <p className="truncate text-[10px] text-gray-400">{c.email}</p>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {clientQuery.trim() && !clientSearching && clientResults.length === 0 && (
+                          <div className="absolute z-10 mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs text-gray-400 shadow">
+                            No past clients found — only clients who have booked before can be selected.
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Notes */}
+                  <div>
+                    <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">Notes (optional)</label>
+                    <textarea value={bookingNotes} onChange={e => setBookingNotes(e.target.value)}
+                      placeholder="Any notes for this appointment…" rows={2}
+                      className="w-full resize-none rounded-xl border border-gray-200 px-3 py-2 text-xs focus:border-[#D94472] focus:outline-none" />
+                  </div>
+
+                  {bookingError && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-500">{bookingError}</p>}
+
+                  <button onClick={createManualBooking} disabled={!selectedClient || !selectedServiceId || actionLoading === "booking"}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#D94472] py-2.5 text-sm font-bold text-white hover:bg-[#c03d66] disabled:opacity-40">
+                    {actionLoading === "booking" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                    Create booking
+                  </button>
+                </div>
+              )}
             </>
           )}
 
@@ -750,24 +842,21 @@ export function CalendarView() {
                 <h2 className="text-sm font-black">Blocked slot</h2>
                 <button onClick={() => setPanel(null)} className="rounded-lg p-1 hover:bg-gray-100"><X className="h-4 w-4" /></button>
               </div>
-              <div className="flex flex-col gap-4 p-4">
-                <div className="rounded-xl border border-gray-100 p-3 space-y-1.5">
-                  <p className="text-xs text-gray-500 flex items-center gap-1"><CalendarDays className="h-3 w-3" />{format(parseISO(panel.slot.startsAt), "EEE, d MMM yyyy")}</p>
-                  <p className="text-xs text-gray-500 flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    {format(parseISO(panel.slot.startsAt), "h:mm a")} – {format(parseISO(panel.slot.endsAt), "h:mm a")}
-                  </p>
-                  {panel.slot.reason && <p className="text-sm font-semibold mt-1">{panel.slot.reason}</p>}
+              <div className="flex flex-col gap-3 p-4">
+                <div className="rounded-xl border border-gray-100 p-3 space-y-1 text-xs text-gray-500">
+                  <p className="flex items-center gap-1"><CalendarDays className="h-3 w-3" />{format(parseISO(panel.slot.startsAt), "EEE, d MMM yyyy")}</p>
+                  <p className="flex items-center gap-1"><Clock className="h-3 w-3" />{format(parseISO(panel.slot.startsAt), "h:mm a")} – {format(parseISO(panel.slot.endsAt), "h:mm a")}</p>
+                  {panel.slot.reason && <p className="pt-0.5 font-semibold text-gray-700">{panel.slot.reason}</p>}
                 </div>
-
                 <button onClick={deleteBlock} disabled={actionLoading === "delete"}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-100 py-2 text-sm font-bold text-red-500 hover:bg-red-50 disabled:opacity-40">
-                  {actionLoading === "delete" ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-red-100 py-2 text-sm font-bold text-red-500 hover:bg-red-50 disabled:opacity-40">
+                  {actionLoading === "delete" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5" />}
                   Remove block
                 </button>
               </div>
             </>
           )}
+
         </div>
       )}
     </div>

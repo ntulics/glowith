@@ -97,3 +97,41 @@ export async function GET() {
     }))
   });
 }
+
+// Provider-initiated (manual) booking — creates directly as CONFIRMED, no deposit required
+export async function POST(request: Request) {
+  const session = await auth();
+  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = (session.user as any).id as string;
+
+  const profile = await prisma.providerProfile.findUnique({
+    where: { userId },
+    select: { id: true, parentBusinessId: true }
+  });
+  if (!profile) return NextResponse.json({ error: "Provider profile not found" }, { status: 404 });
+
+  const { clientId, serviceId, startsAt, notes } = await request.json();
+  if (!clientId || !serviceId || !startsAt) {
+    return NextResponse.json({ error: "clientId, serviceId and startsAt are required" }, { status: 400 });
+  }
+
+  const service = await prisma.service.findFirst({
+    where: { id: serviceId, providerProfileId: profile.id, active: true }
+  });
+  if (!service) return NextResponse.json({ error: "Service not found" }, { status: 404 });
+
+  const booking = await prisma.booking.create({
+    data: {
+      clientId,
+      providerProfileId: profile.id,
+      serviceId,
+      startsAt: new Date(startsAt),
+      status: "CONFIRMED",
+      depositCents: 0,
+      durationMinutes: service.durationMinutes,
+      notes: notes ?? null,
+    }
+  });
+
+  return NextResponse.json({ booking: { id: booking.id } }, { status: 201 });
+}
