@@ -846,8 +846,8 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
         <div ref={dockSentinel} className="h-px" />
 
         {/* ── Main + sidebar ── */}
-        <div className="mt-6 lg:flex lg:gap-8">
-          <main className="min-w-0 flex-1 max-w-2xl space-y-10">
+        <div className="mt-6 lg:grid lg:grid-cols-[1fr_480px] lg:gap-8 lg:items-start">
+          <main className="min-w-0 space-y-10">
 
             {/* Services — selectable cards + in-place booking steps */}
             <section id="services" className="scroll-mt-28">
@@ -1042,7 +1042,7 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
           </main>
 
           {/* ── Sticky sidebar — static or dynamic cart ── */}
-          <aside className="mt-8 lg:mt-0 lg:w-[480px] lg:shrink-0">
+          <aside className="mt-8 lg:mt-0">
             <div className="sticky top-[6rem] rounded-2xl border border-[var(--line)] bg-white shadow-sm overflow-hidden max-h-[calc(100dvh-8rem)] overflow-y-auto">
               <AnimatePresence mode="wait">
                 {!selectedService ? (
