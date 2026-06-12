@@ -5,7 +5,7 @@ import { signIn } from "next-auth/react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, ArrowRight, Check, Loader2, Minus, Plus, Star, UserCheck, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { BookingCalendar, isSAPublicHolidayClient } from "./booking-calendar";
+import { BookingCalendar } from "./booking-calendar";
 
 /* ── Types ──────────────────────────────────────────────────────── */
 type ServiceExtra = { id: string; name: string; description?: string | null; priceCents: number; durationMinutes: number };
@@ -29,7 +29,7 @@ function roleLabel(categories: string[]): string {
   return "Artist";
 }
 
-type Step = "service" | "artist" | "date" | "time" | "auth" | "review" | "pay" | "done";
+type Step = "service" | "artist" | "date" | "time" | "datetime" | "auth" | "review" | "pay" | "done";
 
 /* ── Component ──────────────────────────────────────────────────── */
 export function BookingFlow({
@@ -184,9 +184,9 @@ export function BookingFlow({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Load all agents when the artist step becomes active
+  // Load all agents when the datetime step becomes active
   useEffect(() => {
-    if (step !== "artist" || agentsLoading) return;
+    if ((step !== "datetime" && step !== "artist") || agentsLoading) return;
     if (agents.length > 0) return; // already loaded
     setAgentsLoading(true);
     loadAllAgents()
@@ -240,20 +240,17 @@ export function BookingFlow({
   function afterServiceStep() {
     if (hasPreselectedDateTime) {
       setStep(authed === false ? "auth" : "review");
-    } else if (agents.length > 0) {
-      // Artist step is always shown before date when the provider has team members
-      setStep("artist");
     } else {
-      setStep("date");
+      setStep("datetime");
     }
   }
 
-  // Artist is selected (or "no preference") → move to date picker
+  // Artist is selected (or "no preference") → move to date picker (legacy flow / startStep)
   function afterArtistStep(agent: Agent | null) {
     setSelectedAgent(agent);
-    setAssignedAgent(null); // assigned at confirm time after slot is known
-    setDate(null); setSlot(null); // clear any previous date/slot when changing artist
-    setStep("date");
+    setAssignedAgent(null);
+    setDate(null); setSlot(null);
+    setStep("datetime");
   }
 
   // After time is selected: auto-assign least-loaded agent when "no preference",
@@ -456,8 +453,7 @@ export function BookingFlow({
 
   const stepsOrder: Step[] = [
     ...(preselectedServiceId ? [] : ["service" as Step]),
-    ...(agents.length > 0 && !hasPreselectedDateTime ? ["artist" as Step] : []),
-    ...(hasPreselectedDateTime ? [] : ["date" as Step, "time" as Step]),
+    ...(hasPreselectedDateTime ? [] : ["datetime" as Step]),
     ...(authed === false ? ["auth" as Step] : []),
     "review", "pay", "done"
   ];
@@ -556,14 +552,15 @@ export function BookingFlow({
                 return (
                   <div key={s.id}>
                     <button onClick={() => toggleService(s.id)}
-                      className={`flex w-full items-center justify-between gap-3 rounded-2xl border bg-white p-4 text-left transition ${sel ? "border-[var(--brand)] ring-1 ring-[var(--brand)]" : "border-[var(--line)] hover:border-[var(--ink)]"}`}>
-                      <div className="min-w-0">
-                        <p className="font-bold text-sm">{s.name}</p>
-                        <p className="mt-0.5 text-xs text-[var(--muted)]">{fmtDur(s.durationMinutes)}{s.performer ? ` · with ${s.performer}` : ""}</p>
-                        <p className="mt-1 text-sm font-black">{ZAR(s.priceCents)}</p>
+                      className={`flex w-full items-center justify-between gap-3 rounded-2xl border bg-white p-3 text-left transition ${sel ? "border-[var(--brand)] ring-1 ring-[var(--brand)]" : "border-[var(--line)] hover:border-[var(--ink)]"}`}>
+                      <div className="min-w-0 flex items-center gap-3">
+                        <div className="min-w-0">
+                          <p className="font-bold text-sm">{s.name}</p>
+                          <p className="mt-0.5 text-xs text-[var(--muted)]">{fmtDur(s.durationMinutes)}{s.performer ? ` · ${s.performer}` : ""} · <span className="font-black text-[var(--ink)]">{ZAR(s.priceCents)}</span></p>
+                        </div>
                       </div>
-                      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${sel ? "bg-[var(--brand)] text-white" : "border border-[var(--line)] text-[var(--muted)]"}`}>
-                        {sel ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                      <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${sel ? "bg-[var(--brand)] text-white" : "border border-[var(--line)] text-[var(--muted)]"}`}>
+                        {sel ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
                       </span>
                     </button>
                     {/* Inline extras when service is selected */}
@@ -600,7 +597,7 @@ export function BookingFlow({
 
           {/* Summary sidebar (full-screen only) */}
           {!drawer && (
-            <aside className="lg:w-80 lg:shrink-0">
+            <aside className="lg:w-[340px] lg:shrink-0">
               <div className="rounded-2xl border border-[var(--line)] bg-white p-5 shadow-sm lg:sticky lg:top-4">
                 {/* Provider */}
                 <div className="mb-4 border-b border-[var(--line)] pb-4">
@@ -669,7 +666,7 @@ export function BookingFlow({
       ) : (
         /* ── Other steps ── */
         <div className="flex flex-1 flex-col overflow-y-auto px-4 py-4">
-          <div className="w-full max-w-lg mx-auto">
+          <div className={step === "datetime" ? "w-full" : "w-full max-w-lg mx-auto"}>
             <AnimatePresence mode="wait">
               <motion.div key={step} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.2 }}>
 
@@ -739,90 +736,129 @@ export function BookingFlow({
                   </Section>
                 )}
 
-                {/* ── Date ── */}
-                {step === "date" && (
-                  <Section title="Pick a day" onBack={() => agents.length > 0 ? setStep("artist") : (preselectedServiceId ? undefined : setStep("service"))}>
-                    {/* Selected artist chip */}
-                    {agents.length > 0 && (
-                      <button
-                        onClick={() => setStep("artist")}
-                        className="mb-3 flex w-full items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--background)] px-3 py-2 text-left hover:border-[var(--brand)] transition"
-                      >
-                        {selectedAgent?.avatarUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={selectedAgent.avatarUrl} alt={selectedAgent.name} className="h-7 w-7 rounded-lg object-cover shrink-0" />
-                        ) : (
-                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--brand)] text-white text-xs font-bold">
-                            {selectedAgent ? selectedAgent.name[0] : <UserCheck className="h-3.5 w-3.5" />}
-                          </span>
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-bold text-[var(--ink)] truncate">
-                            {selectedAgent ? selectedAgent.name : "Any available artist"}
-                          </p>
-                          <p className="text-[10px] text-[var(--muted)]">Tap to change</p>
-                        </div>
-                        <ArrowRight className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />
-                      </button>
-                    )}
-                    <BookingCalendar
-                      providerProfileId={selectedAgent ? selectedAgent.id : providerProfileId}
-                      serviceDuration={totalDuration}
-                      selectedDate={date}
-                      onSelectDate={(d) => { setDate(d); setSlot(null); setStep("time"); }}
-                    />
-                  </Section>
-                )}
+                {/* ── Date + Time (combined) ── */}
+                {(step === "datetime" || step === "date" || step === "time") && (
+                  <div>
+                    <button
+                      onClick={() => preselectedServiceId ? undefined : setStep("service")}
+                      className="mb-4 inline-flex items-center gap-1.5 text-sm font-bold text-[var(--muted)] hover:text-[var(--ink)]"
+                      style={preselectedServiceId ? { visibility: "hidden" } : undefined}
+                    >
+                      <ArrowLeft className="h-4 w-4" /> Back
+                    </button>
+                    <h2 className="mb-4 text-xl font-black leading-tight">Pick a date &amp; time</h2>
 
-                {/* ── Time ── */}
-                {step === "time" && (
-                  <Section title="Choose a time" onBack={() => setStep("date")}>
-                    {agents.length > 0 && (
-                      <button
-                        onClick={() => setStep("artist")}
-                        className="mb-3 flex w-full items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--background)] px-3 py-2 text-left hover:border-[var(--brand)] transition"
-                      >
-                        {selectedAgent?.avatarUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={selectedAgent.avatarUrl} alt={selectedAgent.name} className="h-7 w-7 rounded-lg object-cover shrink-0" />
-                        ) : (
-                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--brand)] text-white text-xs font-bold">
-                            {selectedAgent ? selectedAgent.name[0] : <UserCheck className="h-3.5 w-3.5" />}
-                          </span>
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-bold text-[var(--ink)] truncate">
-                            {selectedAgent ? selectedAgent.name : "Any available artist"}
-                          </p>
-                          <p className="text-[10px] text-[var(--muted)]">Tap to change</p>
-                        </div>
-                        <ArrowRight className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />
-                      </button>
-                    )}
-                    {busyLoading ? (
-                      <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-[var(--muted)]" /></div>
-                    ) : (
-                      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                        {computedSlots.map((s) => {
-                          const disabled = slotDisabled(s.label);
-                          const sel = slot === s.label;
+                    {/* Agent selector row */}
+                    {(agentsLoading && agents.length === 0) ? (
+                      <div className="mb-4 flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin text-[var(--muted)]" />
+                        <span className="text-xs text-[var(--muted)]">Loading artists…</span>
+                      </div>
+                    ) : agents.length > 0 && (
+                      <div className="mb-4 flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+                        {/* No preference chip */}
+                        <button
+                          onClick={() => { setSelectedAgent(null); setDate(null); setSlot(null); }}
+                          className={`shrink-0 flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition
+                            ${selectedAgent === null
+                              ? "border-[var(--brand)] bg-[var(--brand)]/10 text-[var(--brand)]"
+                              : "border-[var(--line)] text-[var(--muted)] hover:border-[var(--brand)] hover:text-[var(--ink)]"}`}
+                        >
+                          <UserCheck className="h-3.5 w-3.5 shrink-0" />
+                          Any artist
+                          {selectedAgent === null && <Check className="h-3 w-3" />}
+                        </button>
+
+                        {/* Individual agent chips */}
+                        {agents.map((agent) => {
+                          const isSel = selectedAgent?.id === agent.id;
                           return (
-                            <button key={s.label} disabled={disabled} onClick={() => setSlot(s.label)}
-                              className={`rounded-xl border py-2.5 text-sm font-bold transition ${sel ? "border-[var(--brand)] bg-[var(--brand)] text-white" : disabled ? "cursor-not-allowed border-[var(--line)] bg-[var(--line)]/30 text-[var(--muted)]/40" : "border-[var(--line)] bg-white hover:border-[var(--brand)]"}`}>
-                              {s.label}
+                            <button
+                              key={agent.id}
+                              onClick={() => { setSelectedAgent(agent); setDate(null); setSlot(null); }}
+                              className={`shrink-0 flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition
+                                ${isSel
+                                  ? "border-[var(--brand)] bg-[var(--brand)]/10 text-[var(--brand)]"
+                                  : "border-[var(--line)] text-[var(--muted)] hover:border-[var(--brand)] hover:text-[var(--ink)]"}`}
+                            >
+                              {agent.avatarUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={agent.avatarUrl} alt={agent.name} className="h-5 w-5 shrink-0 rounded-full object-cover" />
+                              ) : (
+                                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--brand)] text-white text-[10px] font-bold">
+                                  {agent.name[0]}
+                                </span>
+                              )}
+                              {agent.name}
+                              {isSel && <Check className="h-3 w-3" />}
                             </button>
                           );
                         })}
                       </div>
                     )}
-                    <p className="mt-3 text-center text-xs text-[var(--muted)]">Duration: {fmtDur(totalDuration)}</p>
-                    <NextButton disabled={!slot || agentsLoading} onClick={goAfterTime} />
-                  </Section>
+
+                    {/* Calendar + slots two-column grid */}
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_180px]">
+                      {/* Calendar */}
+                      <div className="min-w-0">
+                        <BookingCalendar
+                          providerProfileId={selectedAgent ? selectedAgent.id : providerProfileId}
+                          serviceDuration={totalDuration}
+                          selectedDate={date}
+                          onSelectDate={(d) => { setDate(d); setSlot(null); }}
+                        />
+                      </div>
+
+                      {/* Time slots */}
+                      <div className="flex flex-col">
+                        {!date ? (
+                          <div className="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-[var(--line)] py-8">
+                            <p className="text-center text-xs text-[var(--muted)]">← Select a date</p>
+                          </div>
+                        ) : busyLoading ? (
+                          <div className="flex flex-1 items-center justify-center py-8">
+                            <Loader2 className="h-5 w-5 animate-spin text-[var(--muted)]" />
+                          </div>
+                        ) : (
+                          <>
+                            <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">
+                              {date.toLocaleDateString("en-ZA", { weekday: "short", day: "numeric", month: "short" })}
+                            </p>
+                            <div className="grid grid-cols-2 gap-1 overflow-y-auto max-h-[300px] sm:max-h-[340px] pr-0.5">
+                              {computedSlots.map((s) => {
+                                const disabled = slotDisabled(s.label);
+                                const sel = slot === s.label;
+                                return (
+                                  <button key={s.label} disabled={disabled} onClick={() => setSlot(s.label)}
+                                    className={`rounded-xl border py-2 text-xs font-bold transition ${sel ? "border-[var(--brand)] bg-[var(--brand)] text-white" : disabled ? "cursor-not-allowed border-[var(--line)] bg-[var(--line)]/30 text-[var(--muted)]/40" : "border-[var(--line)] bg-white hover:border-[var(--brand)]"}`}>
+                                    {s.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            <p className="mt-2 text-[10px] text-[var(--muted)]">Duration: {fmtDur(totalDuration)}</p>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Continue — only shown once slot selected */}
+                    {date && slot && (
+                      <button
+                        onClick={goAfterTime}
+                        disabled={agentsLoading}
+                        className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] py-3 text-sm font-bold text-white hover:bg-[var(--brand-dark)] disabled:opacity-50 transition"
+                      >
+                        {agentsLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                        Continue <ArrowRight className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
                 )}
 
                 {/* ── Auth ── */}
                 {step === "auth" && (
-                  <Section title="Sign in to confirm" onBack={() => setStep(hasPreselectedDateTime ? "service" : (agents.length > 1 ? "artist" : "time"))}>
+                  <Section title="Sign in to confirm" onBack={() => setStep(hasPreselectedDateTime ? "service" : "datetime")}>
                     <div className="mb-3 flex gap-2">
                       <button onClick={() => setAuthMode("signin")} className={`flex-1 rounded-xl border py-2 text-sm font-bold ${authMode === "signin" ? "border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]" : "border-[var(--line)]"}`}>Sign in</button>
                       <button onClick={() => setAuthMode("register")} className={`flex-1 rounded-xl border py-2 text-sm font-bold ${authMode === "register" ? "border-[var(--brand)] bg-[var(--brand)]/5 text-[var(--brand)]" : "border-[var(--line)]"}`}>Create account</button>
@@ -841,7 +877,7 @@ export function BookingFlow({
 
                 {/* ── Review ── */}
                 {step === "review" && selectedServices.length > 0 && date && slot && (
-                  <Section title="Review & confirm" onBack={() => setStep(authed === false ? "auth" : (hasPreselectedDateTime ? (agents.length > 1 ? "artist" : "service") : "time"))}>
+                  <Section title="Review & confirm" onBack={() => setStep(authed === false ? "auth" : (hasPreselectedDateTime ? "service" : "datetime"))}>
                     {/* Compact summary */}
                     <div className="space-y-1.5 rounded-2xl border border-[var(--line)] bg-white p-3.5 text-sm">
                       {selectedServices.map((s) => (
