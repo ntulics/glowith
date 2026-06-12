@@ -1110,13 +1110,15 @@ function ProviderCard({
     >
       {/* Image */}
       <div className="relative aspect-[4/3] overflow-hidden bg-[#f3e8e4]">
-        <Image
-          src={provider.portfolio[0].image}
-          alt={provider.businessName}
-          fill
-          sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
-          className="object-cover transition duration-300 group-hover:scale-105"
-        />
+        {provider.portfolio[0]?.image && (
+          <Image
+            src={provider.portfolio[0].image}
+            alt={provider.businessName}
+            fill
+            sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+            className="object-cover transition duration-300 group-hover:scale-105"
+          />
+        )}
         {provider.verified && (
           <div className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-white/90 px-2.5 py-1 text-xs font-bold backdrop-blur-sm">
             <BadgeCheck className="h-3.5 w-3.5 text-[var(--sage)]" />
@@ -1216,7 +1218,9 @@ function ProviderDrawer({
             <div className="space-y-6">
               <div className="flex gap-4">
                 <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-[#f3e8e4]">
-                  <Image src={provider.portfolio[0].image} alt="" fill sizes="96px" className="object-cover" />
+                  {provider.portfolio[0]?.image && (
+                    <Image src={provider.portfolio[0].image} alt="" fill sizes="96px" className="object-cover" />
+                  )}
                 </div>
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
