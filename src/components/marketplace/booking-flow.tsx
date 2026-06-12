@@ -798,9 +798,9 @@ export function BookingFlow({
                     )}
 
                     {/* Calendar + slots two-column grid */}
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_180px]">
-                      {/* Calendar */}
-                      <div className="min-w-0">
+                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-[460px_1fr]">
+                      {/* Calendar — fixed width so cells stay square-ish */}
+                      <div className="w-full min-w-0">
                         <BookingCalendar
                           providerProfileId={selectedAgent ? selectedAgent.id : providerProfileId}
                           serviceDuration={totalDuration}
@@ -809,34 +809,34 @@ export function BookingFlow({
                         />
                       </div>
 
-                      {/* Time slots */}
+                      {/* Time slots — fills remaining space */}
                       <div className="flex flex-col">
                         {!date ? (
-                          <div className="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-[var(--line)] py-8">
-                            <p className="text-center text-xs text-[var(--muted)]">← Select a date</p>
+                          <div className="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-[var(--line)] py-12">
+                            <p className="text-center text-sm text-[var(--muted)]">← Select a date first</p>
                           </div>
                         ) : busyLoading ? (
-                          <div className="flex flex-1 items-center justify-center py-8">
+                          <div className="flex flex-1 items-center justify-center py-12">
                             <Loader2 className="h-5 w-5 animate-spin text-[var(--muted)]" />
                           </div>
                         ) : (
                           <>
-                            <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">
-                              {date.toLocaleDateString("en-ZA", { weekday: "short", day: "numeric", month: "short" })}
+                            <p className="mb-3 text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">
+                              {date.toLocaleDateString("en-ZA", { weekday: "long", day: "numeric", month: "long" })}
                             </p>
-                            <div className="grid grid-cols-2 gap-1 overflow-y-auto max-h-[300px] sm:max-h-[340px] pr-0.5">
+                            <div className="grid grid-cols-3 gap-2 overflow-y-auto max-h-[320px] pr-0.5">
                               {computedSlots.map((s) => {
                                 const disabled = slotDisabled(s.label);
                                 const sel = slot === s.label;
                                 return (
                                   <button key={s.label} disabled={disabled} onClick={() => setSlot(s.label)}
-                                    className={`rounded-xl border py-2 text-xs font-bold transition ${sel ? "border-[var(--brand)] bg-[var(--brand)] text-white" : disabled ? "cursor-not-allowed border-[var(--line)] bg-[var(--line)]/30 text-[var(--muted)]/40" : "border-[var(--line)] bg-white hover:border-[var(--brand)]"}`}>
+                                    className={`rounded-xl border py-2.5 text-sm font-bold transition ${sel ? "border-[var(--brand)] bg-[var(--brand)] text-white" : disabled ? "cursor-not-allowed border-[var(--line)] bg-[var(--line)]/30 text-[var(--muted)]/40" : "border-[var(--line)] bg-white hover:border-[var(--brand)]"}`}>
                                     {s.label}
                                   </button>
                                 );
                               })}
                             </div>
-                            <p className="mt-2 text-[10px] text-[var(--muted)]">Duration: {fmtDur(totalDuration)}</p>
+                            <p className="mt-3 text-xs text-[var(--muted)]">Duration: {fmtDur(totalDuration)}</p>
                           </>
                         )}
                       </div>
