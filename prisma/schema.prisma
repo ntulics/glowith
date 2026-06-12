@@ -227,7 +227,8 @@ model ProviderProfile {
   isDemo           Boolean  @default(false)
   mobile           Boolean  @default(false)
   studio           Boolean  @default(true)
-  workingHoursJson  String?  // JSON: [{day,enabled,from,to}] — stored as string
+  workingHoursJson       String?  // JSON: [{day,enabled,from,to}] — stored as string
+  workOnPublicHolidays   Boolean  @default(true)
   // Cancellation & reschedule policy (agents inherit from parent business)
   cancelNoticeHours     Int?
   cancelFeePercent      Int?

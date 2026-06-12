@@ -12,6 +12,7 @@ import {
 } from "date-fns";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
+import { saHolidaysForYear, type SAHoliday } from "@/lib/sa-holidays";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -133,6 +134,7 @@ export function CalendarView() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [blockedSlots, setBlockedSlots] = useState<BlockedSlot[]>([]);
   const [workingHours, setWorkingHours] = useState<WorkingHour[]>(DEFAULT_WH);
+  const [workOnPublicHolidays, setWorkOnPublicHolidays] = useState(true);
   const [loading, setLoading] = useState(true);
   const [panel, setPanel] = useState<PanelState | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -182,6 +184,19 @@ export function CalendarView() {
     return workingHours.find(w => w.day === name)?.enabled ?? true;
   });
 
+  // Build a map of public holidays for any year visible in this view
+  const holidayMap = new Map<string, SAHoliday>();
+  const yearsInView = [...new Set(days.map(d => d.getFullYear()))];
+  for (const y of yearsInView) {
+    for (const h of saHolidaysForYear(y)) {
+      const key = format(h.observed, "yyyy-MM-dd");
+      holidayMap.set(key, h);
+    }
+  }
+  function holidayForDay(day: Date): SAHoliday | undefined {
+    return holidayMap.get(format(day, "yyyy-MM-dd"));
+  }
+
   // ── Data loading ─────────────────────────────────────────────────────────
 
   const load = useCallback(async () => {
@@ -219,6 +234,9 @@ export function CalendarView() {
       }
       if (whData.workingHoursJson) {
         try { setWorkingHours(JSON.parse(whData.workingHoursJson)); } catch {}
+      }
+      if (typeof whData.workOnPublicHolidays === "boolean") {
+        setWorkOnPublicHolidays(whData.workOnPublicHolidays);
       }
       if (Array.isArray(blockData.slots)) setBlockedSlots(blockData.slots);
       if (Array.isArray(svcData.services)) {
@@ -482,6 +500,8 @@ export function CalendarView() {
             {days.map(day => {
               const isToday = isSameDay(day, new Date());
               const wh = whForDay(day);
+              const holiday = holidayForDay(day);
+              const isPublicHolidayClosed = !!holiday && !workOnPublicHolidays;
               const activeBookings = bookingsForDay(day);
               const layoutData = layoutItems(activeBookings.map(b => {
                 const s = parseISO(b.startsAt);
@@ -493,15 +513,20 @@ export function CalendarView() {
               return (
                 <div key={day.toISOString()} className="flex min-w-[100px] flex-1 flex-col border-r border-gray-100 last:border-r-0">
                   {/* Day header */}
-                  <div className="flex h-10 flex-col items-center justify-center border-b border-gray-100">
-                    <p className="text-[10px] font-semibold uppercase text-gray-400">{format(day, "EEE")}</p>
+                  <div className={cn("flex flex-col items-center justify-center border-b px-1 pb-1 pt-1.5", holiday ? "border-amber-200 bg-amber-50/60" : "border-gray-100", "min-h-[40px]")}>
+                    <p className={cn("text-[9px] font-semibold uppercase", holiday ? "text-amber-500" : "text-gray-400")}>{format(day, "EEE")}</p>
                     <p className={`text-xs font-black ${isToday ? "flex h-5 w-5 items-center justify-center rounded-full bg-[#D94472] text-white" : ""}`}>
                       {format(day, "d")}
                     </p>
+                    {holiday && (
+                      <p className="truncate text-center text-[8px] font-bold leading-tight text-amber-600 max-w-full px-0.5">
+                        {isPublicHolidayClosed ? "🔒 " : "🇿🇦 "}{holiday.name}
+                      </p>
+                    )}
                   </div>
 
                   {/* Grid — clickable */}
-                  <div className="relative flex-1" onClick={e => handleGridClick(e, day)}>
+                  <div className="relative flex-1" onClick={e => { if (!isPublicHolidayClosed) handleGridClick(e, day); }}>
                     {HOURS.map(h => (
                       <div
                         key={h}
@@ -524,6 +549,15 @@ export function CalendarView() {
                         </>
                       );
                     })()}
+
+                    {/* Public holiday overlay */}
+                    {isPublicHolidayClosed && (
+                      <div className="pointer-events-none absolute inset-0 bg-amber-50/70 flex items-center justify-center">
+                        <div className="rotate-90 text-center">
+                          <p className="text-[9px] font-bold text-amber-400 whitespace-nowrap">Public holiday</p>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Blocked slots */}
                     {blockedForDay(day).map(slot => {

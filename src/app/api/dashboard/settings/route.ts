@@ -10,11 +10,14 @@ export async function GET() {
 
   const profile = await prisma.providerProfile.findUnique({
     where: { userId },
-    select: { workingHoursJson: true }
+    select: { workingHoursJson: true, workOnPublicHolidays: true }
   });
   if (!profile) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  return NextResponse.json({ workingHoursJson: profile.workingHoursJson ?? null });
+  return NextResponse.json({
+    workingHoursJson: profile.workingHoursJson ?? null,
+    workOnPublicHolidays: profile.workOnPublicHolidays,
+  });
 }
 
 export async function PUT(request: Request) {
@@ -39,6 +42,9 @@ export async function PUT(request: Request) {
 
   if (body.workingHours !== undefined) {
     data.workingHoursJson = JSON.stringify(body.workingHours);
+  }
+  if (typeof body.workOnPublicHolidays === "boolean") {
+    data.workOnPublicHolidays = body.workOnPublicHolidays;
   }
 
   // Exact pin from the map picker takes precedence.

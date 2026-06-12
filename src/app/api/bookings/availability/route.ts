@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { isSAPublicHoliday } from "@/lib/sa-holidays";
 
 // Returns the busy intervals for a provider on a given date so the client
 // can grey out taken slots. Public (needed before booking).
@@ -15,12 +16,20 @@ export async function GET(request: Request) {
   const dayEnd = new Date(`${date}T23:59:59`);
   const now = new Date();
 
-  // Resolve root business so blocked slots set by the parent cover agents too
+  // Resolve root business so blocked slots and settings from the parent apply to agents too
   const profile = await prisma.providerProfile.findUnique({
     where: { id: providerProfileId },
-    select: { parentBusinessId: true }
+    select: { parentBusinessId: true, workOnPublicHolidays: true }
   });
   const rootProviderId = profile?.parentBusinessId ?? providerProfileId;
+
+  // If the provider doesn't work public holidays, treat the whole day as blocked
+  const requestDate = new Date(`${date}T12:00:00Z`);
+  if (profile?.workOnPublicHolidays === false && isSAPublicHoliday(requestDate)) {
+    return NextResponse.json({
+      busy: [{ start: `${date}T00:00:00.000Z`, durationMinutes: 1440, blocked: true, publicHoliday: true }]
+    });
+  }
 
   const [bookings, blocked] = await Promise.all([
     prisma.booking.findMany({

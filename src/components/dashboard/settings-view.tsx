@@ -237,6 +237,7 @@ export function SettingsView({
   const [workingHours, setWorkingHours] = useState(
     DAYS.map((day, i) => ({ day, enabled: i < 5, from: "09:00", to: "17:00" }))
   );
+  const [workOnPublicHolidays, setWorkOnPublicHolidays] = useState(true);
   const [currency, setCurrency] = useState("ZAR");
   const [paymentMethod, setPaymentMethod] = useState("on-site");
   const [intSearchQuery, setIntSearchQuery] = useState("");
@@ -365,6 +366,9 @@ export function SettingsView({
       .then(d => {
         if (d.workingHoursJson) {
           try { setWorkingHours(JSON.parse(d.workingHoursJson)); } catch {}
+        }
+        if (typeof d.workOnPublicHolidays === "boolean") {
+          setWorkOnPublicHolidays(d.workOnPublicHolidays);
         }
       })
       .catch(() => {});
@@ -625,6 +629,15 @@ export function SettingsView({
               ) : <span className="text-xs text-gray-400">Closed</span>}
             </div>
           ))}
+
+          {/* Public holidays */}
+          <div className="flex items-center justify-between rounded-xl border border-gray-100 p-3">
+            <div>
+              <p className="text-sm font-semibold">Work on South African public holidays</p>
+              <p className="text-xs text-gray-400 mt-0.5">When off, public holidays are automatically blocked and clients cannot book on those days.</p>
+            </div>
+            <ToggleButton on={workOnPublicHolidays} onToggle={() => setWorkOnPublicHolidays(v => !v)} />
+          </div>
         </div>
         <div className="flex justify-end">
           <button
@@ -634,7 +647,7 @@ export function SettingsView({
               await fetch("/api/dashboard/settings", {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ workingHours }),
+                body: JSON.stringify({ workingHours, workOnPublicHolidays }),
               });
             }}
           >Save changes</button>

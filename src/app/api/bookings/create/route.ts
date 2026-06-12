@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { checkInCodeExpiry, generateCheckInCode } from "@/lib/booking-attendance";
+import { isSAPublicHoliday, getHolidayForDate } from "@/lib/sa-holidays";
 
 // How long a PENDING_DEPOSIT booking holds a slot before another user can take it.
 const RESERVATION_MINUTES = 15;
@@ -95,8 +96,19 @@ export async function POST(request: Request) {
   });
   if (clash) return NextResponse.json({ error: "That slot was just taken — pick another time" }, { status: 409 });
 
-  // Reject if the provider (or their parent business) has blocked this slot
   const rootProviderId = profile.parentBusinessId ?? profile.id;
+
+  // Reject if the provider doesn't work on public holidays and this day is one
+  const rootProfile = await prisma.providerProfile.findUnique({
+    where: { id: rootProviderId },
+    select: { workOnPublicHolidays: true }
+  });
+  if (rootProfile?.workOnPublicHolidays === false && isSAPublicHoliday(start)) {
+    const holiday = getHolidayForDate(start);
+    return NextResponse.json({ error: `Bookings are not available on ${holiday?.name ?? "this public holiday"}` }, { status: 409 });
+  }
+
+  // Reject if the provider (or their parent business) has blocked this slot
   const blockedOverlap = await prisma.blockedSlot.findFirst({
     where: {
       providerProfileId: rootProviderId,
