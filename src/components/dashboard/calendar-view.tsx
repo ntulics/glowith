@@ -42,13 +42,15 @@ type BlockedSlot = {
   reason: string | null;
 };
 
-type ServiceOption = { id: string; name: string; durationMinutes: number; priceCents: number };
+type ExtraOption = { id: string; name: string; durationMinutes: number; priceCents: number };
+type ServiceOption = { id: string; name: string; durationMinutes: number; priceCents: number; extras: ExtraOption[] };
 type ClientOption = { id: string; name: string; email: string; image: string | null };
 
 type PanelState =
   | { type: "booking"; booking: Booking }
   | { type: "blocked"; slot: BlockedSlot }
-  | { type: "new"; startsAt: Date };
+  | { type: "new"; startsAt: Date }
+  | { type: "reschedule"; booking: Booking };
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -144,7 +146,11 @@ export function CalendarView() {
   // New-slot panel state
   const [newMode, setNewMode] = useState<"pick" | "block" | "booking">("pick");
   const [blockReason, setBlockReason] = useState("");
-  const [blockDuration, setBlockDuration] = useState(60);
+  // Date-range block
+  const [blockStartDate, setBlockStartDate] = useState("");
+  const [blockStartTime, setBlockStartTime] = useState("09:00");
+  const [blockEndDate, setBlockEndDate] = useState("");
+  const [blockEndTime, setBlockEndTime] = useState("17:00");
 
   // Manual booking form state
   const [clientQuery, setClientQuery] = useState("");
@@ -153,9 +159,14 @@ export function CalendarView() {
   const [selectedClient, setSelectedClient] = useState<ClientOption | null>(null);
   const [services, setServices] = useState<ServiceOption[]>([]);
   const [selectedServiceId, setSelectedServiceId] = useState("");
+  const [selectedExtraIds, setSelectedExtraIds] = useState<string[]>([]);
   const [bookingNotes, setBookingNotes] = useState("");
   const [bookingError, setBookingError] = useState("");
   const clientTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Reschedule state
+  const [rescheduleDate, setRescheduleDate] = useState("");
+  const [rescheduleTime, setRescheduleTime] = useState("");
 
   // Compute grid from working hours — only show working days
   const enabledWH = workingHours.filter(w => w.enabled);
@@ -214,7 +225,8 @@ export function CalendarView() {
         setServices(svcData.services.map((s: any) => ({
           id: s.id, name: s.name,
           durationMinutes: s.durationMinutes,
-          priceCents: s.priceCents
+          priceCents: s.priceCents,
+          extras: (s.extras ?? []).map((e: any) => ({ id: e.id, name: e.name, durationMinutes: e.durationMinutes, priceCents: e.priceCents }))
         })));
       }
     } finally {
@@ -235,13 +247,21 @@ export function CalendarView() {
     if (panel?.type === "new") {
       setNewMode("pick");
       setBlockReason("");
-      setBlockDuration(60);
+      const d = format(panel.startsAt, "yyyy-MM-dd");
+      const t = format(panel.startsAt, "HH:mm");
+      setBlockStartDate(d); setBlockStartTime(t);
+      setBlockEndDate(d); setBlockEndTime(format(addMinutes(panel.startsAt, 60), "HH:mm"));
       setSelectedClient(null);
       setClientQuery("");
       setClientResults([]);
       setSelectedServiceId(services[0]?.id ?? "");
+      setSelectedExtraIds([]);
       setBookingNotes("");
       setBookingError("");
+    }
+    if (panel?.type === "reschedule") {
+      setRescheduleDate(format(parseISO(panel.booking.startsAt), "yyyy-MM-dd"));
+      setRescheduleTime(format(parseISO(panel.booking.startsAt), "HH:mm"));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panel?.type === "booking" ? (panel as any).booking.id : panel?.type]);
@@ -344,14 +364,15 @@ export function CalendarView() {
   }
 
   async function createBlock() {
-    if (panel?.type !== "new") return;
     setActionLoading("block");
     try {
-      const endsAt = addMinutes(panel.startsAt, blockDuration);
+      const startsAt = new Date(`${blockStartDate}T${blockStartTime}`);
+      const endsAt = new Date(`${blockEndDate}T${blockEndTime}`);
+      if (isNaN(startsAt.getTime()) || isNaN(endsAt.getTime()) || endsAt <= startsAt) return;
       const res = await fetch("/api/dashboard/blocked-slots", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ startsAt: panel.startsAt.toISOString(), endsAt: endsAt.toISOString(), reason: blockReason || null }),
+        body: JSON.stringify({ startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(), reason: blockReason || null }),
       });
       if (res.ok) { await load(); setPanel(null); }
     } finally { setActionLoading(null); }
@@ -370,6 +391,7 @@ export function CalendarView() {
         body: JSON.stringify({
           clientId: selectedClient.id,
           serviceId: selectedServiceId,
+          extraIds: selectedExtraIds,
           startsAt: panel.startsAt.toISOString(),
           notes: bookingNotes || null,
         }),
@@ -378,6 +400,21 @@ export function CalendarView() {
       if (!res.ok) { setBookingError(data.error ?? "Failed to create booking"); return; }
       await load();
       setPanel(null);
+    } finally { setActionLoading(null); }
+  }
+
+  async function rescheduleBooking() {
+    if (panel?.type !== "reschedule") return;
+    setActionLoading("reschedule");
+    try {
+      const newStart = new Date(`${rescheduleDate}T${rescheduleTime}`);
+      if (isNaN(newStart.getTime())) return;
+      const res = await fetch(`/api/dashboard/bookings/${panel.booking.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ startsAt: newStart.toISOString() }),
+      });
+      if (res.ok) { await load(); setPanel(null); }
     } finally { setActionLoading(null); }
   }
 
@@ -400,6 +437,7 @@ export function CalendarView() {
     ? Date.now() >= parseISO(bk.startsAt).getTime() + 5 * 60 * 1000
     : false;
   const selectedService = services.find(s => s.id === selectedServiceId);
+  const availableExtras = selectedService?.extras ?? [];
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
@@ -668,6 +706,12 @@ export function CalendarView() {
                         </button>
                       )}
                       {!canNS && !checkedIn && <p className="text-center text-[10px] text-gray-400">No-show available 5 min after start</p>}
+                      <button
+                        onClick={() => setPanel({ type: "reschedule", booking: bk })}
+                        className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-gray-200 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50">
+                        <CalendarDays className="h-3.5 w-3.5" />
+                        Reschedule
+                      </button>
                       <button onClick={cancelBooking} disabled={actionLoading === "cancel"}
                         className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-red-100 py-2 text-sm font-bold text-red-500 hover:bg-red-50 disabled:opacity-40">
                         {actionLoading === "cancel" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5" />}
@@ -723,28 +767,34 @@ export function CalendarView() {
 
               {newMode === "block" && (
                 <div className="flex flex-col gap-3 p-4">
-                  <div className="rounded-xl border border-gray-100 p-3 text-xs text-gray-500">
-                    Starting {format(panel.startsAt, "h:mm a · EEE d MMM yyyy")}
+                  <div>
+                    <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">From</label>
+                    <div className="flex gap-2">
+                      <input type="date" value={blockStartDate} onChange={e => setBlockStartDate(e.target.value)}
+                        className="flex-1 rounded-xl border border-gray-200 px-2 py-2 text-sm focus:border-[#D94472] focus:outline-none" />
+                      <input type="time" value={blockStartTime} onChange={e => setBlockStartTime(e.target.value)}
+                        className="w-24 rounded-xl border border-gray-200 px-2 py-2 text-sm focus:border-[#D94472] focus:outline-none" />
+                    </div>
                   </div>
                   <div>
-                    <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">Duration</label>
-                    <select value={blockDuration} onChange={e => setBlockDuration(Number(e.target.value))}
-                      className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-[#D94472] focus:outline-none">
-                      {[15,30,45,60,90,120,180,240,480].map(m => (
-                        <option key={m} value={m}>{m < 60 ? `${m} min` : `${m/60}h${m%60 ? ` ${m%60}min` : ""}`}</option>
-                      ))}
-                    </select>
+                    <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">To</label>
+                    <div className="flex gap-2">
+                      <input type="date" value={blockEndDate} onChange={e => setBlockEndDate(e.target.value)}
+                        className="flex-1 rounded-xl border border-gray-200 px-2 py-2 text-sm focus:border-[#D94472] focus:outline-none" />
+                      <input type="time" value={blockEndTime} onChange={e => setBlockEndTime(e.target.value)}
+                        className="w-24 rounded-xl border border-gray-200 px-2 py-2 text-sm focus:border-[#D94472] focus:outline-none" />
+                    </div>
                   </div>
                   <div>
                     <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">Reason (optional)</label>
                     <input value={blockReason} onChange={e => setBlockReason(e.target.value)}
-                      placeholder="Lunch, meeting, break…"
+                      placeholder="Holiday, leave, maintenance…"
                       className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-[#D94472] focus:outline-none" />
                   </div>
-                  <button onClick={createBlock} disabled={actionLoading === "block"}
+                  <button onClick={createBlock} disabled={actionLoading === "block" || !blockStartDate || !blockEndDate}
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 py-2.5 text-sm font-bold text-white hover:bg-gray-700 disabled:opacity-40">
                     {actionLoading === "block" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
-                    Block slot
+                    Block time
                   </button>
                 </div>
               )}
@@ -759,7 +809,7 @@ export function CalendarView() {
                   {/* Service */}
                   <div>
                     <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">Service</label>
-                    <select value={selectedServiceId} onChange={e => setSelectedServiceId(e.target.value)}
+                    <select value={selectedServiceId} onChange={e => { setSelectedServiceId(e.target.value); setSelectedExtraIds([]); }}
                       className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-[#D94472] focus:outline-none">
                       <option value="">Select service…</option>
                       {services.map(s => (
@@ -767,6 +817,30 @@ export function CalendarView() {
                       ))}
                     </select>
                   </div>
+
+                  {/* Extras */}
+                  {availableExtras.length > 0 && (
+                    <div>
+                      <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">Extras</label>
+                      <div className="space-y-1.5">
+                        {availableExtras.map(e => {
+                          const checked = selectedExtraIds.includes(e.id);
+                          return (
+                            <label key={e.id} className={cn("flex cursor-pointer items-center justify-between rounded-xl border px-3 py-2 transition-colors", checked ? "border-[#D94472]/40 bg-[#D94472]/5" : "border-gray-200 hover:bg-gray-50")}>
+                              <div className="flex items-center gap-2">
+                                <input type="checkbox" checked={checked}
+                                  onChange={() => setSelectedExtraIds(prev => checked ? prev.filter(x => x !== e.id) : [...prev, e.id])}
+                                  className="accent-[#D94472]" />
+                                <span className="text-xs font-semibold">{e.name}</span>
+                                {e.durationMinutes > 0 && <span className="text-[10px] text-gray-400">+{e.durationMinutes}min</span>}
+                              </div>
+                              <span className="text-xs font-bold text-gray-600">+{formatCents(e.priceCents)}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Client search */}
                   <div>
@@ -832,6 +906,39 @@ export function CalendarView() {
                   </button>
                 </div>
               )}
+            </>
+          )}
+
+          {/* ── Reschedule ── */}
+          {panel.type === "reschedule" && (
+            <>
+              <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+                <h2 className="text-sm font-black">Reschedule</h2>
+                <button onClick={() => setPanel({ type: "booking", booking: panel.booking })} className="rounded-lg p-1 hover:bg-gray-100"><X className="h-4 w-4" /></button>
+              </div>
+              <div className="flex flex-col gap-3 p-4">
+                <div className="rounded-xl border border-gray-100 p-3 space-y-0.5 text-xs text-gray-500">
+                  <p className="font-bold text-gray-700">{panel.booking.service}</p>
+                  <p>Currently: {format(parseISO(panel.booking.startsAt), "EEE d MMM · h:mm a")}</p>
+                </div>
+                <div>
+                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">New date</label>
+                  <input type="date" value={rescheduleDate} onChange={e => setRescheduleDate(e.target.value)}
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-[#D94472] focus:outline-none" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">New time</label>
+                  <input type="time" value={rescheduleTime} onChange={e => setRescheduleTime(e.target.value)}
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-[#D94472] focus:outline-none" />
+                </div>
+                <button onClick={rescheduleBooking} disabled={!rescheduleDate || !rescheduleTime || actionLoading === "reschedule"}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#D94472] py-2.5 text-sm font-bold text-white hover:bg-[#c03d66] disabled:opacity-40">
+                  {actionLoading === "reschedule" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarDays className="h-4 w-4" />}
+                  Confirm reschedule
+                </button>
+                <button onClick={() => setPanel({ type: "booking", booking: panel.booking })}
+                  className="text-center text-xs text-gray-400 hover:text-gray-600">← Back to appointment</button>
+              </div>
             </>
           )}
 

@@ -110,7 +110,7 @@ export async function POST(request: Request) {
   });
   if (!profile) return NextResponse.json({ error: "Provider profile not found" }, { status: 404 });
 
-  const { clientId, serviceId, startsAt, notes } = await request.json();
+  const { clientId, serviceId, startsAt, notes, extraIds = [] } = await request.json();
   if (!clientId || !serviceId || !startsAt) {
     return NextResponse.json({ error: "clientId, serviceId and startsAt are required" }, { status: 400 });
   }
@@ -120,6 +120,12 @@ export async function POST(request: Request) {
   });
   if (!service) return NextResponse.json({ error: "Service not found" }, { status: 404 });
 
+  const extras = extraIds.length
+    ? await prisma.serviceExtra.findMany({ where: { id: { in: extraIds }, serviceId, active: true } })
+    : [];
+
+  const totalDuration = service.durationMinutes + extras.reduce((s: number, e: any) => s + e.durationMinutes, 0);
+
   const booking = await prisma.booking.create({
     data: {
       clientId,
@@ -128,8 +134,11 @@ export async function POST(request: Request) {
       startsAt: new Date(startsAt),
       status: "CONFIRMED",
       depositCents: 0,
-      durationMinutes: service.durationMinutes,
+      durationMinutes: totalDuration,
       notes: notes ?? null,
+      extras: extras.length
+        ? { create: extras.map((e: any) => ({ serviceExtraId: e.id, name: e.name, priceCents: e.priceCents, durationMinutes: e.durationMinutes })) }
+        : undefined,
     }
   });
 

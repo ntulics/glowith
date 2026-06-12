@@ -8,7 +8,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const userId = (session.user as any).id as string;
   const { id } = await params;
-  const body = await request.json().catch(() => ({})) as { status?: string; notes?: string };
+  const body = await request.json().catch(() => ({})) as {
+    status?: string;
+    notes?: string;
+    startsAt?: string;
+  };
 
   const profile = await prisma.providerProfile.findUnique({
     where: { userId },
@@ -28,11 +32,24 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const data: Record<string, unknown> = {};
   if (body.status === "CANCELLED") data.status = "CANCELLED";
   if (typeof body.notes === "string") data.notes = body.notes;
+  if (body.startsAt) {
+    const newStart = new Date(body.startsAt);
+    if (isNaN(newStart.getTime())) return NextResponse.json({ error: "Invalid startsAt" }, { status: 400 });
+    data.startsAt = newStart;
+    // Clear check-in state when rescheduled
+    data.checkedInAt = null;
+    data.checkedInById = null;
+    data.checkInCode = null;
+    data.checkInCodeExpiresAt = null;
+    data.noShowAt = null;
+    data.completedAt = null;
+    data.status = "CONFIRMED";
+  }
 
   if (Object.keys(data).length === 0) {
     return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
   }
 
   const updated = await prisma.booking.update({ where: { id }, data });
-  return NextResponse.json({ booking: { id: updated.id, status: updated.status, notes: updated.notes } });
+  return NextResponse.json({ booking: { id: updated.id, status: updated.status, notes: updated.notes, startsAt: updated.startsAt.toISOString() } });
 }

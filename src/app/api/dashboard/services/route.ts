@@ -23,7 +23,7 @@ export async function GET() {
   const userId = (session.user as any).id as string;
   const profile = await prisma.providerProfile.findUnique({
     where: { userId },
-    include: { services: { orderBy: { createdAt: "asc" }, include: { agents: { select: { agentId: true } } } } }
+    include: { services: { where: { active: true }, orderBy: { createdAt: "asc" }, include: { agents: { select: { agentId: true } }, extras: { where: { active: true }, orderBy: { createdAt: "asc" } } } } }
   });
   if (!profile) return NextResponse.json({ error: "Provider profile not found" }, { status: 404 });
   return NextResponse.json({ profileId: profile.id, services: profile.services });
