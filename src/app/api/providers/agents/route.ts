@@ -61,16 +61,18 @@ export async function GET(request: Request) {
         return NextResponse.json({ agents: [] });
       }
 
-      // Working hours: if the slot falls outside the provider's working hours, no agents available
-      const wh = workingHoursForDate(providerSettings.workingHoursJson, slotDate);
-      if (wh === null) {
-        // Provider doesn't work on this day of week at all
-        return NextResponse.json({ agents: [] });
-      }
-      const openMs = new Date(`${dateStr}T${wh.open}:00`).getTime();
-      const closeMs = new Date(`${dateStr}T${wh.close}:00`).getTime();
-      if (slotStart < openMs || slotEnd > closeMs) {
-        return NextResponse.json({ agents: [] });
+      // Working hours: only enforce if the provider has actually saved a schedule.
+      // If workingHoursJson is null the provider hasn't configured hours yet — don't block agents.
+      if (providerSettings.workingHoursJson) {
+        const wh = workingHoursForDate(providerSettings.workingHoursJson, slotDate);
+        if (wh === null) {
+          return NextResponse.json({ agents: [] });
+        }
+        const openMs = new Date(`${dateStr}T${wh.open}:00`).getTime();
+        const closeMs = new Date(`${dateStr}T${wh.close}:00`).getTime();
+        if (slotStart < openMs || slotEnd > closeMs) {
+          return NextResponse.json({ agents: [] });
+        }
       }
     }
 

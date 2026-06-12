@@ -28,11 +28,48 @@ function roleLabel(categories: string[]): string {
   return "Artist";
 }
 
-// 08:00–18:00 in 30-min steps — actual open/close comes from working hours API
-const SLOTS = Array.from({ length: 20 }, (_, i) => {
-  const mins = 8 * 60 + i * 30;
-  return { h: Math.floor(mins / 60), m: mins % 60, label: `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}` };
-});
+/* ── SA Public Holidays (client-side) ──────────────────────────── */
+function easterSunday(y: number): Date {
+  const a = y % 19, b = Math.floor(y / 100), c = y % 100;
+  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(y, month - 1, day);
+}
+function isSAPublicHolidayClient(d: Date): boolean {
+  const y = d.getFullYear(), mo = d.getMonth() + 1, da = d.getDate(), dow = d.getDay();
+  const easter = easterSunday(y);
+  const gf = new Date(easter); gf.setDate(easter.getDate() - 2);
+  const fm = new Date(easter); fm.setDate(easter.getDate() + 1);
+  // Fixed holidays: if the holiday falls on Sunday the actual observed day is Monday
+  // We check whether 'd' IS the holiday or the displaced Monday
+  function isFixed(hmo: number, hda: number): boolean {
+    if (mo === hmo && da === hda) return true; // it is the holiday
+    // displaced Monday: today is Monday, yesterday was Sunday and was the holiday
+    if (dow === 1 && mo === hmo) {
+      const sun = da - 1;
+      if (sun === hda) return true;
+    }
+    return false;
+  }
+  return (
+    isFixed(1, 1)   || // New Year
+    isFixed(3, 21)  || // Human Rights Day
+    (mo === gf.getMonth() + 1 && da === gf.getDate()) || // Good Friday
+    (mo === fm.getMonth() + 1 && da === fm.getDate()) || // Family Day
+    isFixed(4, 27)  || // Freedom Day
+    isFixed(5, 1)   || // Workers' Day
+    isFixed(6, 16)  || // Youth Day
+    isFixed(8, 9)   || // Women's Day
+    isFixed(9, 24)  || // Heritage Day
+    isFixed(12, 16) || // Reconciliation Day
+    isFixed(12, 25) || // Christmas
+    isFixed(12, 26)    // Day of Goodwill
+  );
+}
 
 function nextDays(n: number) {
   const out: Date[] = [];
@@ -107,7 +144,12 @@ export function BookingFlow({
   // Working hours returned by availability API for the selected date
   const [workingHours, setWorkingHours] = useState<{ open: string; close: string } | null>(null);
 
-  // Per-day capacity data for the date picker
+  // Provider's weekly schedule (fetched once on open — enables synchronous day-closed checks)
+  type WeeklySchedule = Record<number, { open: string; close: string } | null>;
+  type ProviderSchedule = { weeklySchedule: WeeklySchedule; workOnPublicHolidays: boolean };
+  const [schedule, setSchedule] = useState<ProviderSchedule | null>(null);
+
+  // Per-day capacity data for the date picker (fill level only — closed state uses schedule)
   type DayMeta = { fill: number; hasSlot: boolean; closed: boolean };
   const [dayMeta, setDayMeta] = useState<Record<string, DayMeta>>({});
 
@@ -143,6 +185,33 @@ export function BookingFlow({
   const activeProviderId = displayAgent?.id ?? providerProfileId;
   const activeProviderName = displayAgent?.name ?? providerName;
 
+  // Synchronously determine whether a day is closed (non-working day or public holiday)
+  function isDayClosed(d: Date): boolean {
+    if (!schedule) return false; // schedule still loading — optimistic
+    const wh = schedule.weeklySchedule[d.getDay()];
+    if (!wh) return true; // provider doesn't work this day of week
+    if (!schedule.workOnPublicHolidays && isSAPublicHolidayClient(d)) return true;
+    return false;
+  }
+
+  // Slots generated from actual working hours for the selected date (falls back to schedule then defaults)
+  const computedSlots = useMemo(() => {
+    let open = "09:00", close = "17:00";
+    if (workingHours) {
+      open = workingHours.open; close = workingHours.close;
+    } else if (date && schedule) {
+      const wh = schedule.weeklySchedule[date.getDay()];
+      if (wh) { open = wh.open; close = wh.close; }
+    }
+    const [oh, om] = open.split(":").map(Number);
+    const [ch, cm] = close.split(":").map(Number);
+    const result = [];
+    for (let m = oh * 60 + om; m < ch * 60 + cm; m += 30) {
+      result.push({ h: Math.floor(m / 60), m: m % 60, label: `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}` });
+    }
+    return result;
+  }, [workingHours, schedule, date]);
+
   function toggleService(id: string) {
     setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
     setSelectedExtras((prev) => {
@@ -176,17 +245,29 @@ export function BookingFlow({
     setNotes(""); setServiceCat("All");
     setSelectedAgent(undefined); setAssignedAgent(null);
     setAgents([]);
+    setDayMeta({});
+    setSchedule(null);
     if (startStep) {
       setStep(startStep);
     } else {
       setStep(preselectedServiceId ? "date" : "service");
     }
+    // Fetch session and provider schedule in parallel
     fetch("/api/auth/session").then((r) => r.json()).then((s) => {
       const isAuthed = !!s?.user;
       setAuthed(isAuthed);
-      // If we jumped straight to review but user is not signed in, drop to auth
       if (startStep === "review" && !isAuthed) setStep("auth");
     }).catch(() => setAuthed(false));
+    fetch(`/api/providers/schedule?providerProfileId=${providerProfileId}`)
+      .then((r) => r.json())
+      .then((d) => setSchedule(d))
+      .catch(() => {
+        // On failure default to Mon–Fri 09–17, allow public holidays
+        const ws: WeeklySchedule = {};
+        for (let i = 0; i < 7; i++) ws[i] = null;
+        for (let i = 1; i <= 5; i++) ws[i] = { open: "09:00", close: "17:00" };
+        setSchedule({ weeklySchedule: ws, workOnPublicHolidays: true });
+      });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -213,13 +294,19 @@ export function BookingFlow({
       .finally(() => setBusyLoading(false));
   }, [date, providerProfileId]);
 
-  // Prefetch capacity data for the next 14 days when the date step is shown
+  // Prefetch capacity fill data for the next 14 days when the date step is shown.
+  // Closed days (weekend / holiday) are already handled synchronously via isDayClosed,
+  // so we skip those here to halve API calls on providers who work Mon–Fri.
   useEffect(() => {
     if (step !== "date" || totalDuration === 0) return;
     const days = nextDays(14);
     days.forEach((d) => {
       const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       if (dayMeta[ds]) return; // already fetched
+      if (isDayClosed(d)) { // no need to fetch — we know it's closed
+        setDayMeta((prev) => ({ ...prev, [ds]: { fill: 1, hasSlot: false, closed: true } }));
+        return;
+      }
       fetch(`/api/bookings/availability?providerProfileId=${providerProfileId}&date=${ds}`)
         .then((r) => r.json())
         .then((data) => {
@@ -265,6 +352,7 @@ export function BookingFlow({
           setDayMeta((prev) => ({ ...prev, [ds]: { fill, hasSlot, closed: false } }));
         })
         .catch(() => {
+          // On error: don't mark day as available — let user try it and see
           setDayMeta((prev) => ({ ...prev, [ds]: { fill: 0, hasSlot: true, closed: false } }));
         });
     });
@@ -751,7 +839,8 @@ export function BookingFlow({
                       {nextDays(14).map((d) => {
                         const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
                         const meta = dayMeta[ds];
-                        const unavailable = meta ? (!meta.hasSlot || meta.closed) : false;
+                        // isDayClosed is synchronous — no race condition on weekends/holidays
+                        const unavailable = isDayClosed(d) || (meta ? (!meta.hasSlot || meta.closed) : false);
                         const fill = meta?.fill ?? 0;
                         const sel = date && d.toDateString() === date.toDateString();
 
@@ -828,7 +917,7 @@ export function BookingFlow({
                       <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-[var(--muted)]" /></div>
                     ) : (
                       <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                        {SLOTS.map((s) => {
+                        {computedSlots.map((s) => {
                           const disabled = slotDisabled(s.label);
                           const sel = slot === s.label;
                           return (
