@@ -95,6 +95,17 @@ export async function POST(request: Request) {
   });
   if (clash) return NextResponse.json({ error: "That slot was just taken — pick another time" }, { status: 409 });
 
+  // Reject if the provider (or their parent business) has blocked this slot
+  const rootProviderId = profile.parentBusinessId ?? profile.id;
+  const blockedOverlap = await prisma.blockedSlot.findFirst({
+    where: {
+      providerProfileId: rootProviderId,
+      startsAt: { lt: end },
+      endsAt: { gt: start },
+    },
+  });
+  if (blockedOverlap) return NextResponse.json({ error: "This time slot is not available for booking" }, { status: 409 });
+
   // Coupon: discount applies to service price only (matching the validate route)
   let couponId: string | null = null;
   let discountCents = 0;
