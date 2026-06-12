@@ -227,6 +227,7 @@ model ProviderProfile {
   isDemo           Boolean  @default(false)
   mobile           Boolean  @default(false)
   studio           Boolean  @default(true)
+  workingHoursJson  String?  // JSON: [{day,enabled,from,to}] — stored as string
   // Cancellation & reschedule policy (agents inherit from parent business)
   cancelNoticeHours     Int?
   cancelFeePercent      Int?
@@ -258,6 +259,7 @@ model ProviderProfile {
   verificationRequests  VerificationRequest[]
   serviceCategories     ServiceCategory[]
   serviceAgents         ServiceAgent[]
+  blockedSlots          BlockedSlot[]
 }
 
 model ProviderAmenity {
@@ -554,4 +556,15 @@ model JobApplication {
   applicant   ProviderProfile @relation(fields: [applicantId], references: [id], onDelete: Cascade)
 
   @@unique([jobPostingId, applicantId])
+}
+
+model BlockedSlot {
+  id                String   @id @default(cuid())
+  providerProfileId String
+  startsAt          DateTime
+  endsAt            DateTime
+  reason            String?
+  createdAt         DateTime @default(now())
+
+  provider ProviderProfile @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
 }

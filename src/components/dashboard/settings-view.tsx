@@ -360,6 +360,17 @@ export function SettingsView({
   }, [activeSection, availableSections, searchParams]);
 
   useEffect(() => {
+    fetch("/api/dashboard/settings")
+      .then(r => r.json())
+      .then(d => {
+        if (d.workingHoursJson) {
+          try { setWorkingHours(JSON.parse(d.workingHoursJson)); } catch {}
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
     fetch("/api/dashboard/banking")
       .then((r) => r.json())
       .then((d) => {
@@ -616,7 +627,17 @@ export function SettingsView({
           ))}
         </div>
         <div className="flex justify-end">
-          <button type="button" className="rounded-xl bg-[#1a1a1a] px-6 py-2.5 text-sm font-bold text-white hover:opacity-90">Save changes</button>
+          <button
+            type="button"
+            className="rounded-xl bg-[#1a1a1a] px-6 py-2.5 text-sm font-bold text-white hover:opacity-90"
+            onClick={async () => {
+              await fetch("/api/dashboard/settings", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ workingHours }),
+              });
+            }}
+          >Save changes</button>
         </div>
       </div>
     );

@@ -3,6 +3,20 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { geocodeQuery } from "@/lib/geocode";
 
+export async function GET() {
+  const session = await auth();
+  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = (session.user as any).id as string;
+
+  const profile = await prisma.providerProfile.findUnique({
+    where: { userId },
+    select: { workingHoursJson: true }
+  });
+  if (!profile) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  return NextResponse.json({ workingHoursJson: profile.workingHoursJson ?? null });
+}
+
 export async function PUT(request: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -22,6 +36,10 @@ export async function PUT(request: Request) {
     mobile: body.mobile,
     studio: body.studio
   };
+
+  if (body.workingHours !== undefined) {
+    data.workingHoursJson = JSON.stringify(body.workingHours);
+  }
 
   // Exact pin from the map picker takes precedence.
   if (typeof body.latitude === "number" && typeof body.longitude === "number" && (body.latitude !== 0 || body.longitude !== 0)) {
