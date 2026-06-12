@@ -271,28 +271,40 @@ export function BookingFlow({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Fetch agent count once per open (to know whether to show the artist step at all)
+  // Load all agents when the artist step becomes active
   useEffect(() => {
-    if (!open || agents.length > 0 || agentsLoading) return;
+    if (step !== "artist" || agentsLoading) return;
+    if (agents.length > 0) return; // already loaded
     setAgentsLoading(true);
+    loadAllAgents()
+      .then((list) => setAgents(list))
+      .finally(() => setAgentsLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
+
+  // Also pre-fetch agents count on open so afterServiceStep knows whether to show artist step
+  useEffect(() => {
+    if (!open) return;
     fetch(`/api/providers/agents?providerProfileId=${providerProfileId}`)
       .then((r) => r.json())
       .then((d) => setAgents(d.agents ?? []))
-      .catch(() => {})
-      .finally(() => setAgentsLoading(false));
-  }, [open, providerProfileId, agents.length, agentsLoading]);
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
-  // Load busy slots and actual working hours for the selected date
+  // Load busy slots and actual working hours for the selected date.
+  // When a specific agent is chosen, fetch their schedule so slots reflect their availability.
   useEffect(() => {
     if (!date) return;
     setBusyLoading(true);
     const ds = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-    fetch(`/api/bookings/availability?providerProfileId=${providerProfileId}&date=${ds}`)
+    const pid = selectedAgent ? selectedAgent.id : providerProfileId;
+    fetch(`/api/bookings/availability?providerProfileId=${pid}&date=${ds}`)
       .then((r) => r.json())
       .then((d) => { setBusy(d.busy ?? []); setWorkingHours(d.workingHours ?? null); })
       .catch(() => { setBusy([]); setWorkingHours(null); })
       .finally(() => setBusyLoading(false));
-  }, [date, providerProfileId]);
+  }, [date, providerProfileId, selectedAgent]);
 
   // Prefetch capacity fill data for the next 14 days when the date step is shown.
   // Closed days (weekend / holiday) are already handled synchronously via isDayClosed,
@@ -359,7 +371,16 @@ export function BookingFlow({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, providerProfileId, totalDuration]);
 
-  // Fetch agents filtered by a specific slot so we only show available ones on the artist step
+  // Load all agents for the artist selection step (no slot filter — user picks before choosing date)
+  async function loadAllAgents(): Promise<Agent[]> {
+    try {
+      const r = await fetch(`/api/providers/agents?providerProfileId=${providerProfileId}`);
+      const d = await r.json();
+      return d.agents ?? [];
+    } catch { return []; }
+  }
+
+  // Load agents available for a specific slot — sorted by fewest bookings (round-robin allocation)
   async function loadAvailableAgents(ds: string, slotTime: string): Promise<Agent[]> {
     try {
       const r = await fetch(`/api/providers/agents?providerProfileId=${providerProfileId}&date=${ds}&slot=${slotTime}&duration=${totalDuration || 60}`);
@@ -371,40 +392,48 @@ export function BookingFlow({
   function afterServiceStep() {
     if (hasPreselectedDateTime) {
       setStep(authed === false ? "auth" : "review");
+    } else if (agents.length > 0) {
+      // Artist step is always shown before date when the provider has team members
+      setStep("artist");
     } else {
       setStep("date");
     }
   }
 
-  async function afterArtistStep(agent: Agent | null) {
+  // Artist is selected (or "no preference") → move to date picker
+  function afterArtistStep(agent: Agent | null) {
     setSelectedAgent(agent);
-    if (agent === null) {
-      // Pick random from the already-filtered available agents list
-      const picked = agents.length > 0 ? agents[Math.floor(Math.random() * agents.length)] : null;
-      setAssignedAgent(picked);
-    } else {
-      setAssignedAgent(null);
-    }
-    setStep(authed === false ? "auth" : "review");
+    setAssignedAgent(null); // assigned at confirm time after slot is known
+    setDate(null); setSlot(null); // clear any previous date/slot when changing artist
+    setStep("date");
   }
 
-  // After time is selected: if there are agents, load filtered ones then go to artist step
+  // After time is selected: auto-assign least-loaded agent when "no preference",
+  // validate chosen agent is still free, then proceed to review
   async function goAfterTime() {
     if (!date || !slot) return;
     const ds = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-    setAgentsLoading(true);
-    const available = await loadAvailableAgents(ds, slot);
-    setAgentsLoading(false);
-    if (available.length > 0) {
-      // Overwrite agents with the filtered available set for the artist step
-      setAgents(available);
-      setSelectedAgent(undefined);
-      setAssignedAgent(null);
-      setStep("artist");
-    } else {
-      // No agents or no multi-agent setup — skip artist step
-      setStep(authed === false ? "auth" : "review");
+
+    if (agents.length > 0) {
+      setAgentsLoading(true);
+      const available = await loadAvailableAgents(ds, slot);
+      setAgentsLoading(false);
+
+      if (selectedAgent) {
+        // Verify chosen agent is still free at this slot
+        const stillFree = available.some((a) => a.id === selectedAgent.id);
+        if (!stillFree) {
+          // Agent is booked — auto-assign least-loaded available one and note it
+          setAssignedAgent(available[0] ?? null);
+          setSelectedAgent(null);
+        }
+      } else {
+        // "No preference": assign the least-loaded available agent (API returns sorted by fewest bookings)
+        setAssignedAgent(available[0] ?? null);
+      }
     }
+
+    setStep(authed === false ? "auth" : "review");
   }
 
   async function onPaid() {
@@ -579,8 +608,8 @@ export function BookingFlow({
 
   const stepsOrder: Step[] = [
     ...(preselectedServiceId ? [] : ["service" as Step]),
+    ...(agents.length > 0 && !hasPreselectedDateTime ? ["artist" as Step] : []),
     ...(hasPreselectedDateTime ? [] : ["date" as Step, "time" as Step]),
-    ...(agents.length > 1 ? ["artist" as Step] : []),
     ...(authed === false ? ["auth" as Step] : []),
     "review", "pay", "done"
   ];
@@ -636,7 +665,7 @@ export function BookingFlow({
     <>
       <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm" onClick={onClose} />
       {/* Mobile: bottom sheet — Desktop: centered dialog */}
-      <div className="fixed inset-x-0 bottom-0 z-[61] flex max-h-[92dvh] flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:inset-0 sm:m-auto sm:h-fit sm:max-h-[88dvh] sm:max-w-lg sm:rounded-3xl">
+      <div className="fixed inset-x-0 bottom-0 z-[61] flex max-h-[92dvh] flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:inset-0 sm:m-auto sm:h-fit sm:max-h-[88dvh] sm:max-w-2xl sm:rounded-3xl">
         {children}
       </div>
     </>
@@ -796,39 +825,69 @@ export function BookingFlow({
             <AnimatePresence mode="wait">
               <motion.div key={step} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.2 }}>
 
-                {/* ── Artist ── (shown after time selection, agents already filtered by slot) */}
+                {/* ── Artist — shown before date, always when provider has a team ── */}
                 {step === "artist" && (
-                  <Section title={`Available ${roleLabel(selectedCategories)}`} onBack={() => setStep("time")}>
-                    <p className="mb-4 text-sm text-[var(--muted)]">
-                      {agents.length === 0 ? "No team members found for this slot." : "These team members are available for your selected time."}
-                    </p>
-                    <div className="space-y-2">
-                      <button onClick={() => afterArtistStep(null)}
-                        className="flex w-full items-center gap-3 rounded-2xl border border-[var(--line)] bg-white p-4 text-left hover:border-[var(--ink)] transition">
-                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--background)] text-[var(--muted)]">
-                          <UserCheck className="h-5 w-5" />
-                        </span>
-                        <div>
-                          <p className="font-bold text-[var(--ink)]">No preference</p>
-                          <p className="text-xs text-[var(--muted)]">Best available artist auto-assigned</p>
+                  <Section
+                    title={`Choose your ${roleLabel(selectedCategories)}`}
+                    onBack={preselectedServiceId ? undefined : () => setStep("service")}
+                  >
+                    {agentsLoading ? (
+                      <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-[var(--muted)]" /></div>
+                    ) : (
+                      <>
+                        <p className="mb-4 text-sm text-[var(--muted)]">
+                          Pick a team member or leave it to us — we&apos;ll assign the best available artist when you choose your time.
+                        </p>
+                        <div className="space-y-2">
+                          {/* No preference option */}
+                          <button
+                            onClick={() => afterArtistStep(null)}
+                            className={`flex w-full items-center gap-3 rounded-2xl border p-4 text-left transition
+                              ${selectedAgent === null
+                                ? "border-[var(--brand)] bg-[var(--brand)]/5 ring-1 ring-[var(--brand)]"
+                                : "border-[var(--line)] bg-white hover:border-[var(--brand)]"}`}
+                          >
+                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--background)] text-[var(--muted)]">
+                              <UserCheck className="h-5 w-5" />
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <p className="font-bold text-[var(--ink)]">No preference</p>
+                              <p className="text-xs text-[var(--muted)]">Best available artist auto-assigned at your chosen time</p>
+                            </div>
+                            {selectedAgent === null && <Check className="h-4 w-4 shrink-0 text-[var(--brand)]" />}
+                          </button>
+
+                          {/* Individual agents */}
+                          {agents.map((agent) => {
+                            const isSel = selectedAgent?.id === agent.id;
+                            return (
+                              <button
+                                key={agent.id}
+                                onClick={() => afterArtistStep(agent)}
+                                className={`flex w-full items-center gap-3 rounded-2xl border p-4 text-left transition
+                                  ${isSel
+                                    ? "border-[var(--brand)] bg-[var(--brand)]/5 ring-1 ring-[var(--brand)]"
+                                    : "border-[var(--line)] bg-white hover:border-[var(--brand)]"}`}
+                              >
+                                {agent.avatarUrl ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img src={agent.avatarUrl} alt={agent.name} className="h-10 w-10 shrink-0 rounded-xl object-cover" />
+                                ) : (
+                                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--brand)] text-white text-sm font-bold">{agent.name[0]}</span>
+                                )}
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-bold text-[var(--ink)]">{agent.name}</p>
+                                  {agent.serviceCategories.length > 0 && (
+                                    <p className="text-xs text-[var(--muted)]">{agent.serviceCategories.join(", ")}</p>
+                                  )}
+                                </div>
+                                {isSel && <Check className="h-4 w-4 shrink-0 text-[var(--brand)]" />}
+                              </button>
+                            );
+                          })}
                         </div>
-                      </button>
-                      {agents.map((agent) => (
-                        <button key={agent.id} onClick={() => afterArtistStep(agent)}
-                          className="flex w-full items-center gap-3 rounded-2xl border border-[var(--line)] bg-white p-4 text-left hover:border-[var(--ink)] transition">
-                          {agent.avatarUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={agent.avatarUrl} alt={agent.name} className="h-10 w-10 shrink-0 rounded-xl object-cover" />
-                          ) : (
-                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--brand)] text-white text-sm font-bold">{agent.name[0]}</span>
-                          )}
-                          <div className="min-w-0">
-                            <p className="font-bold text-[var(--ink)]">{agent.name}</p>
-                            {agent.serviceCategories.length > 0 && <p className="text-xs text-[var(--muted)]">{agent.serviceCategories.join(", ")}</p>}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
+                      </>
+                    )}
                   </Section>
                 )}
 
@@ -848,7 +907,30 @@ export function BookingFlow({
                   }
                   const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
                   return (
-                    <Section title="Pick a day" onBack={preselectedServiceId ? undefined : () => setStep("service")}>
+                    <Section title="Pick a day" onBack={() => agents.length > 0 ? setStep("artist") : (preselectedServiceId ? undefined : setStep("service"))}>
+                      {/* Selected artist chip */}
+                      {agents.length > 0 && (
+                        <button
+                          onClick={() => setStep("artist")}
+                          className="mb-3 flex w-full items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--background)] px-3 py-2 text-left hover:border-[var(--brand)] transition"
+                        >
+                          {selectedAgent?.avatarUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={selectedAgent.avatarUrl} alt={selectedAgent.name} className="h-7 w-7 rounded-lg object-cover shrink-0" />
+                          ) : (
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--brand)] text-white text-xs font-bold">
+                              {selectedAgent ? selectedAgent.name[0] : <UserCheck className="h-3.5 w-3.5" />}
+                            </span>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-bold text-[var(--ink)] truncate">
+                              {selectedAgent ? selectedAgent.name : "Any available artist"}
+                            </p>
+                            <p className="text-[10px] text-[var(--muted)]">Tap to change</p>
+                          </div>
+                          <ArrowRight className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />
+                        </button>
+                      )}
                       {/* Month label */}
                       <p className="mb-2 text-xs font-bold uppercase tracking-wider text-[var(--muted)]">
                         {today.toLocaleDateString("en-ZA", { month: "long", year: "numeric" })}
@@ -939,6 +1021,28 @@ export function BookingFlow({
                 {/* ── Time ── */}
                 {step === "time" && (
                   <Section title="Choose a time" onBack={() => setStep("date")}>
+                    {agents.length > 0 && (
+                      <button
+                        onClick={() => setStep("artist")}
+                        className="mb-3 flex w-full items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--background)] px-3 py-2 text-left hover:border-[var(--brand)] transition"
+                      >
+                        {selectedAgent?.avatarUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={selectedAgent.avatarUrl} alt={selectedAgent.name} className="h-7 w-7 rounded-lg object-cover shrink-0" />
+                        ) : (
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--brand)] text-white text-xs font-bold">
+                            {selectedAgent ? selectedAgent.name[0] : <UserCheck className="h-3.5 w-3.5" />}
+                          </span>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold text-[var(--ink)] truncate">
+                            {selectedAgent ? selectedAgent.name : "Any available artist"}
+                          </p>
+                          <p className="text-[10px] text-[var(--muted)]">Tap to change</p>
+                        </div>
+                        <ArrowRight className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />
+                      </button>
+                    )}
                     {busyLoading ? (
                       <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-[var(--muted)]" /></div>
                     ) : (

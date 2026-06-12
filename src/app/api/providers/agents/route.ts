@@ -102,6 +102,10 @@ export async function GET(request: Request) {
         return slotStart < be && slotEnd > bs;
       });
     });
+
+    // Sort available agents by number of bookings today ascending so the client
+    // can pick available[0] for round-robin / least-loaded auto-allocation.
+    available.sort((a, b) => (busyByAgent.get(a.id)?.length ?? 0) - (busyByAgent.get(b.id)?.length ?? 0));
   }
 
   return NextResponse.json({
