@@ -124,6 +124,7 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
   const [selectedExtraIds, setSelectedExtraIds] = useState<string[]>([]);
   const [extrasConfirmed, setExtrasConfirmed] = useState(false);
   const [busySlots, setBusySlots] = useState<{ start: string; durationMinutes: number }[]>([]);
+  const [sidebarWorkingHours, setSidebarWorkingHours] = useState<{ open: string; close: string } | null>(null);
   const [busyLoading, setBusyLoading] = useState(false);
   const [photoGalleryOpen, setPhotoGalleryOpen] = useState(false);
   const [agentPopup, setAgentPopup] = useState<TeamMember | null>(null);
@@ -271,11 +272,12 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
   useEffect(() => {
     if (!selectedDate) return;
     setBusySlots([]);
+    setSidebarWorkingHours(null);
     setBusyLoading(true);
     const ds = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, "0")}-${String(selectedDate.getDate()).padStart(2, "0")}`;
     fetch(`/api/bookings/availability?providerProfileId=${profile.id}&date=${ds}`)
       .then((r) => r.json())
-      .then((d) => setBusySlots(d.busy ?? []))
+      .then((d) => { setBusySlots(d.busy ?? []); setSidebarWorkingHours(d.workingHours ?? null); })
       .catch(() => {})
       .finally(() => setBusyLoading(false));
   }, [selectedDate, profile.id]);
@@ -287,8 +289,18 @@ export function ProviderProfilePage({ profile, embed = false }: { profile: Profi
     const [hh, mm] = hhmm.split(":").map(Number);
     const start = new Date(selectedDate); start.setHours(hh, mm, 0, 0);
     if (start.getTime() < Date.now()) return true;
-    if (hh * 60 + mm + selectedServiceDuration > 18 * 60) return true;
     const end = start.getTime() + selectedServiceDuration * 60000;
+    // Check open/close bounds from actual working hours
+    if (sidebarWorkingHours) {
+      const [openH, openM] = sidebarWorkingHours.open.split(":").map(Number);
+      const [closeH, closeM] = sidebarWorkingHours.close.split(":").map(Number);
+      const openMs = new Date(selectedDate).setHours(openH, openM, 0, 0);
+      const closeMs = new Date(selectedDate).setHours(closeH, closeM, 0, 0);
+      if (start.getTime() < openMs || end > closeMs) return true;
+    } else {
+      // Fallback while working hours are loading
+      if (hh * 60 + mm + selectedServiceDuration > 18 * 60) return true;
+    }
     return busySlots.some((b) => {
       const bs = new Date(b.start).getTime(); const be = bs + b.durationMinutes * 60000;
       return start.getTime() < be && end > bs;
