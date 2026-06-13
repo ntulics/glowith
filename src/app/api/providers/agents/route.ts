@@ -21,7 +21,17 @@ function workingHoursForDate(json: string | null | undefined, date: Date): { ope
 // so "no preference" can be randomly assigned from available ones only.
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const providerProfileId = searchParams.get("providerProfileId");
+  let providerProfileId = searchParams.get("providerProfileId");
+
+  // Allow lookup by handle as an alternative
+  if (!providerProfileId) {
+    const handle = searchParams.get("providerHandle");
+    if (handle) {
+      const profile = await prisma.providerProfile.findUnique({ where: { handle }, select: { id: true } });
+      providerProfileId = profile?.id ?? null;
+    }
+  }
+
   if (!providerProfileId) return NextResponse.json({ agents: [] });
 
   const dateStr = searchParams.get("date");   // YYYY-MM-DD

@@ -35,10 +35,20 @@ export async function GET() {
       items: { select: { priceCents: true } },
       providerProfile: {
         select: {
-          businessName: true, handle: true, avatarUrl: true, city: true,
+          id: true, businessName: true, handle: true, avatarUrl: true, city: true,
           latitude: true, longitude: true,
           cancelNoticeHours: true, cancelFeePercent: true,
-          rescheduleNoticeHours: true, rescheduleFeePercent: true, policyText: true
+          rescheduleNoticeHours: true, rescheduleFeePercent: true, policyText: true,
+          // If this profile is an agent, parentBusiness holds the real provider
+          parentBusinessId: true,
+          parentBusiness: {
+            select: {
+              id: true, businessName: true, handle: true, avatarUrl: true, city: true,
+              latitude: true, longitude: true,
+              cancelNoticeHours: true, cancelFeePercent: true,
+              rescheduleNoticeHours: true, rescheduleFeePercent: true, policyText: true
+            }
+          }
         }
       }
     },
@@ -50,6 +60,12 @@ export async function GET() {
       const priceCents = b.items.length > 0
         ? b.items.reduce((sum, i) => sum + i.priceCents, 0)
         : (b.service?.priceCents ?? 0);
+
+      // If the stored providerProfile has a parentBusiness, the stored profile IS the agent
+      const isAgentBooking = !!b.providerProfile.parentBusinessId;
+      const providerProfile = isAgentBooking ? b.providerProfile.parentBusiness! : b.providerProfile;
+      const agentProfile = isAgentBooking ? b.providerProfile : null;
+
       return {
         id: b.id,
         status: b.status,
@@ -65,19 +81,21 @@ export async function GET() {
         priceCents,
         durationMinutes: b.service?.durationMinutes ?? b.durationMinutes,
         service: b.service?.name ?? "Service",
-        agentName: null,
-        agentHandle: null,
+        agentName: agentProfile?.businessName ?? null,
+        agentHandle: agentProfile?.handle ?? null,
+        agentProfileId: agentProfile?.id ?? null,
         provider: {
-          name: b.providerProfile.businessName,
-          handle: b.providerProfile.handle,
-          city: b.providerProfile.city,
-          lat: b.providerProfile.latitude,
-          lng: b.providerProfile.longitude,
-          cancelNoticeHours: b.providerProfile.cancelNoticeHours,
-          cancelFeePercent: b.providerProfile.cancelFeePercent,
-          rescheduleNoticeHours: b.providerProfile.rescheduleNoticeHours,
-          rescheduleFeePercent: b.providerProfile.rescheduleFeePercent,
-          policyText: b.providerProfile.policyText
+          id: providerProfile.id,
+          name: providerProfile.businessName,
+          handle: providerProfile.handle,
+          city: providerProfile.city,
+          lat: providerProfile.latitude,
+          lng: providerProfile.longitude,
+          cancelNoticeHours: providerProfile.cancelNoticeHours,
+          cancelFeePercent: providerProfile.cancelFeePercent,
+          rescheduleNoticeHours: providerProfile.rescheduleNoticeHours,
+          rescheduleFeePercent: providerProfile.rescheduleFeePercent,
+          policyText: providerProfile.policyText
         }
       };
     })

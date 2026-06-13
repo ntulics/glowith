@@ -32,9 +32,35 @@ export async function POST(request: Request) {
 
   const profile = await prisma.providerProfile.findUnique({
     where: { id: providerProfileId },
-    select: { id: true, parentBusinessId: true, plan: true, agents: { select: { id: true } } }
+    select: {
+      id: true, parentBusinessId: true, plan: true,
+      agents: { select: { id: true } }
+    }
   });
   if (!profile) return NextResponse.json({ error: "Provider not found" }, { status: 404 });
+
+  // Determine the effective provider profile ID for this booking.
+  // If the passed providerProfileId is a parent business (not an agent itself) and
+  // has agents, auto-assign the least-loaded available agent for the requested slot.
+  let effectiveProviderId = providerProfileId;
+  if (!profile.parentBusinessId && profile.agents.length > 0 && startsAt) {
+    const start = new Date(startsAt);
+    if (!isNaN(start.getTime())) {
+      const ds = start.toISOString().slice(0, 10);
+      const slotHHMM = `${String(start.getHours()).padStart(2, "0")}:${String(start.getMinutes()).padStart(2, "0")}`;
+      const dur = body.durationMinutes ?? 60;
+      try {
+        const agentsRes = await fetch(
+          `${process.env.NEXTAUTH_URL ?? "http://localhost:3000"}/api/providers/agents?providerProfileId=${providerProfileId}&date=${ds}&slot=${slotHHMM}&duration=${dur}`
+        );
+        if (agentsRes.ok) {
+          const agentsData = await agentsRes.json();
+          const available: { id: string }[] = agentsData.agents ?? [];
+          if (available.length > 0) effectiveProviderId = available[0].id;
+        }
+      } catch { /* fall back to parent */ }
+    }
+  }
 
   const allowedProviderIds = new Set<string>([
     profile.id,
@@ -161,7 +187,7 @@ export async function POST(request: Request) {
   const booking = await prisma.booking.create({
     data: {
       clientId: user.id,
-      providerProfileId,
+      providerProfileId: effectiveProviderId,
       serviceId: services[0].id,
       startsAt: start,
       durationMinutes: totalDuration,
