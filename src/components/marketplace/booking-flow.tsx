@@ -800,6 +800,32 @@ export function BookingFlow({
                       </div>
                     )}
 
+                    {/* Extras for preselected service — shown here since service step is skipped */}
+                    {preselectedServiceId && allExtras.length > 0 && (
+                      <div className="mb-4 space-y-1 rounded-2xl border border-[var(--line)] p-3">
+                        <p className="mb-2 text-xs font-bold uppercase tracking-wider text-[var(--brand)]">Optional extras</p>
+                        {allExtras.map((e) => {
+                          const checked = selectedExtras.some((x) => x.id === e.id);
+                          return (
+                            <button key={e.id} onClick={() => toggleExtra(e)}
+                              className={`flex w-full items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left transition ${checked ? "border-[var(--brand)]/50 bg-[var(--brand)]/5" : "border-[var(--line)] bg-white hover:border-[var(--brand)]/40"}`}>
+                              <div className="min-w-0">
+                                <p className="text-xs font-bold text-[var(--ink)]">{e.name}</p>
+                                {e.description && <p className="text-xs text-[var(--muted)]">{e.description}</p>}
+                                <p className="text-xs font-semibold text-[var(--muted)]">
+                                  {e.priceCents > 0 ? `+${ZAR(e.priceCents)}` : "Free"}
+                                  {e.durationMinutes > 0 ? ` · +${e.durationMinutes} min` : ""}
+                                </p>
+                              </div>
+                              <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${checked ? "bg-[var(--brand)] text-white" : "border border-[var(--line)] text-[var(--muted)]"}`}>
+                                {checked ? <Check className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
                     {/* Calendar + slots two-column grid */}
                     <div className="grid grid-cols-1 gap-6 sm:grid-cols-[460px_1fr]">
                       {/* Calendar — fixed width so cells stay square-ish */}

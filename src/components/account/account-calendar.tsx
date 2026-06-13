@@ -509,8 +509,6 @@ export function AccountCalendar({ initialBookings }: { initialBookings: Calendar
           services={selectedProvider.services}
           preselectedServiceId={selectedService.id}
           preselectedDate={bookingDate}
-          preselectedSlot={bookingSlot}
-          startStep="review"
         />
       )}
     </div>
