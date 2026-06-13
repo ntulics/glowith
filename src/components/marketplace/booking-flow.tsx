@@ -173,23 +173,24 @@ export function BookingFlow({
     setNotes(""); setServiceCat("All");
     setSelectedAgent(undefined); setAssignedAgent(null);
     setAgents([]);
-    if (startStep) {
-      setStep(startStep);
-    } else {
-      setStep(preselectedServiceId ? "date" : "service");
-    }
+    const computedStart: Step = startStep ?? (
+      preselectedServiceId && hasPreselectedDateTime ? "review" :
+      preselectedServiceId ? "date" : "service"
+    );
+    setStep(computedStart);
     // Fetch session and provider schedule in parallel
     fetch("/api/auth/session").then((r) => r.json()).then((s) => {
       const isAuthed = !!s?.user;
       setAuthed(isAuthed);
-      if (startStep === "review" && !isAuthed) setStep("auth");
+      if (computedStart === "review" && !isAuthed) setStep("auth");
     }).catch(() => setAuthed(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Load all agents when the datetime step becomes active
+  // Load all agents when the datetime step (or review step in calendar mode) becomes active
   useEffect(() => {
-    if ((step !== "datetime" && step !== "artist") || agentsLoading) return;
+    const needsAgents = step === "datetime" || step === "artist" || (step === "review" && hasPreselectedDateTime && !!preselectedServiceId);
+    if (!needsAgents || agentsLoading) return;
     if (agents.length > 0) return; // already loaded
     setAgentsLoading(true);
     loadAllAgents()
@@ -906,7 +907,98 @@ export function BookingFlow({
 
                 {/* ── Review ── */}
                 {step === "review" && selectedServices.length > 0 && date && slot && (
-                  <Section title="Review & confirm" onBack={() => setStep(authed === false ? "auth" : (hasPreselectedDateTime ? "service" : "datetime"))}>
+                  <Section title="Review & confirm" onBack={hasPreselectedDateTime && preselectedServiceId ? undefined : () => setStep(authed === false ? "auth" : "datetime")}>
+
+                    {/* ── Calendar-booking mode: agent chips + extras at top ── */}
+                    {hasPreselectedDateTime && preselectedServiceId && (
+                      <>
+                        {/* Agent chips */}
+                        <div className="mb-4">
+                          <p className="mb-2 text-xs font-bold uppercase tracking-wider text-[var(--muted)]">Artist preference</p>
+                          {agentsLoading ? (
+                            <div className="flex items-center gap-2 text-xs text-[var(--muted)]">
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading artists…
+                            </div>
+                          ) : agents.length > 0 ? (
+                            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+                              <button
+                                onClick={() => setSelectedAgent(null)}
+                                className={`shrink-0 flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition ${selectedAgent === null ? "border-[var(--brand)] bg-[var(--brand)]/10 text-[var(--brand)]" : "border-[var(--line)] text-[var(--muted)] hover:border-[var(--brand)] hover:text-[var(--ink)]"}`}
+                              >
+                                <UserCheck className="h-3.5 w-3.5 shrink-0" /> Any artist
+                                {selectedAgent === null && <Check className="h-3 w-3" />}
+                              </button>
+                              {agents.map((agent) => {
+                                const isSel = selectedAgent?.id === agent.id;
+                                return (
+                                  <button key={agent.id} onClick={() => setSelectedAgent(agent)}
+                                    className={`shrink-0 flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition ${isSel ? "border-[var(--brand)] bg-[var(--brand)]/10 text-[var(--brand)]" : "border-[var(--line)] text-[var(--muted)] hover:border-[var(--brand)] hover:text-[var(--ink)]"}`}>
+                                    {agent.avatarUrl ? (
+                                      // eslint-disable-next-line @next/next/no-img-element
+                                      <img src={agent.avatarUrl} alt={agent.name} className="h-5 w-5 shrink-0 rounded-full object-cover" />
+                                    ) : (
+                                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--brand)] text-white text-[10px] font-bold">{agent.name[0]}</span>
+                                    )}
+                                    {agent.name}
+                                    {isSel && <Check className="h-3 w-3" />}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-[var(--muted)]">Any available artist will be assigned.</p>
+                          )}
+                        </div>
+
+                        {/* Extras */}
+                        {allExtras.length > 0 && (
+                          <div className="mb-4 space-y-1 rounded-2xl border border-[var(--line)] p-3">
+                            <p className="mb-2 text-xs font-bold uppercase tracking-wider text-[var(--brand)]">Optional extras</p>
+                            {allExtras.map((e) => {
+                              const checked = selectedExtras.some((x) => x.id === e.id);
+                              return (
+                                <button key={e.id} onClick={() => toggleExtra(e)}
+                                  className={`flex w-full items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left transition ${checked ? "border-[var(--brand)]/50 bg-[var(--brand)]/5" : "border-[var(--line)] bg-white hover:border-[var(--brand)]/40"}`}>
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-bold text-[var(--ink)]">{e.name}</p>
+                                    {e.description && <p className="text-xs text-[var(--muted)]">{e.description}</p>}
+                                    <p className="text-xs font-semibold text-[var(--muted)]">
+                                      {e.priceCents > 0 ? `+${ZAR(e.priceCents)}` : "Free"}
+                                      {e.durationMinutes > 0 ? ` · +${e.durationMinutes} min` : ""}
+                                    </p>
+                                  </div>
+                                  <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${checked ? "bg-[var(--brand)] text-white" : "border border-[var(--line)] text-[var(--muted)]"}`}>
+                                    {checked ? <Check className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {/* ── Non-calendar mode: assigned agent banner ── */}
+                    {!(hasPreselectedDateTime && preselectedServiceId) && displayAgent && (
+                      <div className="mb-3 flex items-center gap-3 rounded-2xl border border-[var(--line)] bg-[var(--background)] p-3">
+                        {displayAgent.avatarUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={displayAgent.avatarUrl} alt={displayAgent.name} className="h-10 w-10 rounded-xl object-cover shrink-0" />
+                        ) : (
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--brand)] text-white text-sm font-bold">{displayAgent.name[0]}</span>
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold uppercase tracking-wider text-[var(--muted)]">Your artist</p>
+                          <p className="font-black text-[var(--ink)]">{displayAgent.name}</p>
+                          <p className="text-xs text-[var(--muted)]">at {providerName}</p>
+                        </div>
+                        {agents.length > 1 && (
+                          <button onClick={() => setStep("datetime")} className="ml-auto shrink-0 rounded-xl border border-[var(--line)] px-3 py-1.5 text-xs font-bold text-[var(--muted)] hover:border-[var(--brand)] hover:text-[var(--brand)] transition">
+                            Change
+                          </button>
+                        )}
+                      </div>
+                    )}
                     {/* Compact summary */}
                     <div className="space-y-1.5 rounded-2xl border border-[var(--line)] bg-white p-3.5 text-sm">
                       {selectedServices.map((s) => (
@@ -1021,6 +1113,9 @@ export function BookingFlow({
                       {activeProviderName} has your appointment
                       {date && slot ? ` for ${date.toLocaleDateString("en-ZA", { weekday: "long", day: "numeric", month: "long" })} at ${slot}` : ""}.
                     </p>
+                    {displayAgent && displayAgent.id !== providerProfileId && (
+                      <p className="mt-1 text-sm text-[var(--muted)]">Your artist: <span className="font-bold text-[var(--ink)]">{displayAgent.name}</span></p>
+                    )}
                     <button onClick={onClose} className="mt-6 rounded-xl bg-[var(--ink)] px-6 py-3 text-sm font-bold text-white hover:bg-[var(--ink)]/90">Done</button>
                   </div>
                 )}
