@@ -421,7 +421,7 @@ export function AccountCalendar({ initialBookings }: { initialBookings: Calendar
             </div>
           ) : (
             /* ── Provider selected: services + time slots side by side ── */
-            <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_200px]">
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-[3fr_2fr]">
               {/* Services list */}
               <div>
                 <p className="mb-3 text-xs font-bold uppercase tracking-wider text-[var(--muted)]">
