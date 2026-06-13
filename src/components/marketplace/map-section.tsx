@@ -135,7 +135,7 @@ export function MapSection({ providers, user }: { providers: P[]; user: { lat: n
   }, [ready, pinned, user.lat, user.lng]);
 
   return (
-    <section className="relative mt-10">
+    <section id="map" className="relative mt-10">
       <div className="mx-auto mb-4 max-w-[90rem] px-4 sm:px-6 lg:px-8">
         <h2 className="text-xl font-black">Studios on the map</h2>
         <p className="text-sm text-[var(--muted)]">{pinned.length} near {user.label}</p>

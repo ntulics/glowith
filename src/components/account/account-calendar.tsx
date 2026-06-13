@@ -15,27 +15,18 @@ import {
 
 /* ── Types ──────────────────────────────────────────────────────── */
 type CalendarBooking = {
-  id: string;
-  status: string;
-  startsAt: string;
-  durationMinutes: number;
-  serviceName: string;
-  providerName: string;
-  providerHandle: string;
-  providerProfileId: string;
-  noShowAt?: string | null;
-  checkedInAt?: string | null;
+  id: string; status: string; startsAt: string; durationMinutes: number;
+  serviceName: string; providerName: string; providerHandle: string;
+  providerProfileId: string; noShowAt?: string | null; checkedInAt?: string | null;
 };
-
+type ProviderService = {
+  id: string; name: string; category: string;
+  durationMinutes: number; priceCents: number; depositCents: number;
+};
 type Provider = {
-  id: string;
-  handle: string;
-  name: string;
-  avatarUrl: string | null;
-  category: string;
-  services: Array<{ id: string; name: string; category: string; durationMinutes: number; priceCents: number; depositCents: number }>;
+  id: string; handle: string; name: string; avatarUrl: string | null;
+  category: string; services: ProviderService[];
 };
-
 type BusySlot = { start: string; durationMinutes: number };
 type WorkingHours = { open: string; close: string };
 
@@ -45,103 +36,74 @@ function easterSunday(y: number): Date {
   const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
   const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
   const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
-  const m = Math.floor((a + 11 * h + 22 * l) / 451);
-  const mo = Math.floor((h + l - 7 * m + 114) / 31);
-  const da = ((h + l - 7 * m + 114) % 31) + 1;
+  const m2 = Math.floor((a + 11 * h + 22 * l) / 451);
+  const mo = Math.floor((h + l - 7 * m2 + 114) / 31);
+  const da = ((h + l - 7 * m2 + 114) % 31) + 1;
   return new Date(y, mo - 1, da);
 }
-
 function getSAHolidayName(d: Date): string | null {
   const y = d.getFullYear(), mo = d.getMonth() + 1, da = d.getDate(), dow = d.getDay();
   const easter = easterSunday(y);
   const gf = new Date(easter); gf.setDate(easter.getDate() - 2);
   const fm = new Date(easter); fm.setDate(easter.getDate() + 1);
-
-  // Fixed holiday: returns name if date matches, or if Monday displacement applies
   function fixed(hmo: number, hda: number, name: string): string | null {
     if (mo === hmo && da === hda) return name;
-    // Sunday falls on holiday → observed Monday
     if (dow === 1 && mo === hmo && da - 1 === hda) return `${name} (observed)`;
     return null;
   }
-
   return (
-    fixed(1, 1, "New Year's Day") ??
-    fixed(3, 21, "Human Rights Day") ??
+    fixed(1, 1, "New Year's Day") ?? fixed(3, 21, "Human Rights Day") ??
     (mo === gf.getMonth() + 1 && da === gf.getDate() ? "Good Friday" : null) ??
     (mo === fm.getMonth() + 1 && da === fm.getDate() ? "Family Day" : null) ??
-    fixed(4, 27, "Freedom Day") ??
-    fixed(5, 1, "Workers' Day") ??
-    fixed(6, 16, "Youth Day") ??
-    fixed(8, 9, "National Women's Day") ??
-    fixed(9, 24, "Heritage Day") ??
-    fixed(12, 16, "Day of Reconciliation") ??
-    fixed(12, 25, "Christmas Day") ??
-    fixed(12, 26, "Day of Goodwill") ??
-    null
+    fixed(4, 27, "Freedom Day") ?? fixed(5, 1, "Workers' Day") ??
+    fixed(6, 16, "Youth Day") ?? fixed(8, 9, "National Women's Day") ??
+    fixed(9, 24, "Heritage Day") ?? fixed(12, 16, "Day of Reconciliation") ??
+    fixed(12, 25, "Christmas Day") ?? fixed(12, 26, "Day of Goodwill") ?? null
   );
 }
 
 /* ── Helpers ────────────────────────────────────────────────────── */
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const FALLBACK_WH: WorkingHours = { open: "09:00", close: "17:00" };
 
 function isoDate(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
+const ZAR = (c: number) => new Intl.NumberFormat("en-ZA", { style: "currency", currency: "ZAR", maximumFractionDigits: 0 }).format(c / 100);
+const fmtDur = (m: number) => m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ""}`;
 
-function buildSlots(wh: WorkingHours, serviceDuration: number): string[] {
+function buildSlots(wh: WorkingHours, dur: number): string[] {
   const [oh, om] = wh.open.split(":").map(Number);
   const [ch, cm] = wh.close.split(":").map(Number);
   const closeMins = ch * 60 + cm;
-  const dur = serviceDuration > 0 ? serviceDuration : 30;
   const result: string[] = [];
   for (let m = oh * 60 + om; m < closeMins; m += 30) {
-    if (m + dur <= closeMins) {
+    if (m + dur <= closeMins)
       result.push(`${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`);
-    }
   }
   return result;
 }
 
-function hasAvailableSlot(wh: WorkingHours, busy: BusySlot[], date: Date, minDuration = 30): boolean {
-  const slots = buildSlots(wh, minDuration);
+function availableSlots(wh: WorkingHours, busy: BusySlot[], date: Date, dur: number): string[] {
   const now = Date.now();
-  return slots.some((label) => {
+  return buildSlots(wh, dur).filter((label) => {
     const [h, m] = label.split(":").map(Number);
     const start = new Date(date); start.setHours(h, m, 0, 0);
     if (start.getTime() <= now) return false;
-    const end = start.getTime() + minDuration * 60000;
+    const end = start.getTime() + dur * 60000;
     return !busy.some((b) => {
       const bs = new Date(b.start).getTime();
-      const be = bs + b.durationMinutes * 60000;
-      return start.getTime() < be && end > bs;
+      return start.getTime() < bs + b.durationMinutes * 60000 && end > bs;
     });
   });
 }
 
-function slotDisabled(hhmm: string, busy: BusySlot[], totalDuration: number, date: Date): boolean {
-  if (totalDuration === 0) return true;
-  const [h, m] = hhmm.split(":").map(Number);
-  const start = new Date(date); start.setHours(h, m, 0, 0);
-  if (start.getTime() < Date.now()) return true;
-  const end = start.getTime() + totalDuration * 60000;
-  return busy.some((b) => {
-    const bs = new Date(b.start).getTime();
-    const be = bs + b.durationMinutes * 60000;
-    return start.getTime() < be && end > bs;
-  });
-}
-
 const STATUS_COLOR: Record<string, string> = {
-  CONFIRMED: "bg-emerald-500",
-  PENDING_DEPOSIT: "bg-amber-400",
-  COMPLETED: "bg-[var(--muted)]/40",
-  CANCELLED: "bg-red-400",
-  EXPIRED: "bg-gray-300",
-  NO_SHOW: "bg-orange-400"
+  CONFIRMED: "bg-emerald-500", PENDING_DEPOSIT: "bg-amber-400",
+  COMPLETED: "bg-[var(--muted)]/40", CANCELLED: "bg-red-400",
+  EXPIRED: "bg-gray-300", NO_SHOW: "bg-orange-400"
 };
-
 const STATUS_LABEL: Record<string, { text: string; cls: string }> = {
   CONFIRMED: { text: "Confirmed", cls: "text-emerald-700 bg-emerald-50" },
   PENDING_DEPOSIT: { text: "Awaiting deposit", cls: "text-amber-700 bg-amber-50" },
@@ -152,30 +114,20 @@ const STATUS_LABEL: Record<string, { text: string; cls: string }> = {
 };
 
 /* ── Mini Month Grid ────────────────────────────────────────────── */
-function MonthGrid({
-  year, month, bookingDates, selectedDate, onSelect
-}: {
-  year: number; month: number;
-  bookingDates: Set<string>;
-  selectedDate: Date | null;
-  onSelect: (d: Date) => void;
+function MonthGrid({ year, month, bookingDates, selectedDate, onSelect }: {
+  year: number; month: number; bookingDates: Set<string>;
+  selectedDate: Date | null; onSelect: (d: Date) => void;
 }) {
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const today = isoDate(new Date());
-
-  const cells: (null | number)[] = [
-    ...Array(firstDay).fill(null),
-    ...Array.from({ length: daysInMonth }, (_, i) => i + 1)
-  ];
+  const cells: (null | number)[] = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
   while (cells.length % 7 !== 0) cells.push(null);
 
   return (
     <div>
       <div className="grid grid-cols-7 text-center">
-        {DAYS.map((d) => (
-          <div key={d} className="py-1 text-xs font-bold text-[var(--muted)]">{d}</div>
-        ))}
+        {DAYS.map((d) => <div key={d} className="py-1 text-xs font-bold text-[var(--muted)]">{d}</div>)}
         {cells.map((day, idx) => {
           if (!day) return <div key={idx} />;
           const dateObj = new Date(year, month, day);
@@ -185,27 +137,17 @@ function MonthGrid({
           const isSelected = selectedDate ? isoDate(selectedDate) === dateStr : false;
           const holidayName = getSAHolidayName(dateObj);
           return (
-            <button
-              key={idx}
-              onClick={() => onSelect(dateObj)}
-              title={holidayName ?? undefined}
+            <button key={idx} onClick={() => onSelect(dateObj)} title={holidayName ?? undefined}
               className={cn(
                 "relative mx-auto flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold transition",
                 isSelected && "bg-[var(--ink)] text-white",
                 !isSelected && holidayName && "bg-amber-100 text-amber-700 hover:bg-amber-200",
                 !isSelected && !holidayName && isToday && "text-[var(--brand)] font-black",
                 !isSelected && !holidayName && !isToday && "hover:bg-[var(--background)] text-[var(--ink)]"
-              )}
-            >
+              )}>
               {day}
-              {/* Booking dot */}
-              {hasBooking && !isSelected && (
-                <span className="absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-[var(--brand)]" />
-              )}
-              {/* Holiday marker */}
-              {holidayName && !isSelected && !hasBooking && (
-                <span className="absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-amber-400" />
-              )}
+              {hasBooking && !isSelected && <span className="absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-[var(--brand)]" />}
+              {holidayName && !isSelected && !hasBooking && <span className="absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-amber-400" />}
             </button>
           );
         })}
@@ -225,18 +167,16 @@ export function AccountCalendar({ initialBookings }: { initialBookings: Calendar
   const [allProviders, setAllProviders] = useState<Provider[]>([]);
   const [providerSearch, setProviderSearch] = useState("");
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
+  const [selectedService, setSelectedService] = useState<ProviderService | null>(null);
   const [busy, setBusy] = useState<BusySlot[]>([]);
   const [workingHours, setWorkingHours] = useState<WorkingHours | null>(null);
   const [busyLoading, setBusyLoading] = useState(false);
   const [bookingSlot, setBookingSlot] = useState<string | null>(null);
   const [bookingDate, setBookingDate] = useState<Date | null>(null);
   const [loadingProviders, setLoadingProviders] = useState(false);
-
-  // Provider IDs that have at least one open slot on the selected date (null = not yet checked)
   const [availableProviderIds, setAvailableProviderIds] = useState<Set<string> | null>(null);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
 
-  /* Load providers once when switching to book mode */
   useEffect(() => {
     if (mode !== "book-provider" || allProviders.length > 0) return;
     setLoadingProviders(true);
@@ -247,11 +187,12 @@ export function AccountCalendar({ initialBookings }: { initialBookings: Calendar
       .finally(() => setLoadingProviders(false));
   }, [mode, allProviders.length]);
 
-  /* When date or provider list changes in book mode, check who has availability */
+  /* Check which providers have availability on the selected date.
+     Falls back to 09:00-17:00 if provider hasn't set working hours — fixes
+     providers being incorrectly excluded from the list. */
   useEffect(() => {
     if (mode !== "book-provider" || !selectedDate || allProviders.length === 0) {
-      setAvailableProviderIds(null);
-      return;
+      setAvailableProviderIds(null); return;
     }
     setAvailableProviderIds(null);
     setCheckingAvailability(true);
@@ -262,10 +203,14 @@ export function AccountCalendar({ initialBookings }: { initialBookings: Calendar
         fetch(`/api/bookings/availability?providerProfileId=${p.id}&date=${ds}`)
           .then((r) => r.json())
           .then((d) => {
-            const wh: WorkingHours | null = d.workingHours ?? null;
+            // Use fallback hours if provider hasn't configured working hours
+            const wh: WorkingHours = d.workingHours ?? FALLBACK_WH;
             const busyList: BusySlot[] = d.busy ?? [];
-            if (!wh) return null;
-            return hasAvailableSlot(wh, busyList, dateSnap) ? p.id : null;
+            // A provider is available if any of their services has at least one open slot
+            const minDur = p.services.length > 0
+              ? Math.min(...p.services.map((s) => s.durationMinutes))
+              : 30;
+            return availableSlots(wh, busyList, dateSnap, minDur).length > 0 ? p.id : null;
           })
           .catch(() => null)
       )
@@ -285,14 +230,8 @@ export function AccountCalendar({ initialBookings }: { initialBookings: Calendar
       .finally(() => setBusyLoading(false));
   }, [selectedProvider, selectedDate]);
 
-  function prevMonth() {
-    if (month === 0) { setMonth(11); setYear((y) => y - 1); }
-    else setMonth((m) => m - 1);
-  }
-  function nextMonth() {
-    if (month === 11) { setMonth(0); setYear((y) => y + 1); }
-    else setMonth((m) => m + 1);
-  }
+  function prevMonth() { if (month === 0) { setMonth(11); setYear((y) => y - 1); } else setMonth((m) => m - 1); }
+  function nextMonth() { if (month === 11) { setMonth(0); setYear((y) => y + 1); } else setMonth((m) => m + 1); }
 
   const bookingDates = useMemo(() => {
     const s = new Set<string>();
@@ -317,13 +256,28 @@ export function AccountCalendar({ initialBookings }: { initialBookings: Calendar
     return list.slice(0, 20);
   }, [allProviders, providerSearch, availableProviderIds]);
 
-  const totalDuration = selectedProvider?.services.reduce((a, s) => a + s.durationMinutes, 0) ?? 0;
+  // Effective working hours — fallback to 09-17 if not configured
+  const effectiveWH = workingHours ?? (selectedProvider && !busyLoading ? FALLBACK_WH : null);
 
-  // Slots derived from actual working hours — only times where the service fits
-  const computedSlots = useMemo(() => {
-    if (!workingHours) return [];
-    return buildSlots(workingHours, totalDuration > 0 ? totalDuration : 60);
-  }, [workingHours, totalDuration]);
+  // Per-service slot availability for the selected provider + date
+  const serviceAvailability = useMemo(() => {
+    if (!selectedProvider || !effectiveWH || !selectedDate) return new Map<string, { slots: string[]; reason: string | null }>();
+    const map = new Map<string, { slots: string[]; reason: string | null }>();
+    for (const svc of selectedProvider.services) {
+      const possible = buildSlots(effectiveWH, svc.durationMinutes);
+      if (possible.length === 0) {
+        map.set(svc.id, { slots: [], reason: `Needs ${fmtDur(svc.durationMinutes)} — provider closes at ${effectiveWH.close}` });
+        continue;
+      }
+      const free = availableSlots(effectiveWH, busy, selectedDate, svc.durationMinutes);
+      if (free.length === 0) {
+        map.set(svc.id, { slots: [], reason: "Fully booked for this day" });
+      } else {
+        map.set(svc.id, { slots: free, reason: null });
+      }
+    }
+    return map;
+  }, [selectedProvider, effectiveWH, busy, selectedDate]);
 
   return (
     <div>
@@ -332,27 +286,22 @@ export function AccountCalendar({ initialBookings }: { initialBookings: Calendar
         <p className="mt-1 text-sm text-[var(--muted)]">View your appointments and book new ones</p>
       </div>
 
-      {/* Mode toggle */}
       <div className="mb-6 flex gap-1 rounded-2xl border border-[var(--line)] bg-white p-1 max-w-sm">
-        <button
-          onClick={() => setMode("my-bookings")}
+        <button onClick={() => setMode("my-bookings")}
           className={cn("flex-1 rounded-xl py-2 text-sm font-semibold transition",
-            mode === "my-bookings" ? "bg-[var(--ink)] text-white" : "text-[var(--muted)] hover:text-[var(--ink)]")}
-        >
+            mode === "my-bookings" ? "bg-[var(--ink)] text-white" : "text-[var(--muted)] hover:text-[var(--ink)]")}>
           My bookings
         </button>
-        <button
-          onClick={() => setMode("book-provider")}
+        <button onClick={() => setMode("book-provider")}
           className={cn("flex-1 rounded-xl py-2 text-sm font-semibold transition",
-            mode === "book-provider" ? "bg-[var(--ink)] text-white" : "text-[var(--muted)] hover:text-[var(--ink)]")}
-        >
+            mode === "book-provider" ? "bg-[var(--ink)] text-white" : "text-[var(--muted)] hover:text-[var(--ink)]")}>
           Book a provider
         </button>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[340px_1fr]">
+      <div className="grid gap-6 lg:grid-cols-[300px_1fr]">
         {/* ── Left: calendar + provider picker ── */}
-        <div className="space-y-5">
+        <div className="space-y-4">
           <div className="rounded-2xl border border-[var(--line)] bg-white p-4">
             <div className="mb-3 flex items-center justify-between">
               <button onClick={prevMonth} className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--line)] hover:bg-[var(--background)] transition">
@@ -363,64 +312,45 @@ export function AccountCalendar({ initialBookings }: { initialBookings: Calendar
                 <ChevronRight className="h-4 w-4" />
               </button>
             </div>
-            <MonthGrid
-              year={year}
-              month={month}
+            <MonthGrid year={year} month={month}
               bookingDates={mode === "my-bookings" ? bookingDates : new Set()}
               selectedDate={selectedDate}
-              onSelect={(d) => { setSelectedDate(d); setSelectedProvider(null); }}
+              onSelect={(d) => { setSelectedDate(d); setSelectedProvider(null); setSelectedService(null); }}
             />
           </div>
 
-          {/* Provider picker (book mode only) */}
           {mode === "book-provider" && (
             <div className="rounded-2xl border border-[var(--line)] bg-white p-4">
               <p className="mb-1 text-sm font-black">Select a provider</p>
               {selectedDate && (
-                <p className="mb-3 text-xs text-[var(--muted)]">
-                  Showing providers available on {selectedDate.toLocaleDateString("en-ZA", { weekday: "short", day: "numeric", month: "short" })}
+                <p className="mb-2 text-xs text-[var(--muted)]">
+                  Available on {selectedDate.toLocaleDateString("en-ZA", { weekday: "short", day: "numeric", month: "short" })}
                 </p>
               )}
               <div className="mb-3 flex items-center gap-2 rounded-xl border border-[var(--line)] px-3 py-2">
                 <Search className="h-4 w-4 shrink-0 text-[var(--muted)]" />
-                <input
-                  value={providerSearch}
-                  onChange={(e) => setProviderSearch(e.target.value)}
-                  placeholder="Search…"
-                  className="min-w-0 flex-1 bg-transparent text-sm outline-none"
-                />
+                <input value={providerSearch} onChange={(e) => setProviderSearch(e.target.value)}
+                  placeholder="Search…" className="min-w-0 flex-1 bg-transparent text-sm outline-none" />
               </div>
               {(loadingProviders || checkingAvailability) ? (
                 <div className="flex items-center justify-center gap-2 py-4 text-xs text-[var(--muted)]">
                   <Loader2 className="h-4 w-4 animate-spin text-[var(--brand)]" />
-                  {checkingAvailability ? "Checking availability…" : "Loading…"}
+                  {checkingAvailability ? "Checking availability…" : "Loading providers…"}
                 </div>
               ) : filteredProviders.length === 0 ? (
-                <div className="py-6 text-center">
+                <div className="py-5 text-center">
                   <p className="text-sm font-bold text-[var(--muted)]">No providers available</p>
-                  {selectedDate && (
-                    <p className="mt-1 text-xs text-[var(--muted)]">
-                      on {selectedDate.toLocaleDateString("en-ZA", { weekday: "long", day: "numeric", month: "long" })}
-                    </p>
-                  )}
+                  {selectedDate && <p className="mt-1 text-xs text-[var(--muted)]">on {selectedDate.toLocaleDateString("en-ZA", { weekday: "long", day: "numeric", month: "long" })}</p>}
                 </div>
               ) : (
-                <ul className="max-h-56 overflow-y-auto space-y-1">
+                <ul className="max-h-52 overflow-y-auto space-y-1">
                   {filteredProviders.map((p) => (
                     <li key={p.id}>
-                      <button
-                        onClick={() => setSelectedProvider(p)}
-                        className={cn(
-                          "w-full rounded-xl px-3 py-2 text-left text-sm font-semibold transition",
-                          selectedProvider?.id === p.id
-                            ? "bg-[var(--ink)] text-white"
-                            : "hover:bg-[var(--background)] text-[var(--ink)]"
-                        )}
-                      >
+                      <button onClick={() => { setSelectedProvider(p); setSelectedService(null); }}
+                        className={cn("w-full rounded-xl px-3 py-2 text-left text-sm font-semibold transition",
+                          selectedProvider?.id === p.id ? "bg-[var(--ink)] text-white" : "hover:bg-[var(--background)] text-[var(--ink)]")}>
                         {p.name}
-                        <span className={cn("ml-2 text-xs", selectedProvider?.id === p.id ? "text-white/70" : "text-[var(--muted)]")}>
-                          {p.category}
-                        </span>
+                        <span className={cn("ml-2 text-xs", selectedProvider?.id === p.id ? "text-white/70" : "text-[var(--muted)]")}>{p.category}</span>
                       </button>
                     </li>
                   ))}
@@ -432,16 +362,15 @@ export function AccountCalendar({ initialBookings }: { initialBookings: Calendar
 
         {/* ── Right: day view ── */}
         <div className="rounded-2xl border border-[var(--line)] bg-white p-5">
+          {/* Header */}
           <div className="mb-4">
             <h2 className="text-base font-black">
-              {selectedDate
-                ? selectedDate.toLocaleDateString("en-ZA", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
-                : "Select a date"}
+              {selectedDate ? selectedDate.toLocaleDateString("en-ZA", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : "Select a date"}
             </h2>
             {selectedDate && getSAHolidayName(selectedDate) && (
-              <p className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-700">
+              <span className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-700">
                 🎉 {getSAHolidayName(selectedDate)}
-              </p>
+              </span>
             )}
           </div>
 
@@ -450,10 +379,8 @@ export function AccountCalendar({ initialBookings }: { initialBookings: Calendar
               <div className="flex flex-col items-center justify-center py-12 text-center">
                 <CalendarDays className="mb-3 h-10 w-10 text-[var(--muted)]/40" />
                 <p className="text-sm font-bold text-[var(--muted)]">No appointments on this day</p>
-                <button
-                  onClick={() => setMode("book-provider")}
-                  className="mt-4 inline-flex items-center gap-2 rounded-full bg-[var(--brand)] px-4 py-2 text-sm font-bold text-white hover:bg-[var(--brand-dark)]"
-                >
+                <button onClick={() => setMode("book-provider")}
+                  className="mt-4 inline-flex items-center gap-2 rounded-full bg-[var(--brand)] px-4 py-2 text-sm font-bold text-white hover:bg-[var(--brand-dark)]">
                   Book a provider
                 </button>
               </div>
@@ -469,11 +396,7 @@ export function AccountCalendar({ initialBookings }: { initialBookings: Calendar
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="font-black text-[var(--ink)]">{b.serviceName}</p>
-                          {lbl && (
-                            <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold", lbl.cls)}>
-                              {lbl.text}
-                            </span>
-                          )}
+                          {lbl && <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold", lbl.cls)}>{lbl.text}</span>}
                         </div>
                         <p className="text-sm text-[var(--brand)] font-semibold">{b.providerName}</p>
                         <div className="mt-1 flex items-center gap-3 text-xs text-[var(--muted)]">
@@ -489,66 +412,105 @@ export function AccountCalendar({ initialBookings }: { initialBookings: Calendar
                 })}
               </div>
             )
+          ) : !selectedProvider ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <CalendarCheck className="mb-3 h-10 w-10 text-[var(--muted)]/40" />
+              <p className="text-sm font-bold text-[var(--muted)]">
+                {availableProviderIds?.size === 0 ? "No providers available on this day" : "Select a provider on the left"}
+              </p>
+            </div>
           ) : (
-            !selectedProvider ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <CalendarCheck className="mb-3 h-10 w-10 text-[var(--muted)]/40" />
-                <p className="text-sm font-bold text-[var(--muted)]">
-                  {availableProviderIds?.size === 0
-                    ? "No providers available on this day"
-                    : "Select an available provider on the left"}
-                </p>
-              </div>
-            ) : busyLoading ? (
-              <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-[var(--brand)]" /></div>
-            ) : computedSlots.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <CalendarDays className="mb-3 h-10 w-10 text-[var(--muted)]/40" />
-                <p className="text-sm font-bold text-[var(--muted)]">
-                  {workingHours ? "No available slots on this day" : "Provider not available on this day"}
-                </p>
-              </div>
-            ) : (
+            /* ── Provider selected: services + time slots side by side ── */
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_200px]">
+              {/* Services list */}
               <div>
-                <p className="mb-4 text-sm text-[var(--muted)]">
-                  Availability for <strong>{selectedProvider.name}</strong> — click an open slot to book
+                <p className="mb-3 text-xs font-bold uppercase tracking-wider text-[var(--muted)]">
+                  {selectedProvider.name} — select a service
+                  {effectiveWH && <span className="ml-2 normal-case font-normal">· {effectiveWH.open}–{effectiveWH.close}</span>}
                 </p>
-                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
-                  {computedSlots.map((label) => {
-                    const disabled = slotDisabled(label, busy, totalDuration > 0 ? totalDuration : 60, selectedDate!);
-                    return (
-                      <button
-                        key={label}
-                        disabled={disabled}
-                        onClick={() => { setBookingSlot(label); setBookingDate(selectedDate ? new Date(selectedDate) : null); }}
-                        className={cn(
-                          "rounded-xl border py-2.5 text-sm font-bold transition",
-                          disabled
-                            ? "border-[var(--line)] bg-[var(--background)] text-[var(--muted)]/40 cursor-not-allowed line-through"
-                            : "border-[var(--brand)]/30 bg-[var(--brand)]/5 text-[var(--brand)] hover:bg-[var(--brand)] hover:text-white"
-                        )}
-                      >
-                        {label}
-                      </button>
-                    );
-                  })}
-                </div>
+                {busyLoading ? (
+                  <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-[var(--brand)]" /></div>
+                ) : (
+                  <div className="space-y-2">
+                    {selectedProvider.services.map((svc) => {
+                      const avail = serviceAvailability.get(svc.id);
+                      const canBook = !!avail && avail.slots.length > 0;
+                      const isSelected = selectedService?.id === svc.id;
+                      return (
+                        <button
+                          key={svc.id}
+                          disabled={!canBook}
+                          onClick={() => setSelectedService(isSelected ? null : svc)}
+                          className={cn(
+                            "w-full flex items-start justify-between gap-3 rounded-2xl border p-3 text-left transition",
+                            isSelected ? "border-[var(--brand)] bg-[var(--brand)]/5 ring-1 ring-[var(--brand)]" :
+                            canBook ? "border-[var(--line)] hover:border-[var(--brand)]" :
+                            "border-[var(--line)] opacity-50 cursor-not-allowed"
+                          )}
+                        >
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-[var(--ink)]">{svc.name}</p>
+                            <p className="mt-0.5 text-xs text-[var(--muted)]">
+                              {fmtDur(svc.durationMinutes)} · {ZAR(svc.priceCents)}
+                            </p>
+                            {avail && (
+                              <p className={cn("mt-1 text-xs font-semibold",
+                                canBook ? "text-emerald-600" : "text-red-500")}>
+                                {canBook
+                                  ? `${avail.slots.length} slot${avail.slots.length !== 1 ? "s" : ""} available`
+                                  : avail.reason}
+                              </p>
+                            )}
+                          </div>
+                          {isSelected && <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-[var(--brand)]" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-            )
+
+              {/* Time slots panel */}
+              <div>
+                {!selectedService ? (
+                  <div className="flex h-full items-center justify-center rounded-2xl border border-dashed border-[var(--line)] px-4 py-10">
+                    <p className="text-center text-xs text-[var(--muted)]">← Select a service to see available times</p>
+                  </div>
+                ) : (
+                  <>
+                    <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">
+                      Available times
+                    </p>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {(serviceAvailability.get(selectedService.id)?.slots ?? []).map((label) => (
+                        <button
+                          key={label}
+                          onClick={() => { setBookingSlot(label); setBookingDate(selectedDate ? new Date(selectedDate) : null); }}
+                          className="rounded-xl border border-[var(--brand)]/30 bg-[var(--brand)]/5 py-2 text-xs font-bold text-[var(--brand)] transition hover:bg-[var(--brand)] hover:text-white"
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
           )}
         </div>
       </div>
 
-      {bookingSlot && selectedProvider && bookingDate && (
+      {bookingSlot && selectedProvider && bookingDate && selectedService && (
         <BookingFlow
-          open
-          drawer
+          open drawer
           onClose={() => { setBookingSlot(null); setBookingDate(null); }}
           providerProfileId={selectedProvider.id}
           providerName={selectedProvider.name}
           services={selectedProvider.services}
+          preselectedServiceId={selectedService.id}
           preselectedDate={bookingDate}
           preselectedSlot={bookingSlot}
+          startStep="review"
         />
       )}
     </div>

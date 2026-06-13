@@ -215,8 +215,11 @@ export function MarketplaceApp() {
     [distanceByProvider, providers]
   );
   const displayNew = useMemo(
-    () => newProviders.map((p) => ({ ...p, distanceKm: distanceByProvider[p.id] !== undefined ? Math.round(distanceByProvider[p.id] * 10) / 10 : p.distanceKm })),
-    [distanceByProvider, newProviders]
+    () => newProviders
+      .map((p) => ({ ...p, distanceKm: distanceByProvider[p.id] !== undefined ? Math.round(distanceByProvider[p.id] * 10) / 10 : p.distanceKm }))
+      .filter((p) => (distanceByProvider[p.id] ?? p.distanceKm ?? 0) <= radiusKm)
+      .sort((a, b) => (distanceByProvider[a.id] ?? a.distanceKm) - (distanceByProvider[b.id] ?? b.distanceKm)),
+    [distanceByProvider, newProviders, radiusKm]
   );
   const displayTrending = useMemo(
     () => trendingProviders.map((p) => ({ ...p, distanceKm: distanceByProvider[p.id] !== undefined ? Math.round(distanceByProvider[p.id] * 10) / 10 : p.distanceKm })),
@@ -423,6 +426,12 @@ export function MarketplaceApp() {
 
       <Footer />
 
+      {/* Spacer so content isn't hidden behind mobile tab bar */}
+      <div className="h-16 sm:hidden" />
+
+      {/* Mobile bottom tab bar */}
+      <MobileTabBar loggedIn={loggedIn} />
+
       {/* Scroll-to-top progress button */}
       <AnimatePresence>
         {scrollProgress > 0.05 && (
@@ -453,6 +462,49 @@ export function MarketplaceApp() {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+/* ─── Mobile bottom tab bar ───────────────────────────────── */
+
+function MobileTabBar({ loggedIn }: { loggedIn: boolean | null }) {
+  return (
+    <nav className="fixed bottom-0 inset-x-0 z-50 flex items-center justify-around border-t border-[var(--line)] bg-white/95 backdrop-blur-md sm:hidden" style={{ paddingBottom: "max(0px, env(safe-area-inset-bottom))" }}>
+      <a href="/" className="flex flex-1 flex-col items-center gap-0.5 py-3 text-[10px] font-semibold text-[var(--muted)]">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" className="text-[var(--ink)]">
+          <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
+        </svg>
+        <span>Home</span>
+      </a>
+      <a href="#map" className="flex flex-1 flex-col items-center gap-0.5 py-3 text-[10px] font-semibold text-[var(--muted)]">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
+          <line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/>
+        </svg>
+        <span>Nearby</span>
+      </a>
+      <a href="/account/bookings" className="flex flex-1 flex-col items-center gap-0.5 py-3 text-[10px] font-semibold text-[var(--muted)]">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+        </svg>
+        <span>Bookings</span>
+      </a>
+      {loggedIn === true ? (
+        <a href="/account/messages" className="flex flex-1 flex-col items-center gap-0.5 py-3 text-[10px] font-semibold text-[var(--muted)]">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+          <span>Messages</span>
+        </a>
+      ) : (
+        <a href="/account" className="flex flex-1 flex-col items-center gap-0.5 py-3 text-[10px] font-semibold text-[var(--muted)]">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+          </svg>
+          <span>Profile</span>
+        </a>
+      )}
+    </nav>
   );
 }
 
@@ -529,12 +581,18 @@ function TopBar({ searchInTopBar, searchProps, providers, areaName, loggedIn }: 
                 className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-0.5 md:flex"
                 aria-label="Primary"
               >
-                {["Discover", "Portfolio", "Bookings", "Inbox"].map((item) => (
+                {["Discover", "Portfolio", "Bookings"].map((item) => (
                   <a key={item} href={`#${item.toLowerCase()}`}
                     className="rounded-lg px-3 py-2 text-sm font-semibold text-[var(--muted)] transition hover:text-[var(--ink)]">
                     {item}
                   </a>
                 ))}
+                {loggedIn === true && (
+                  <a href="#inbox"
+                    className="rounded-lg px-3 py-2 text-sm font-semibold text-[var(--muted)] transition hover:text-[var(--ink)]">
+                    Inbox
+                  </a>
+                )}
               </motion.nav>
             )}
           </AnimatePresence>
@@ -626,13 +684,20 @@ function TopBar({ searchInTopBar, searchProps, providers, areaName, loggedIn }: 
 
               {/* Nav links */}
               <nav className="flex flex-col gap-1 p-4">
-                {["Discover", "Portfolio", "Bookings", "Inbox"].map((item) => (
+                {["Discover", "Portfolio", "Bookings"].map((item) => (
                   <a key={item} href={`#${item.toLowerCase()}`}
                     onClick={() => setMobileMenuOpen(false)}
                     className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-[var(--ink)] transition hover:bg-[var(--background)]">
                     {item}
                   </a>
                 ))}
+                {loggedIn === true && (
+                  <a href="#inbox"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-[var(--ink)] transition hover:bg-[var(--background)]">
+                    Inbox
+                  </a>
+                )}
               </nav>
 
               {/* Bottom actions */}
@@ -814,6 +879,16 @@ function HeroSection({
               <Sliders className="h-3 w-3" />
               {radiusKm} km
             </button>
+            <a
+              href="#map"
+              className="shrink-0 inline-flex items-center justify-center h-7 w-7 rounded-full border border-[var(--line)] bg-[var(--background)] text-[var(--muted)] hover:border-[var(--ink)] hover:text-[var(--ink)]"
+              title="View nearby on map"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
+                <line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/>
+              </svg>
+            </a>
           </div>
           {/* Date */}
           <button

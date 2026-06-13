@@ -31,10 +31,12 @@ export async function GET() {
   const bookings = await prisma.booking.findMany({
     where: { clientId: userId },
     include: {
-      service: { select: { name: true, durationMinutes: true } },
+      service: { select: { name: true, durationMinutes: true, priceCents: true } },
+      items: { select: { priceCents: true } },
       providerProfile: {
         select: {
           businessName: true, handle: true, avatarUrl: true, city: true,
+          latitude: true, longitude: true,
           cancelNoticeHours: true, cancelFeePercent: true,
           rescheduleNoticeHours: true, rescheduleFeePercent: true, policyText: true
         }
@@ -44,31 +46,41 @@ export async function GET() {
   });
 
   return NextResponse.json({
-    bookings: bookings.map((b) => ({
-      id: b.id,
-      status: b.status,
-      startsAt: b.startsAt.toISOString(),
-      createdAt: b.createdAt.toISOString(),
-      checkedInAt: b.checkedInAt?.toISOString() ?? null,
-      noShowAt: b.noShowAt?.toISOString() ?? null,
-      checkInCode: b.status === "CONFIRMED" && b.checkInCodeExpiresAt && b.checkInCodeExpiresAt > new Date() ? b.checkInCode : null,
-      completedAt: b.completedAt?.toISOString() ?? null,
-      feedbackRequestedAt: b.feedbackRequestedAt?.toISOString() ?? null,
-      notes: b.notes,
-      depositCents: b.depositCents,
-      durationMinutes: b.service?.durationMinutes ?? b.durationMinutes,
-      service: b.service?.name ?? "Service",
-      provider: {
-        name: b.providerProfile.businessName,
-        handle: b.providerProfile.handle,
-        city: b.providerProfile.city,
-        cancelNoticeHours: b.providerProfile.cancelNoticeHours,
-        cancelFeePercent: b.providerProfile.cancelFeePercent,
-        rescheduleNoticeHours: b.providerProfile.rescheduleNoticeHours,
-        rescheduleFeePercent: b.providerProfile.rescheduleFeePercent,
-        policyText: b.providerProfile.policyText
-      }
-    }))
+    bookings: bookings.map((b) => {
+      const priceCents = b.items.length > 0
+        ? b.items.reduce((sum, i) => sum + i.priceCents, 0)
+        : (b.service?.priceCents ?? 0);
+      return {
+        id: b.id,
+        status: b.status,
+        startsAt: b.startsAt.toISOString(),
+        createdAt: b.createdAt.toISOString(),
+        checkedInAt: b.checkedInAt?.toISOString() ?? null,
+        noShowAt: b.noShowAt?.toISOString() ?? null,
+        checkInCode: b.status === "CONFIRMED" && b.checkInCodeExpiresAt && b.checkInCodeExpiresAt > new Date() ? b.checkInCode : null,
+        completedAt: b.completedAt?.toISOString() ?? null,
+        feedbackRequestedAt: b.feedbackRequestedAt?.toISOString() ?? null,
+        notes: b.notes,
+        depositCents: b.depositCents,
+        priceCents,
+        durationMinutes: b.service?.durationMinutes ?? b.durationMinutes,
+        service: b.service?.name ?? "Service",
+        agentName: null,
+        agentHandle: null,
+        provider: {
+          name: b.providerProfile.businessName,
+          handle: b.providerProfile.handle,
+          city: b.providerProfile.city,
+          lat: b.providerProfile.latitude,
+          lng: b.providerProfile.longitude,
+          cancelNoticeHours: b.providerProfile.cancelNoticeHours,
+          cancelFeePercent: b.providerProfile.cancelFeePercent,
+          rescheduleNoticeHours: b.providerProfile.rescheduleNoticeHours,
+          rescheduleFeePercent: b.providerProfile.rescheduleFeePercent,
+          policyText: b.providerProfile.policyText
+        }
+      };
+    })
   });
 }
 
