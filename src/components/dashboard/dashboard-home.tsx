@@ -3,6 +3,7 @@
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { ArrowDown, ArrowUp, Calendar, CheckCircle, Clock, TrendingUp, Users } from "lucide-react";
 import { format } from "date-fns";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { QrScanner } from "./qr-scanner";
 
@@ -61,6 +62,8 @@ export function DashboardHome({
   upcoming: Array<{ id: string; clientName: string; service: string; startsAt: string; checkedInAt?: string | null; noShowAt?: string | null; status: string; priceCents: number; depositCents: number }>;
   chartData: Array<{ label: string; revenue: number }>;
 }) {
+  const router = useRouter();
+
   async function updateAttendance(id: string, action: "check_in" | "no_show" | "complete") {
     const confirmationCode = action === "check_in" ? window.prompt("Enter the customer's 6-digit check-in code")?.trim() : undefined;
     if (action === "check_in" && !confirmationCode) return;
@@ -82,7 +85,10 @@ export function DashboardHome({
         </div>
         <div className="flex gap-2">
           <QrScanner />
-          <button className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-50">
+          <button
+            onClick={() => router.push("/dashboard/appointments")}
+            className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-50"
+          >
             Appointments
           </button>
         </div>
@@ -129,7 +135,7 @@ export function DashboardHome({
         <div className="rounded-2xl border border-gray-100 bg-white shadow-sm">
           <div className="flex items-center justify-between px-5 py-4">
             <h2 className="font-black">Upcoming appointments</h2>
-            <button className="text-xs font-bold text-[#D94472] hover:underline">View all</button>
+            <button onClick={() => router.push("/dashboard/appointments")} className="text-xs font-bold text-[#D94472] hover:underline">View all</button>
           </div>
 
           {upcoming.length === 0 ? (

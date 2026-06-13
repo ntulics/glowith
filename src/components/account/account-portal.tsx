@@ -51,11 +51,15 @@ type Booking = {
   provider: { name: string; handle: string; city?: string | null } & ProviderPolicy;
 };
 
-/** Bookings that expired or were abandoned (pending deposit) within 1 hour are hidden from history */
+/** Hide EXPIRED bookings (failed deposit attempts) and stale PENDING_DEPOSIT from history */
 function shouldHideFromHistory(booking: Booking): boolean {
-  if (booking.status !== "EXPIRED" && booking.status !== "PENDING_DEPOSIT") return false;
-  const ageMs = Date.now() - new Date(booking.createdAt).getTime();
-  return ageMs > 60 * 60 * 1000; // older than 1 hour
+  if (booking.status === "EXPIRED") return true;
+  if (booking.status === "PENDING_DEPOSIT") {
+    // Only show if still within the 15-min payment window
+    const ageMs = Date.now() - new Date(booking.createdAt).getTime();
+    return ageMs > 15 * 60 * 1000;
+  }
+  return false;
 }
 
 /** QR code component using canvas */
@@ -158,7 +162,8 @@ function appointmentState(booking: Booking) {
       icon: Clock
     };
   }
-  return { label: "Upcoming", color: "text-emerald-700 bg-emerald-50", icon: CalendarCheck };
+  if (start > now) return { label: "Upcoming", color: "text-emerald-700 bg-emerald-50", icon: CalendarCheck };
+  return { label: "Past", color: "text-[var(--muted)] bg-[var(--background)]", icon: CheckCircle2 };
 }
 
 /** Returns mm:ss remaining for a 15-min pending deposit window, or null if expired */

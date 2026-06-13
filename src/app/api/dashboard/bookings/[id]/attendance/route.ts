@@ -56,7 +56,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     action === "check_in"
       ? { checkedInAt: new Date(), checkedInById: userId, noShowAt: null }
       : action === "no_show"
-        ? { noShowAt: new Date(), checkedInAt: null, checkedInById: null, status: "COMPLETED" as const, completedAt: new Date() }
+        ? { noShowAt: new Date(), checkedInAt: null, checkedInById: null }
         : { status: "COMPLETED" as const, completedAt: new Date(), feedbackRequestedAt: new Date() };
 
   const updated = await prisma.booking.update({

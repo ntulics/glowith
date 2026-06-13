@@ -8,6 +8,7 @@ import {
   BookOpen,
   Briefcase,
   Calendar,
+  CalendarCheck,
   ChevronDown,
   HardDrive,
   Images,
@@ -26,6 +27,7 @@ import { useEffect, useState } from "react";
 
 const nav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard/appointments", label: "Appointments", icon: CalendarCheck },
   { href: "/dashboard/calendar", label: "Calendar", icon: Calendar },
   { href: "/dashboard/catalog", label: "Catalog", icon: BookOpen },
   { href: "/dashboard/portfolio", label: "Portfolio", icon: Images },
