@@ -81,7 +81,7 @@ export async function GET(request: Request) {
       bio: p.bio,
       services: p.services.map((s) => ({
         id: s.id, name: s.name, category: s.category,
-        durationMinutes: s.durationMinutes, priceCents: s.priceCents, depositCents: s.depositCents,
+        durationMinutes: s.durationMinutes, priceCents: s.priceCents, depositCents: s.depositCents, depositIsPercent: s.depositIsPercent,
         extras: (s as any).extras?.map((e: any) => ({ id: e.id, name: e.name, description: e.description, priceCents: e.priceCents, durationMinutes: e.durationMinutes })) ?? []
       })),
       portfolio: p.posts.map((post) => ({

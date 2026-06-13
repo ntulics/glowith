@@ -181,6 +181,93 @@ function ExtraModal({ extra, serviceId, onClose, onSaved }: {
   );
 }
 
+// ── Deposit Section with live revenue breakdown ───────────────────────────────
+function DepositSection({ form, set, platformDepositPercent }: {
+  form: { priceCents: number; depositCents: number; depositIsPercent: boolean };
+  set: (key: string, value: unknown) => void;
+  platformDepositPercent: number;
+}) {
+  const priceCents = Math.round(Number(form.priceCents) * 100);
+  const depositCents = (() => {
+    const raw = Number(form.depositCents);
+    if (form.depositIsPercent) return Math.round((priceCents * Math.min(100, Math.max(0, raw))) / 100);
+    return Math.round(raw * 100);
+  })();
+  const platformCut = Math.round((depositCents * platformDepositPercent) / 100);
+  // Paystack SA: 1.5% + R2 flat, capped at R2000
+  const paystackFee = Math.min(Math.round(depositCents * 0.015) + 200, 200000);
+  const providerNet = Math.max(depositCents - platformCut - paystackFee, 0);
+  const showBreakdown = depositCents > 0 && priceCents > 0;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-gray-500">Deposit type</span>
+        <div className="flex overflow-hidden rounded-lg border border-gray-200 text-xs font-bold">
+          <button type="button" onClick={() => set("depositIsPercent", false)}
+            className={`px-3 py-1.5 transition ${!form.depositIsPercent ? "bg-[var(--brand)] text-white" : "text-gray-500 hover:bg-gray-50"}`}>
+            Fixed (R)
+          </button>
+          <button type="button" onClick={() => set("depositIsPercent", true)}
+            className={`px-3 py-1.5 transition ${form.depositIsPercent ? "bg-[var(--brand)] text-white" : "text-gray-500 hover:bg-gray-50"}`}>
+            Percentage (%)
+          </button>
+        </div>
+      </div>
+      <div className="relative rounded-xl border border-gray-200 bg-white focus-within:border-[var(--brand)]">
+        <span className="absolute -top-2 left-3 bg-white px-1 text-[10px] text-gray-500">
+          {form.depositIsPercent ? "Deposit % of total (incl. extras)" : "Deposit amount (R) — min R100"}
+        </span>
+        <div className="flex items-center">
+          {!form.depositIsPercent && <span className="pl-3 text-sm text-gray-400">R</span>}
+          <input type="number" value={form.depositCents} onChange={(e) => set("depositCents", e.target.value)}
+            min={form.depositIsPercent ? 0 : 100} max={form.depositIsPercent ? 100 : undefined}
+            step={form.depositIsPercent ? 1 : 1}
+            className="w-full rounded-xl bg-transparent px-3 py-2.5 text-sm outline-none" />
+          {form.depositIsPercent && <span className="pr-3 text-sm text-gray-400">%</span>}
+        </div>
+      </div>
+
+      {/* Live revenue breakdown */}
+      {showBreakdown && (
+        <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 space-y-2">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Revenue breakdown (deposit)</p>
+          <div className="space-y-1.5 text-xs">
+            <div className="flex justify-between">
+              <span className="text-gray-500">Client pays (deposit)</span>
+              <span className="font-bold text-gray-800">{formatZAR(depositCents)}</span>
+            </div>
+            <div className="flex justify-between text-gray-400">
+              <span>Platform commission ({platformDepositPercent}%)</span>
+              <span>– {formatZAR(platformCut)}</span>
+            </div>
+            <div className="flex justify-between text-gray-400">
+              <span>Paystack processing fee (~1.5% + R2)</span>
+              <span>– {formatZAR(paystackFee)}</span>
+            </div>
+            <div className="flex justify-between border-t border-gray-200 pt-1.5 font-bold">
+              <span className="text-gray-700">You receive</span>
+              <span className="text-emerald-600">{formatZAR(providerNet)}</span>
+            </div>
+          </div>
+          {priceCents > depositCents && (
+            <p className="text-[10px] text-gray-400 pt-1 border-t border-gray-100">
+              + {formatZAR(priceCents - depositCents)} remaining paid directly to you at appointment
+            </p>
+          )}
+        </div>
+      )}
+      {!showBreakdown && (
+        <p className="text-xs text-gray-400">
+          {form.depositIsPercent
+            ? "Set a service price above to preview your revenue split."
+            : "Minimum R100. Enter an amount to preview your revenue split."}
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ── Service Form Modal ───────────────────────────────────────────────────────
 function ServiceFormModal({ service, profileId, categories, agents, onClose, onSaved }: {
   service?: Service | null; profileId: string;
@@ -188,13 +275,20 @@ function ServiceFormModal({ service, profileId, categories, agents, onClose, onS
   onClose: () => void; onSaved: (s: Service) => void;
 }) {
   const [tab, setTab] = useState<TabId>("details");
+  const [platformDepositPercent, setPlatformDepositPercent] = useState(20);
+  useEffect(() => {
+    fetch("/api/platform/config").then(r => r.json()).then(d => {
+      if (d.depositPercent != null) setPlatformDepositPercent(d.depositPercent);
+    }).catch(() => {});
+  }, []);
+
   const [form, setForm] = useState({
     name: service?.name ?? "",
     categoryId: service?.categoryId ?? "",
     durationMinutes: service?.durationMinutes ?? 60,
     priceCents: service ? service.priceCents / 100 : 0,
-    depositCents: service ? service.depositCents : 0,
-    depositIsPercent: service?.depositIsPercent ?? false,
+    depositCents: service ? service.depositCents : 50,
+    depositIsPercent: service?.depositIsPercent ?? true,
     active: service?.active ?? true,
     description: service?.description ?? "",
     color: "#D94472",
@@ -233,6 +327,10 @@ function ServiceFormModal({ service, profileId, categories, agents, onClose, onS
     setNameError(!hasName); setDurationError(!hasDuration);
     if (!hasName || !hasDuration) { setTab(!hasName ? "details" : "pricing"); return; }
 
+    // Minimum R100 for fixed deposits
+    if (!form.depositIsPercent && Number(form.depositCents) > 0 && Number(form.depositCents) < 100) {
+      setError("Fixed deposit must be at least R100"); setTab("pricing"); return;
+    }
     setLoading(true); setError("");
     const url = service ? `/api/dashboard/services/${service.id}` : "/api/dashboard/services";
     const method = service ? "PUT" : "POST";
@@ -506,30 +604,7 @@ function ServiceFormModal({ service, profileId, categories, agents, onClose, onS
                   </div>
 
                   {/* Deposit */}
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-500">Deposit type</span>
-                      <div className="flex overflow-hidden rounded-lg border border-gray-200 text-xs font-bold">
-                        <button type="button" onClick={() => set("depositIsPercent", false)}
-                          className={`px-3 py-1.5 transition ${!form.depositIsPercent ? "bg-[var(--brand)] text-white" : "text-gray-500 hover:bg-gray-50"}`}>Fixed (R)</button>
-                        <button type="button" onClick={() => set("depositIsPercent", true)}
-                          className={`px-3 py-1.5 transition ${form.depositIsPercent ? "bg-[var(--brand)] text-white" : "text-gray-500 hover:bg-gray-50"}`}>Percentage (%)</button>
-                      </div>
-                    </div>
-                    <div className="relative rounded-xl border border-gray-200 bg-white focus-within:border-[var(--brand)]">
-                      <span className="absolute -top-2 left-3 bg-white px-1 text-[10px] text-gray-500">
-                        {form.depositIsPercent ? "Deposit % of total (incl. extras)" : "Deposit amount (R)"}
-                      </span>
-                      <div className="flex items-center">
-                        {!form.depositIsPercent && <span className="pl-3 text-sm text-gray-400">R</span>}
-                        <input type="number" value={form.depositCents} onChange={(e) => set("depositCents", e.target.value)}
-                          min={0} max={form.depositIsPercent ? 100 : undefined} step={form.depositIsPercent ? 1 : 0.01}
-                          className="w-full rounded-xl bg-transparent px-3 py-2.5 text-sm outline-none" />
-                        {form.depositIsPercent && <span className="pr-3 text-sm text-gray-400">%</span>}
-                      </div>
-                    </div>
-                    {form.depositIsPercent && <p className="text-xs text-gray-400">Calculated at booking time from the service price + any extras selected.</p>}
-                  </div>
+                  <DepositSection form={form} set={set} platformDepositPercent={platformDepositPercent} />
 
                   {/* Pricing by date toggle */}
                   <div className="flex items-center gap-3 rounded-xl border border-gray-100 px-4 py-3">

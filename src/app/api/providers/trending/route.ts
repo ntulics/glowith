@@ -78,7 +78,7 @@ export async function GET() {
       bio: p.bio,
       services: p.services.map((s) => ({
         id: s.id, name: s.name, durationMinutes: s.durationMinutes,
-        priceCents: s.priceCents, depositCents: s.depositCents
+        priceCents: s.priceCents, depositCents: s.depositCents, depositIsPercent: s.depositIsPercent
       })),
       portfolio: p.posts.map((post) => ({
         id: post.id, caption: post.caption, image: mediaUrl(post.imageUrl) ?? post.imageUrl,

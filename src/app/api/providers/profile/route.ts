@@ -52,7 +52,7 @@ export async function GET(request: Request) {
       appointmentsCompleted: p._count.bookings,
       services: p.services.map((s) => ({
         id: s.id, name: s.name, category: s.category,
-        durationMinutes: s.durationMinutes, priceCents: s.priceCents, depositCents: s.depositCents
+        durationMinutes: s.durationMinutes, priceCents: s.priceCents, depositCents: s.depositCents, depositIsPercent: s.depositIsPercent
       })),
       posts: p.posts.map((post) => ({
         id: post.id, caption: post.caption, imageUrl: mediaUrl(post.imageUrl) ?? post.imageUrl,
@@ -71,7 +71,7 @@ export async function GET(request: Request) {
           category: s.category,
           durationMinutes: s.durationMinutes,
           priceCents: s.priceCents,
-          depositCents: s.depositCents
+          depositCents: s.depositCents, depositIsPercent: s.depositIsPercent
         }))
       }))
     }
