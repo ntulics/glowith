@@ -309,7 +309,12 @@ export function CalendarView() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+    // Poll every 30 s so check-ins from admin/scan show up without manual refresh
+    const id = setInterval(load, 30000);
+    return () => clearInterval(id);
+  }, [load]);
 
   // Reset panel state on change
   useEffect(() => {

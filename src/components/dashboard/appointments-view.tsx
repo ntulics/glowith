@@ -116,13 +116,24 @@ export function AppointmentsView() {
     const res = await fetch("/api/dashboard/appointments");
     if (res.ok) {
       const data = await res.json();
-      setAppointments(data.appointments);
+      setAppointments((prev) => {
+        const next: Appointment[] = data.appointments;
+        // Auto-switch to "In progress" tab when a new in-progress appointment appears
+        const wasCurrentEmpty = !prev.some((a) => a.isCurrent);
+        if (wasCurrentEmpty && next.some((a) => a.isCurrent)) {
+          setSection("current");
+        }
+        return next;
+      });
     }
     setLoading(false);
   }, []);
 
   useEffect(() => {
     load();
+    // Poll every 30 s so check-ins from admin/scan show up without manual refresh
+    const id = setInterval(load, 30000);
+    return () => clearInterval(id);
   }, [load]);
 
   async function updateAttendance(id: string, action: "check_in" | "no_show" | "complete") {
