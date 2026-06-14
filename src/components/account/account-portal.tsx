@@ -190,6 +190,46 @@ function usePendingCountdown(createdAt: string, status: BookingStatus) {
   return remaining;
 }
 
+function AppointmentProgressBar({ checkedInAt, endsAt }: { checkedInAt: string; endsAt: string }) {
+  const [pct, setPct] = useState(0);
+  const [display, setDisplay] = useState("");
+  const [over, setOver] = useState(false);
+
+  useEffect(() => {
+    function tick() {
+      const start = new Date(checkedInAt).getTime();
+      const end = new Date(endsAt).getTime();
+      const now = Date.now();
+      const elapsed = now - start;
+      const total = end - start;
+      setPct(Math.min(100, Math.max(0, (elapsed / total) * 100)));
+      const remaining = end - now;
+      setOver(remaining <= 0);
+      if (remaining <= 0) { setDisplay("Time's up"); return; }
+      const s = Math.floor(remaining / 1000);
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const sec = s % 60;
+      setDisplay(h > 0 ? `${h}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")} left` : `${m}:${String(sec).padStart(2,"0")} left`);
+    }
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [checkedInAt, endsAt]);
+
+  return (
+    <div className="mt-3 space-y-1.5 rounded-xl border border-emerald-100 bg-emerald-50 p-3">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-bold text-emerald-700">Appointment in progress</span>
+        <span className={cn("text-xs font-bold", over ? "text-red-600" : "text-emerald-700")}>{display}</span>
+      </div>
+      <div className="h-2 w-full overflow-hidden rounded-full bg-emerald-100">
+        <div className="h-full rounded-full transition-all duration-1000" style={{ width: `${pct}%`, backgroundColor: over ? "#EF4444" : "#16A34A" }} />
+      </div>
+    </div>
+  );
+}
+
 type Tab = "upcoming" | "history";
 
 // Provider detail drawer
@@ -569,7 +609,15 @@ export function AccountPortal({
                         <p className="mt-2 text-xs font-bold text-[var(--muted)]">
                           Deposit: {formatCurrency(booking.depositCents)}
                         </p>
-                        {booking.status === "CONFIRMED" && (
+                        {/* Live progress bar when appointment is in progress */}
+                        {booking.checkedInAt && !booking.noShowAt && (() => {
+                          const end = bookingEnd(booking);
+                          if (end > new Date()) {
+                            return <AppointmentProgressBar checkedInAt={booking.checkedInAt} endsAt={end.toISOString()} />;
+                          }
+                          return null;
+                        })()}
+                        {booking.status === "CONFIRMED" && !booking.checkedInAt && (
                           <BookingQrCode
                             code={booking.checkInCode ?? ""}
                             bookingId={booking.id}

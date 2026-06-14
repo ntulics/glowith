@@ -62,16 +62,56 @@ const DEFAULT_WH: WorkingHour[] = [
 
 const STATUS_COLORS: Record<string, string> = {
   CONFIRMED: "#0891B2",
+  IN_PROGRESS: "#16A34A",
   COMPLETED: "#16A34A",
   CANCELLED: "#9CA3AF",
   PENDING_DEPOSIT: "#D97706",
 };
 const STATUS_LABEL: Record<string, string> = {
   CONFIRMED: "Confirmed",
+  IN_PROGRESS: "In progress",
   COMPLETED: "Completed",
   CANCELLED: "Cancelled",
   PENDING_DEPOSIT: "Awaiting deposit",
 };
+
+// Live countdown timer for in-progress appointments (calendar side panel)
+function CalLiveTimer({ checkedInAt, endsAt }: { checkedInAt: string; endsAt: string }) {
+  const [pct, setPct] = useState(0);
+  const [display, setDisplay] = useState("");
+  const [over, setOver] = useState(false);
+
+  useEffect(() => {
+    function tick() {
+      const start = new Date(checkedInAt).getTime();
+      const end = new Date(endsAt).getTime();
+      const now = Date.now();
+      const total = end - start;
+      const elapsed = now - start;
+      setPct(Math.min(100, Math.max(0, (elapsed / total) * 100)));
+      const remaining = end - now;
+      setOver(remaining <= 0);
+      if (remaining <= 0) { setDisplay("Time's up"); return; }
+      const s = Math.floor(remaining / 1000);
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const sec = s % 60;
+      setDisplay(h > 0 ? `${h}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")} left` : `${m}:${String(sec).padStart(2,"0")} left`);
+    }
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [checkedInAt, endsAt]);
+
+  return (
+    <div className="space-y-1">
+      <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
+        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: over ? "#EF4444" : "#16A34A" }} />
+      </div>
+      <p className={cn("text-xs font-bold", over ? "text-red-600" : "text-emerald-700")}>{display}</p>
+    </div>
+  );
+}
 const DAY_NAMES = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
 const PX_PER_HOUR = 80; // taller rows = fills screen, less blank space
 
@@ -688,8 +728,9 @@ export function CalendarView() {
                                 {format(parseISO(b.startsAt), "h:mm a")} · {b.service}
                               </p>
                               <p className="truncate text-[9px] leading-tight text-gray-500">{b.clientName}</p>
-                              {b.checkedInAt && !b.noShowAt && <span className="text-[8px] font-bold text-green-600">✓ In</span>}
-                              {b.noShowAt && <span className="text-[8px] font-bold text-red-500">✗ NS</span>}
+                              {b.checkedInAt && !b.noShowAt && !b.completedAt && <span className="inline-flex items-center gap-0.5 text-[8px] font-bold text-green-600"><span className="h-1 w-1 rounded-full bg-green-500 animate-pulse" />In progress</span>}
+                              {b.checkedInAt && !b.noShowAt && b.completedAt && <span className="text-[8px] font-bold text-green-600">✓ Done</span>}
+                              {b.noShowAt && <span className="text-[8px] font-bold text-red-500">✗ No-show</span>}
                             </>
                           )}
                         </button>
@@ -734,12 +775,19 @@ export function CalendarView() {
                   <button onClick={() => setPanel(null)} className="rounded-lg p-1 hover:bg-gray-100"><X className="h-4 w-4" /></button>
                 </div>
                 <div className="flex flex-col gap-3 p-4">
-                  {/* Status badge */}
-                  <span className="inline-flex w-fit items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold"
-                    style={{ backgroundColor: (STATUS_COLORS[bk.status] ?? "#9CA3AF") + "20", color: STATUS_COLORS[bk.status] ?? "#9CA3AF" }}>
-                    <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: STATUS_COLORS[bk.status] ?? "#9CA3AF" }} />
-                    {STATUS_LABEL[bk.status] ?? bk.status}
-                  </span>
+                  {/* Status badge — show "In progress" when checked in and not yet complete */}
+                  {(() => {
+                    const isInProgress = checkedIn && !noShow && !bk.completedAt;
+                    const statusKey = isInProgress ? "IN_PROGRESS" : bk.status;
+                    const color = STATUS_COLORS[statusKey] ?? "#9CA3AF";
+                    return (
+                      <span className="inline-flex w-fit items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold"
+                        style={{ backgroundColor: color + "20", color }}>
+                        <span className="h-1.5 w-1.5 rounded-full animate-pulse" style={{ backgroundColor: color }} />
+                        {STATUS_LABEL[statusKey] ?? bk.status}
+                      </span>
+                    );
+                  })()}
 
                   {/* Service + time */}
                   <div className="rounded-xl border border-gray-100 p-3 space-y-1">
@@ -751,6 +799,11 @@ export function CalendarView() {
                     <p className="flex items-center gap-1 text-xs text-gray-500">
                       <Clock className="h-3 w-3" />{bk.durationMinutes} min
                     </p>
+                    {/* Live progress for in-progress appointment */}
+                    {checkedIn && !noShow && !bk.completedAt && (() => {
+                      const endsAt = new Date(parseISO(bk.startsAt).getTime() + bk.durationMinutes * 60000).toISOString();
+                      return <CalLiveTimer checkedInAt={bk.checkedInAt!} endsAt={endsAt} />;
+                    })()}
                   </div>
 
                   {/* Client */}
