@@ -154,6 +154,10 @@ export function CalendarView() {
   const [newMode, setNewMode] = useState<"pick" | "block" | "booking">("pick");
   const [blockReason, setBlockReason] = useState("");
   const [blockAgentId, setBlockAgentId] = useState(""); // which agent to block (BUSINESS only)
+  const [blockConflicts, setBlockConflicts] = useState<{ id: string; clientName: string; service: string; startsAt: string }[]>([]);
+  const [blockConflictStep, setBlockConflictStep] = useState<"idle" | "confirming">("idle");
+  const [blockReassignMap, setBlockReassignMap] = useState<Record<string, string>>({}); // bookingId → agentId
+  const [blockReassignAgents, setBlockReassignAgents] = useState<AgentOption[]>([]);
   // Date-range block
   const [blockStartDate, setBlockStartDate] = useState("");
   const [blockStartTime, setBlockStartTime] = useState("09:00");
@@ -412,11 +416,47 @@ export function CalendarView() {
   }
 
   async function createBlock() {
+    const [bSy, bSm, bSd] = blockStartDate.split("-").map(Number);
+    const [bSh, bSmn] = blockStartTime.split(":").map(Number);
+    const [bEy, bEm, bEd] = blockEndDate.split("-").map(Number);
+    const [bEh, bEmn] = blockEndTime.split(":").map(Number);
+    const startsAt = new Date(bSy, bSm - 1, bSd, bSh, bSmn);
+    const endsAt = new Date(bEy, bEm - 1, bEd, bEh, bEmn);
+    if (isNaN(startsAt.getTime()) || isNaN(endsAt.getTime()) || endsAt <= startsAt) return;
+
+    // If not yet in confirming state, check for booking conflicts first
+    if (blockConflictStep === "idle") {
+      setActionLoading("block");
+      try {
+        const params = new URLSearchParams({ startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() });
+        if (isBusiness && blockAgentId) params.set("agentProfileId", blockAgentId);
+        const r = await fetch(`/api/dashboard/block-conflicts?${params}`);
+        const d = await r.json();
+        if (d.bookings?.length > 0) {
+          setBlockConflicts(d.bookings);
+          // Load available agents for reassignment (all agents except the one being blocked)
+          const reassignAgents = agents.filter(a => !blockAgentId || a.id !== blockAgentId);
+          setBlockReassignAgents(reassignAgents);
+          setBlockReassignMap({});
+          setBlockConflictStep("confirming");
+          return;
+        }
+      } finally { setActionLoading(null); }
+    }
+
+    // Proceed with block creation (and any reassignments)
     setActionLoading("block");
     try {
-      const startsAt = new Date(`${blockStartDate}T${blockStartTime}`);
-      const endsAt = new Date(`${blockEndDate}T${blockEndTime}`);
-      if (isNaN(startsAt.getTime()) || isNaN(endsAt.getTime()) || endsAt <= startsAt) return;
+      // Reassign bookings first
+      for (const [bookingId, newAgentId] of Object.entries(blockReassignMap)) {
+        if (newAgentId) {
+          await fetch(`/api/dashboard/bookings/${bookingId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ agentProfileId: newAgentId })
+          });
+        }
+      }
       const res = await fetch("/api/dashboard/blocked-slots", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -427,7 +467,12 @@ export function CalendarView() {
           agentProfileId: isBusiness && blockAgentId ? blockAgentId : undefined,
         }),
       });
-      if (res.ok) { await load(); setPanel(null); }
+      if (res.ok) {
+        setBlockConflictStep("idle");
+        setBlockConflicts([]);
+        await load();
+        setPanel(null);
+      }
     } finally { setActionLoading(null); }
   }
 
@@ -873,11 +918,46 @@ export function CalendarView() {
                       placeholder="Holiday, leave, maintenance…"
                       className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-[#D94472] focus:outline-none" />
                   </div>
+                  {/* Conflict reassignment step */}
+                  {blockConflictStep === "confirming" && blockConflicts.length > 0 && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-3">
+                      <p className="text-xs font-bold text-amber-900">
+                        {blockConflicts.length} appointment{blockConflicts.length !== 1 ? "s" : ""} overlap this block. Reassign before blocking:
+                      </p>
+                      {blockConflicts.map(bk => (
+                        <div key={bk.id} className="space-y-1">
+                          <p className="text-xs font-semibold text-amber-800">
+                            {bk.clientName} · {bk.service} · {format(parseISO(bk.startsAt), "h:mm a")}
+                          </p>
+                          {blockReassignAgents.length > 0 ? (
+                            <select
+                              value={blockReassignMap[bk.id] ?? ""}
+                              onChange={e => setBlockReassignMap(m => ({ ...m, [bk.id]: e.target.value }))}
+                              className="w-full rounded-lg border border-amber-300 bg-white px-2 py-1.5 text-xs focus:border-[#D94472] focus:outline-none"
+                            >
+                              <option value="">Skip reassignment</option>
+                              {blockReassignAgents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                            </select>
+                          ) : (
+                            <p className="text-xs text-amber-700">No other agents available to reassign to.</p>
+                          )}
+                        </div>
+                      ))}
+                      <p className="text-xs text-amber-700">Clients will be notified of any reassignment.</p>
+                    </div>
+                  )}
+
                   <button onClick={createBlock} disabled={actionLoading === "block" || !blockStartDate || !blockEndDate}
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 py-2.5 text-sm font-bold text-white hover:bg-gray-700 disabled:opacity-40">
                     {actionLoading === "block" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
-                    Block time
+                    {blockConflictStep === "confirming" ? "Confirm & block time" : "Block time"}
                   </button>
+                  {blockConflictStep === "confirming" && (
+                    <button type="button" onClick={() => { setBlockConflictStep("idle"); setBlockConflicts([]); }}
+                      className="w-full text-center text-xs text-gray-400 hover:text-gray-700">
+                      Cancel
+                    </button>
+                  )}
                 </div>
               )}
 

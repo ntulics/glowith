@@ -20,22 +20,36 @@ export async function GET(request: Request) {
 
   if (!date || !slot) return NextResponse.json({ error: "date and slot required" }, { status: 400 });
 
-  const slotStart = new Date(`${date}T${slot}:00`).getTime();
+  const [yr, mo, dy] = date.split("-").map(Number);
+  const [hr, mn] = slot.split(":").map(Number);
+  const slotStart = new Date(yr, mo - 1, dy, hr, mn).getTime();
   const slotEnd = slotStart + duration * 60000;
 
-  const dayStart = new Date(`${date}T00:00:00`);
-  const dayEnd = new Date(`${date}T23:59:59`);
+  const dayStart = new Date(yr, mo - 1, dy, 0, 0, 0);
+  const dayEnd = new Date(yr, mo - 1, dy, 23, 59, 59);
 
-  // Fetch agents belonging to this business (filter by service if provided)
-  const agents = await prisma.providerProfile.findMany({
-    where: {
-      parentBusinessId: profile.id,
-      ...(serviceId ? { services: { some: { id: serviceId, active: true } } } : {})
-    },
+  // Fetch all agents for this business
+  const allAgents = await prisma.providerProfile.findMany({
+    where: { parentBusinessId: profile.id },
     select: { id: true, businessName: true, avatarUrl: true }
   });
 
-  if (agents.length === 0) return NextResponse.json({ agents: [] });
+  if (allAgents.length === 0) return NextResponse.json({ agents: [] });
+
+  // If a serviceId is provided, narrow to agents explicitly assigned to that service via ServiceAgent.
+  // If no explicit assignments exist (service offered by all), include everyone.
+  let agents = allAgents;
+  if (serviceId) {
+    const assignments = await prisma.serviceAgent.findMany({
+      where: { serviceId, agentId: { in: allAgents.map((a) => a.id) } },
+      select: { agentId: true }
+    });
+    if (assignments.length > 0) {
+      const assigned = new Set(assignments.map((x) => x.agentId));
+      agents = allAgents.filter((a) => assigned.has(a.id));
+    }
+    // else: no assignments → all agents can do this service
+  }
 
   const agentIds = agents.map((a) => a.id);
 

@@ -12,6 +12,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     status?: string;
     notes?: string;
     startsAt?: string;
+    agentProfileId?: string;
   };
 
   const profile = await prisma.providerProfile.findUnique({
@@ -44,6 +45,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     data.noShowAt = null;
     data.completedAt = null;
     data.status = "CONFIRMED";
+  }
+
+  if (body.agentProfileId) {
+    // Validate agent belongs to this business
+    const agent = await prisma.providerProfile.findFirst({
+      where: { id: body.agentProfileId, parentBusinessId: profile.parentBusinessId ?? profile.id }
+    });
+    if (agent) data.providerProfileId = agent.id;
   }
 
   if (Object.keys(data).length === 0) {

@@ -45,12 +45,8 @@ export async function GET(request: Request) {
     select: { workingHoursJson: true, workOnPublicHolidays: true }
   }) : null;
 
-  const agents = await prisma.providerProfile.findMany({
-    where: {
-      parentBusinessId: providerProfileId,
-      // If serviceId provided, only include agents who offer that service
-      ...(serviceId ? { services: { some: { id: serviceId, active: true } } } : {})
-    },
+  const allAgents = await prisma.providerProfile.findMany({
+    where: { parentBusinessId: providerProfileId },
     select: {
       id: true,
       handle: true,
@@ -61,6 +57,20 @@ export async function GET(request: Request) {
     },
     orderBy: { createdAt: "asc" }
   });
+
+  // Narrow by serviceId using the ServiceAgent join table.
+  // If no explicit assignments exist (service offered by all), include everyone.
+  let agents = allAgents;
+  if (serviceId && allAgents.length > 0) {
+    const assignments = await prisma.serviceAgent.findMany({
+      where: { serviceId, agentId: { in: allAgents.map((a) => a.id) } },
+      select: { agentId: true }
+    });
+    if (assignments.length > 0) {
+      const assigned = new Set(assignments.map((x) => x.agentId));
+      agents = allAgents.filter((a) => assigned.has(a.id));
+    }
+  }
 
   // If availability check requested, filter out agents with conflicting bookings
   let available = agents;
