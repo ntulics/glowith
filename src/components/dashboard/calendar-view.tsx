@@ -46,6 +46,7 @@ type BlockedSlot = {
 type ExtraOption = { id: string; name: string; durationMinutes: number; priceCents: number };
 type ServiceOption = { id: string; name: string; durationMinutes: number; priceCents: number; extras: ExtraOption[] };
 type ClientOption = { id: string; name: string; email: string; image: string | null };
+type AgentOption = { id: string; name: string; avatarUrl: string | null };
 
 type PanelState =
   | { type: "booking"; booking: Booking }
@@ -139,6 +140,10 @@ export function CalendarView() {
   const [panel, setPanel] = useState<PanelState | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
+  // Provider type + agents (for BUSINESS providers)
+  const [isBusiness, setIsBusiness] = useState(false);
+  const [agents, setAgents] = useState<AgentOption[]>([]);
+
   // Booking detail state
   const [checkInCode, setCheckInCode] = useState("");
   const [checkInError, setCheckInError] = useState("");
@@ -148,6 +153,7 @@ export function CalendarView() {
   // New-slot panel state
   const [newMode, setNewMode] = useState<"pick" | "block" | "booking">("pick");
   const [blockReason, setBlockReason] = useState("");
+  const [blockAgentId, setBlockAgentId] = useState(""); // which agent to block (BUSINESS only)
   // Date-range block
   const [blockStartDate, setBlockStartDate] = useState("");
   const [blockStartTime, setBlockStartTime] = useState("09:00");
@@ -162,6 +168,9 @@ export function CalendarView() {
   const [services, setServices] = useState<ServiceOption[]>([]);
   const [selectedServiceId, setSelectedServiceId] = useState("");
   const [selectedExtraIds, setSelectedExtraIds] = useState<string[]>([]);
+  const [bookingAgentId, setBookingAgentId] = useState(""); // which agent for the manual booking
+  const [availableAgentsForSlot, setAvailableAgentsForSlot] = useState<AgentOption[]>([]);
+  const [loadingAgents, setLoadingAgents] = useState(false);
   const [bookingNotes, setBookingNotes] = useState("");
   const [bookingError, setBookingError] = useState("");
   const clientTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -237,6 +246,10 @@ export function CalendarView() {
       }
       if (typeof whData.workOnPublicHolidays === "boolean") {
         setWorkOnPublicHolidays(whData.workOnPublicHolidays);
+      }
+      if (whData.providerType === "BUSINESS") {
+        setIsBusiness(true);
+        setAgents((whData.agents ?? []).map((a: any) => ({ id: a.id, name: a.name, avatarUrl: a.avatarUrl ?? null })));
       }
       if (Array.isArray(blockData.slots)) setBlockedSlots(blockData.slots);
       if (Array.isArray(svcData.services)) {
@@ -381,6 +394,23 @@ export function CalendarView() {
     } finally { setActionLoading(null); }
   }
 
+  // Load available agents for a service+slot (BUSINESS mode)
+  // Uses /api/dashboard/agents-available — a scoped endpoint that resolves the caller's business ID
+  async function refreshAvailableAgents(serviceId: string, startsAt: Date) {
+    if (!isBusiness || !serviceId) return;
+    setLoadingAgents(true);
+    const ds = format(startsAt, "yyyy-MM-dd");
+    const slotTime = format(startsAt, "HH:mm");
+    const svc = services.find(s => s.id === serviceId);
+    const dur = svc ? svc.durationMinutes : 60;
+    try {
+      const r = await fetch(`/api/dashboard/agents-available?date=${ds}&slot=${slotTime}&duration=${dur}&serviceId=${serviceId}`);
+      const d = await r.json();
+      setAvailableAgentsForSlot((d.agents ?? []).map((a: any) => ({ id: a.id, name: a.name, avatarUrl: a.avatarUrl ?? null })));
+    } catch { setAvailableAgentsForSlot([]); }
+    setLoadingAgents(false);
+  }
+
   async function createBlock() {
     setActionLoading("block");
     try {
@@ -390,7 +420,12 @@ export function CalendarView() {
       const res = await fetch("/api/dashboard/blocked-slots", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(), reason: blockReason || null }),
+        body: JSON.stringify({
+          startsAt: startsAt.toISOString(),
+          endsAt: endsAt.toISOString(),
+          reason: blockReason || null,
+          agentProfileId: isBusiness && blockAgentId ? blockAgentId : undefined,
+        }),
       });
       if (res.ok) { await load(); setPanel(null); }
     } finally { setActionLoading(null); }
@@ -401,6 +436,7 @@ export function CalendarView() {
     setBookingError("");
     if (!selectedClient) { setBookingError("Select a client"); return; }
     if (!selectedServiceId) { setBookingError("Select a service"); return; }
+    if (isBusiness && !bookingAgentId) { setBookingError("Select an agent for this booking"); return; }
     setActionLoading("booking");
     try {
       const res = await fetch("/api/dashboard/bookings", {
@@ -412,6 +448,7 @@ export function CalendarView() {
           extraIds: selectedExtraIds,
           startsAt: panel.startsAt.toISOString(),
           notes: bookingNotes || null,
+          agentProfileId: isBusiness && bookingAgentId ? bookingAgentId : undefined,
         }),
       });
       const data = await res.json();
@@ -801,6 +838,17 @@ export function CalendarView() {
 
               {newMode === "block" && (
                 <div className="flex flex-col gap-3 p-4">
+                  {/* Agent selector — BUSINESS only */}
+                  {isBusiness && agents.length > 0 && (
+                    <div>
+                      <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">Block for agent</label>
+                      <select value={blockAgentId} onChange={e => setBlockAgentId(e.target.value)}
+                        className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-[#D94472] focus:outline-none">
+                        <option value="">All agents (business-wide)</option>
+                        {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                      </select>
+                    </div>
+                  )}
                   <div>
                     <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">From</label>
                     <div className="flex gap-2">
@@ -843,7 +891,14 @@ export function CalendarView() {
                   {/* Service */}
                   <div>
                     <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">Service</label>
-                    <select value={selectedServiceId} onChange={e => { setSelectedServiceId(e.target.value); setSelectedExtraIds([]); }}
+                    <select value={selectedServiceId} onChange={e => {
+                      const svcId = e.target.value;
+                      setSelectedServiceId(svcId);
+                      setSelectedExtraIds([]);
+                      setBookingAgentId("");
+                      setAvailableAgentsForSlot([]);
+                      if (panel?.type === "new" && svcId) refreshAvailableAgents(svcId, panel.startsAt);
+                    }}
                       className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-[#D94472] focus:outline-none">
                       <option value="">Select service…</option>
                       {services.map(s => (
@@ -851,6 +906,27 @@ export function CalendarView() {
                       ))}
                     </select>
                   </div>
+
+                  {/* Agent selector — BUSINESS only, shown after service selected */}
+                  {isBusiness && selectedServiceId && (
+                    <div>
+                      <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                        Assign to agent
+                        {loadingAgents && <span className="ml-1 text-gray-300">loading…</span>}
+                      </label>
+                      {availableAgentsForSlot.length === 0 && !loadingAgents ? (
+                        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
+                          No agents available for this service at {panel?.type === "new" ? format(panel.startsAt, "h:mm a") : "this time"}
+                        </p>
+                      ) : (
+                        <select value={bookingAgentId} onChange={e => setBookingAgentId(e.target.value)}
+                          className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-[#D94472] focus:outline-none">
+                          <option value="">Select agent…</option>
+                          {availableAgentsForSlot.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                        </select>
+                      )}
+                    </div>
+                  )}
 
                   {/* Extras */}
                   {availableExtras.length > 0 && (

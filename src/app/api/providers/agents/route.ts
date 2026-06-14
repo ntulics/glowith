@@ -34,9 +34,10 @@ export async function GET(request: Request) {
 
   if (!providerProfileId) return NextResponse.json({ agents: [] });
 
-  const dateStr = searchParams.get("date");   // YYYY-MM-DD
-  const slot = searchParams.get("slot");       // HH:MM
+  const dateStr = searchParams.get("date");    // YYYY-MM-DD
+  const slot = searchParams.get("slot");        // HH:MM
   const duration = parseInt(searchParams.get("duration") ?? "60", 10);
+  const serviceId = searchParams.get("serviceId"); // filter agents who offer this service
 
   // Load provider settings to enforce inherited working hours on agents
   const providerSettings = dateStr ? await prisma.providerProfile.findUnique({
@@ -45,14 +46,18 @@ export async function GET(request: Request) {
   }) : null;
 
   const agents = await prisma.providerProfile.findMany({
-    where: { parentBusinessId: providerProfileId },
+    where: {
+      parentBusinessId: providerProfileId,
+      // If serviceId provided, only include agents who offer that service
+      ...(serviceId ? { services: { some: { id: serviceId, active: true } } } : {})
+    },
     select: {
       id: true,
       handle: true,
       businessName: true,
       avatarUrl: true,
       category: true,
-      services: { where: { active: true }, select: { category: true } }
+      services: { where: { active: true }, select: { id: true, category: true } }
     },
     orderBy: { createdAt: "asc" }
   });
@@ -125,7 +130,8 @@ export async function GET(request: Request) {
       name: a.businessName,
       avatarUrl: mediaUrl(a.avatarUrl),
       category: a.category,
-      serviceCategories: [...new Set(a.services.map((s) => s.category).filter(Boolean))]
+      serviceCategories: [...new Set(a.services.map((s) => s.category).filter(Boolean))],
+      serviceIds: a.services.map((s) => s.id)
     }))
   });
 }

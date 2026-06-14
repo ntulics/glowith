@@ -1,7 +1,7 @@
 "use client";
 
 import { format } from "date-fns";
-import { BadgeCheck, BookOpen, DollarSign, TrendingUp, Users, Store, Clock } from "lucide-react";
+import { BadgeCheck, BookOpen, Database, HardDrive, TrendingUp, Users, Store, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const formatZAR = (cents: number) =>
@@ -39,8 +39,17 @@ function StatCard({ label, value, sub, icon: Icon, accent = false }: {
   );
 }
 
-export function AdminOverview({ stats, recentBookings, recentProviders }: {
+type DbStats = {
+  glowithDb: string;
+  serverUsed: string;
+  serverCapacity: string;
+  serverRemaining: string;
+  usagePercent: number;
+};
+
+export function AdminOverview({ stats, dbStats, recentBookings, recentProviders }: {
   stats: { totalProviders: number; pendingVerification: number; totalClients: number; totalBookings: number; totalRevenueCents: number };
+  dbStats?: DbStats;
   recentBookings: Array<{ id: string; clientName: string; providerName: string; service: string; status: string; depositCents: number; createdAt: string }>;
   recentProviders: Array<{ id: string; businessName: string; handle: string; category: string; city: string; verified: boolean; bookings: number; services: number; createdAt: string }>;
 }) {
@@ -70,6 +79,50 @@ export function AdminOverview({ stats, recentBookings, recentProviders }: {
           <StatCard label="Platform revenue" value={formatZAR(stats.totalRevenueCents)} sub="deposits collected" icon={TrendingUp} accent />
           <StatCard label="Verified" value={String(stats.totalProviders - stats.pendingVerification)} sub="of all providers" icon={BadgeCheck} />
         </div>
+
+        {/* Database storage */}
+        {dbStats && (
+          <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+            <div className="mb-4 flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50">
+                <HardDrive className="h-4 w-4 text-indigo-600" />
+              </div>
+              <div>
+                <p className="text-sm font-black">Database storage · thutong-server</p>
+                <p className="text-xs text-gray-400">Azure PostgreSQL Flexible Server · Standard_B1ms</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-3">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Database className="h-3.5 w-3.5 text-indigo-600" />
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-600">Glowith DB</p>
+                </div>
+                <p className="text-2xl font-black text-indigo-700">{dbStats.glowithDb}</p>
+              </div>
+              <div className="rounded-xl border border-gray-100 p-3">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Server used</p>
+                <p className="text-2xl font-black">{dbStats.serverUsed}</p>
+                <p className="text-[10px] text-gray-400">across all apps</p>
+              </div>
+              <div className="rounded-xl border border-gray-100 p-3">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Remaining</p>
+                <p className="text-2xl font-black text-emerald-700">{dbStats.serverRemaining}</p>
+                <p className="text-[10px] text-gray-400">of {dbStats.serverCapacity}</p>
+              </div>
+              <div className="rounded-xl border border-gray-100 p-3">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Usage</p>
+                <p className="text-2xl font-black">{dbStats.usagePercent}%</p>
+                <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+                  <div
+                    className={cn("h-full rounded-full transition-all", dbStats.usagePercent > 80 ? "bg-red-500" : dbStats.usagePercent > 60 ? "bg-amber-500" : "bg-emerald-500")}
+                    style={{ width: `${dbStats.usagePercent}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="grid gap-6 lg:grid-cols-2">
           {/* Recent providers */}

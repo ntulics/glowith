@@ -67,6 +67,8 @@ interface Props {
   onSelectDate: (d: Date) => void;
   /** Optional pre-fetched schedule (avoids an extra request when parent already has it) */
   schedule?: ProviderSchedule | null;
+  /** For BUSINESS providers: filter availability by agents who offer this service */
+  serviceId?: string;
 }
 
 const DOW_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -82,6 +84,7 @@ export function BookingCalendar({
   selectedDate,
   onSelectDate,
   schedule: scheduleProp,
+  serviceId,
 }: Props) {
   const [schedule, setSchedule] = useState<ProviderSchedule | null>(scheduleProp ?? null);
   const [dayMeta, setDayMeta] = useState<Record<string, DayMeta>>({});
@@ -133,7 +136,7 @@ export function BookingCalendar({
         setDayMeta((prev) => ({ ...prev, [ds]: { fill: 1, hasSlot: false, closed: true } }));
         return;
       }
-      fetch(`/api/bookings/availability?providerProfileId=${providerProfileId}&date=${ds}`)
+      fetch(`/api/bookings/availability?providerProfileId=${providerProfileId}&date=${ds}${serviceId ? `&serviceId=${serviceId}` : ""}`)
         .then((r) => r.json())
         .then((data) => {
           const wh: { open: string; close: string } | null = data.workingHours ?? null;

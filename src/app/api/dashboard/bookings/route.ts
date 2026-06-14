@@ -110,13 +110,24 @@ export async function POST(request: Request) {
   });
   if (!profile) return NextResponse.json({ error: "Provider profile not found" }, { status: 404 });
 
-  const { clientId, serviceId, startsAt, notes, extraIds = [] } = await request.json();
+  const { clientId, serviceId, startsAt, notes, extraIds = [], agentProfileId } = await request.json();
   if (!clientId || !serviceId || !startsAt) {
     return NextResponse.json({ error: "clientId, serviceId and startsAt are required" }, { status: 400 });
   }
 
+  // Determine booking target: agent profile or business own profile
+  let bookingProfileId = profile.id;
+  if (agentProfileId) {
+    const agent = await prisma.providerProfile.findFirst({
+      where: { id: agentProfileId, parentBusinessId: profile.id }
+    });
+    if (!agent) return NextResponse.json({ error: "Agent not found" }, { status: 404 });
+    bookingProfileId = agentProfileId;
+  }
+
+  // Service can be on the business profile or the specific agent's profile
   const service = await prisma.service.findFirst({
-    where: { id: serviceId, providerProfileId: profile.id, active: true }
+    where: { id: serviceId, providerProfileId: { in: [profile.id, bookingProfileId] }, active: true }
   });
   if (!service) return NextResponse.json({ error: "Service not found" }, { status: 404 });
 
@@ -129,7 +140,7 @@ export async function POST(request: Request) {
   const booking = await prisma.booking.create({
     data: {
       clientId,
-      providerProfileId: profile.id,
+      providerProfileId: bookingProfileId,
       serviceId,
       startsAt: new Date(startsAt),
       status: "CONFIRMED",

@@ -233,9 +233,11 @@ export function BookingFlow({
   }
 
   // Load agents available for a specific slot — sorted by fewest bookings (round-robin allocation)
+  // Also filters by serviceId so only agents who offer that service are shown
   async function loadAvailableAgents(ds: string, slotTime: string): Promise<Agent[]> {
     try {
-      const r = await fetch(`/api/providers/agents?providerProfileId=${providerProfileId}&date=${ds}&slot=${slotTime}&duration=${totalDuration || 60}`);
+      const svcParam = selectedIds[0] ? `&serviceId=${selectedIds[0]}` : "";
+      const r = await fetch(`/api/providers/agents?providerProfileId=${providerProfileId}&date=${ds}&slot=${slotTime}&duration=${totalDuration || 60}${svcParam}`);
       const d = await r.json();
       return d.agents ?? [];
     } catch { return []; }
@@ -836,6 +838,7 @@ export function BookingFlow({
                           serviceDuration={totalDuration}
                           selectedDate={date}
                           onSelectDate={(d) => { setDate(d); setSlot(null); }}
+                          serviceId={selectedIds[0] ?? undefined}
                         />
                       </div>
 

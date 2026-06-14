@@ -10,13 +10,20 @@ export async function GET() {
 
   const profile = await prisma.providerProfile.findUnique({
     where: { userId },
-    select: { workingHoursJson: true, workOnPublicHolidays: true }
+    select: {
+      workingHoursJson: true,
+      workOnPublicHolidays: true,
+      providerType: true,
+      agents: { select: { id: true, businessName: true, avatarUrl: true } }
+    }
   });
   if (!profile) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   return NextResponse.json({
     workingHoursJson: profile.workingHoursJson ?? null,
     workOnPublicHolidays: profile.workOnPublicHolidays,
+    providerType: profile.providerType,
+    agents: profile.agents.map((a) => ({ id: a.id, name: a.businessName, avatarUrl: a.avatarUrl })),
   });
 }
 
