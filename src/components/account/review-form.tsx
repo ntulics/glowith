@@ -108,7 +108,8 @@ export function ReviewForm({
   const [agentStars, setAgentStars] = useState(agent?.existingStars ?? 0);
   const [agentComment, setAgentComment] = useState(agent?.existingComment ?? "");
   const [submitting, setSubmitting] = useState(false);
-  const [done, setDone] = useState(false);
+  const alreadyReviewed = (provider.existingStars ?? 0) > 0;
+  const [done, setDone] = useState(alreadyReviewed);
   const [error, setError] = useState("");
 
   const date = new Date(startsAt).toLocaleDateString("en-ZA", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
@@ -133,15 +134,69 @@ export function ReviewForm({
   }
 
   if (done) {
+    const displayProviderStars = provider.existingStars ?? providerStars;
+    const displayAgentStars = agent ? (agent.existingStars ?? agentStars) : 0;
     return (
-      <div className="flex flex-col items-center py-16 text-center">
-        <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
-          <Check className="h-8 w-8 text-emerald-600" />
+      <div className="space-y-5">
+        <div>
+          <button onClick={() => router.back()} className="mb-4 inline-flex items-center gap-1.5 text-sm font-bold text-[var(--muted)] hover:text-[var(--ink)]">
+            <ArrowLeft className="h-4 w-4" /> Back
+          </button>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100">
+              <Check className="h-5 w-5 text-emerald-600" />
+            </div>
+            <div>
+              <h1 className="text-xl font-black text-[var(--ink)]">Review submitted</h1>
+              <p className="text-sm text-[var(--muted)]">{serviceName} · {date}</p>
+            </div>
+          </div>
         </div>
-        <h2 className="text-2xl font-black text-[var(--ink)]">Thanks for your review!</h2>
-        <p className="mt-2 text-[var(--muted)]">Your feedback helps others find great providers.</p>
+
+        {/* Provider submitted rating */}
+        <div className="rounded-2xl border border-[var(--line)] bg-white p-5 space-y-3">
+          <div className="flex items-center gap-3">
+            {provider.avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={provider.avatarUrl} alt={provider.name} className="h-12 w-12 rounded-xl object-cover shrink-0" />
+            ) : (
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--brand)] text-white text-lg font-black">{provider.name[0]}</div>
+            )}
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">Provider</p>
+              <p className="font-black text-[var(--ink)]">{provider.name}</p>
+            </div>
+          </div>
+          <div className="flex gap-0.5">
+            {[1,2,3,4,5].map(n => <Star key={n} className={cn("h-5 w-5", n <= displayProviderStars ? "fill-amber-400 text-amber-400" : "fill-none text-gray-200")} />)}
+          </div>
+          {(provider.existingComment) && <p className="text-sm text-[var(--muted)]">"{provider.existingComment}"</p>}
+        </div>
+
+        {/* Agent submitted rating */}
+        {agent && displayAgentStars > 0 && (
+          <div className="rounded-2xl border border-[var(--line)] bg-white p-5 space-y-3">
+            <div className="flex items-center gap-3">
+              {agent.avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={agent.avatarUrl} alt={agent.name} className="h-12 w-12 rounded-xl object-cover shrink-0" />
+              ) : (
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--brand)] text-white text-lg font-black">{agent.name[0]}</div>
+              )}
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">Artist / Agent</p>
+                <p className="font-black text-[var(--ink)]">{agent.name}</p>
+              </div>
+            </div>
+            <div className="flex gap-0.5">
+              {[1,2,3,4,5].map(n => <Star key={n} className={cn("h-5 w-5", n <= displayAgentStars ? "fill-amber-400 text-amber-400" : "fill-none text-gray-200")} />)}
+            </div>
+            {(agent.existingComment) && <p className="text-sm text-[var(--muted)]">"{agent.existingComment}"</p>}
+          </div>
+        )}
+
         <button onClick={() => router.push("/account")}
-          className="mt-6 rounded-xl bg-[var(--ink)] px-6 py-3 text-sm font-bold text-white hover:bg-[var(--ink)]/90">
+          className="w-full rounded-xl bg-[var(--ink)] py-3 text-sm font-bold text-white hover:bg-[var(--ink)]/90">
           Back to my appointments
         </button>
       </div>
