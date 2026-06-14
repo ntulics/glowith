@@ -48,7 +48,10 @@ type Booking = {
   depositCents: number;
   durationMinutes: number;
   service: string;
-  provider: { name: string; handle: string; city?: string | null } & ProviderPolicy;
+  agentName?: string | null;
+  agentHandle?: string | null;
+  agentProfileId?: string | null;
+  provider: { id?: string; name: string; handle: string; city?: string | null } & ProviderPolicy;
 };
 
 /** Hide EXPIRED bookings (failed deposit attempts) and stale PENDING_DEPOSIT from history */
@@ -146,8 +149,8 @@ function appointmentState(booking: Booking) {
   const start = new Date(booking.startsAt);
   const end = bookingEnd(booking);
   if (booking.noShowAt) return { label: "No-show recorded", color: "text-red-600 bg-red-50", icon: ShieldAlert };
-  if (booking.checkedInAt && now < end) return { label: "Checked in", color: "text-emerald-700 bg-emerald-50", icon: CheckCircle2 };
   if (booking.status === "COMPLETED") return STATUS_CONFIG.COMPLETED;
+  if (booking.checkedInAt && !booking.completedAt && now < end) return { label: "In progress", color: "text-emerald-700 bg-emerald-50", icon: CheckCircle2 };
   if (booking.status === "CANCELLED") return STATUS_CONFIG.CANCELLED;
   if (booking.status === "EXPIRED") return STATUS_CONFIG.EXPIRED;
   if (booking.status === "PENDING_DEPOSIT") return STATUS_CONFIG.PENDING_DEPOSIT;
@@ -343,6 +346,21 @@ export function AccountPortal({
 }) {
   const [bookings, setBookings] = useState<Booking[]>(initialBookings);
   const [tab, setTab] = useState<Tab>("upcoming");
+
+  // Poll for updated booking statuses (catches provider-side completions, check-ins, etc.)
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const res = await fetch("/api/account/bookings");
+        if (res.ok) {
+          const data = await res.json();
+          setBookings(data.bookings);
+        }
+      } catch { /* ignore */ }
+    };
+    const id = setInterval(poll, 30000);
+    return () => clearInterval(id);
+  }, []);
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [providerDrawer, setProviderDrawer] = useState<{ handle: string; name: string } | null>(null);
   const [payingDeposit, setPayingDeposit] = useState<string | null>(null);
@@ -609,8 +627,8 @@ export function AccountPortal({
                         <p className="mt-2 text-xs font-bold text-[var(--muted)]">
                           Deposit: {formatCurrency(booking.depositCents)}
                         </p>
-                        {/* Live progress bar when appointment is in progress */}
-                        {booking.checkedInAt && !booking.noShowAt && (() => {
+                        {/* Live progress bar — only while in progress (not after completed) */}
+                        {booking.checkedInAt && !booking.noShowAt && !booking.completedAt && (() => {
                           const end = bookingEnd(booking);
                           if (end > new Date()) {
                             return <AppointmentProgressBar checkedInAt={booking.checkedInAt} endsAt={end.toISOString()} />;
@@ -623,15 +641,31 @@ export function AccountPortal({
                             bookingId={booking.id}
                           />
                         )}
-                        {booking.status === "COMPLETED" && booking.feedbackRequestedAt && (
-                          <div className="mt-3 rounded-xl border border-pink-100 bg-pink-50 p-3 text-sm text-[var(--ink)]">
-                            <div className="flex items-center gap-2 font-black">
+                        {booking.status === "COMPLETED" && (
+                          <div className="mt-3 rounded-xl border border-pink-100 bg-pink-50 p-3 space-y-2">
+                            <div className="flex items-center gap-2 font-black text-sm text-[var(--ink)]">
                               <Star className="h-4 w-4 text-[var(--brand)]" />
-                              Rate your {booking.service.toLowerCase()} booking
+                              How was your appointment?
                             </div>
-                            <p className="mt-1 text-xs font-semibold text-[var(--muted)]">
-                              Please leave feedback for {booking.provider.name} and the agent who served you, if applicable.
-                            </p>
+                            <p className="text-xs text-[var(--muted)]">Share your experience to help others find great providers.</p>
+                            <div className="flex flex-wrap gap-2">
+                              <Link
+                                href={`/@${booking.provider.handle.replace("@","")}/review?bookingId=${booking.id}`}
+                                className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--brand)] px-3 py-2 text-xs font-bold text-white hover:bg-[var(--brand-dark)] transition"
+                              >
+                                <Star className="h-3 w-3" />
+                                Rate {booking.provider.name}
+                              </Link>
+                              {booking.agentHandle && (
+                                <Link
+                                  href={`/@${booking.agentHandle.replace("@","")}/review?bookingId=${booking.id}`}
+                                  className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--brand)] px-3 py-2 text-xs font-bold text-[var(--brand)] hover:bg-[var(--brand)]/5 transition"
+                                >
+                                  <Star className="h-3 w-3" />
+                                  Rate {booking.agentName}
+                                </Link>
+                              )}
+                            </div>
                           </div>
                         )}
                       </div>
