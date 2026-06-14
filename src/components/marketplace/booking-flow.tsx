@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { signIn } from "next-auth/react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, ArrowRight, Check, Loader2, Minus, Plus, Star, UserCheck, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, Check, Loader2, Minus, Plus, Star, UserCheck, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BookingCalendar } from "./booking-calendar";
 
@@ -84,6 +84,9 @@ export function BookingFlow({
   const [couponLabel, setCouponLabel] = useState("");
   const [couponError, setCouponError] = useState("");
   const [applyingCoupon, setApplyingCoupon] = useState(false);
+  const [conflict, setConflict] = useState<{ bookingId: string; service: string; startsAt: string; depositCents: number; depositForfeited: number; provider: { name: string; handle: string; avatarUrl: string | null; city: string | null } } | null>(null);
+  const [conflictDismissed, setConflictDismissed] = useState(false);
+  const [conflictLoading, setConflictLoading] = useState(false);
   const [payInfo, setPayInfo] = useState<{ bookingId: string; reference: string; publicKey: string; email: string; amountCents: number; subaccountCode?: string | null } | null>(null);
   const [payError, setPayError] = useState("");
   const payMountedRef = useRef(false);
@@ -171,6 +174,7 @@ export function BookingFlow({
     setDate(preselectedDate ?? null);
     setSlot(preselectedSlot ?? null);
     setNotes(""); setServiceCat("All");
+    setConflict(null); setConflictDismissed(false);
     setSelectedAgent(undefined); setAssignedAgent(null);
     setAgents([]);
     const computedStart: Step = startStep ?? (
@@ -337,6 +341,28 @@ export function BookingFlow({
     s.onload = mount; s.onerror = () => setPayError("Could not load Paystack");
     document.body.appendChild(s);
   }, [open, step, payInfo]);
+
+  // Check for SELF booking conflicts whenever we land on review step
+  useEffect(() => {
+    if (step !== "review" || !date || !slot || !authed) return;
+    setConflict(null);
+    setConflictDismissed(false);
+    setConflictLoading(true);
+    const d = date;
+    const [h, m] = slot.split(":").map(Number);
+    const start = new Date(d); start.setHours(h, m, 0, 0);
+    const params = new URLSearchParams({
+      startsAt: start.toISOString(),
+      duration: String(totalDuration || 60),
+      excludeProviderId: providerProfileId
+    });
+    fetch(`/api/account/conflict-check?${params}`)
+      .then((r) => r.json())
+      .then((d) => { if (d.conflict) setConflict(d.conflict); })
+      .catch(() => {})
+      .finally(() => setConflictLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, date, slot]);
 
   if (!open) return null;
 
@@ -1046,13 +1072,19 @@ export function BookingFlow({
                     <div className="mt-3">
                       <p className="mb-1.5 text-xs font-bold uppercase tracking-wider text-[var(--muted)]">Booking for</p>
                       <div className="grid grid-cols-3 gap-1.5">
-                        {(["SELF", "CHILD", "OTHER"] as const).map((v) => (
-                          <button key={v} type="button" onClick={() => setBookingFor(v)}
+                        {(["SELF", "CHILD", "OTHER"] as const).map((v) => {
+                          const selfBlocked = v === "SELF" && !!conflict && !conflictDismissed;
+                          return (
+                          <button key={v} type="button"
+                            onClick={() => !selfBlocked && setBookingFor(v)}
+                            disabled={selfBlocked}
+                            title={selfBlocked ? "You already have an appointment at this time" : undefined}
                             className={cn("rounded-xl border py-2 text-xs font-bold transition",
+                              selfBlocked ? "border-[var(--line)] text-[var(--muted)]/40 cursor-not-allowed opacity-50" :
                               bookingFor === v ? "bg-[var(--ink)] border-[var(--ink)] text-white" : "border-[var(--line)] text-[var(--muted)] hover:border-[var(--brand)] hover:text-[var(--ink)]")}>
                             {v === "SELF" ? "Myself" : v === "CHILD" ? "A child" : "Someone else"}
                           </button>
-                        ))}
+                        )})}
                       </div>
                       {bookingFor === "CHILD" && userHasAddress === false && (
                         <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
@@ -1077,7 +1109,49 @@ export function BookingFlow({
 
                     <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Anything the provider should know? (optional)"
                       className="mt-3 w-full resize-none rounded-xl border border-[var(--line)] bg-white px-3 py-2.5 text-sm outline-none focus:border-[var(--brand)]" />
-                    <button onClick={confirm} disabled={submitting || (bookingFor === "CHILD" && userHasAddress === false)}
+
+                    {/* Conflict warning banner */}
+                    {conflictLoading && (
+                      <div className="mt-3 flex items-center gap-2 text-xs text-[var(--muted)]">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking for conflicts…
+                      </div>
+                    )}
+                    {conflict && bookingFor === "SELF" && !conflictDismissed && (
+                      <div className="mt-3 rounded-2xl border border-amber-300 bg-amber-50 p-4">
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-bold text-amber-900">You already have an appointment at this time</p>
+                            <div className="mt-2 flex items-center gap-2">
+                              {conflict.provider.avatarUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={conflict.provider.avatarUrl} alt={conflict.provider.name} className="h-8 w-8 rounded-lg object-cover shrink-0" />
+                              ) : (
+                                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-200 text-amber-900 text-xs font-bold">{conflict.provider.name[0]}</span>
+                              )}
+                              <div className="min-w-0">
+                                <p className="text-xs font-bold text-amber-900">{conflict.provider.name}</p>
+                                <p className="text-xs text-amber-700">{conflict.service} · {new Date(conflict.startsAt).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" })}</p>
+                                {conflict.provider.city && <p className="text-xs text-amber-600">{conflict.provider.city}</p>}
+                              </div>
+                            </div>
+                            <p className="mt-2 text-xs text-amber-800">
+                              If you proceed, your existing appointment will be <span className="font-bold">automatically cancelled</span>.
+                              {conflict.depositForfeited > 0 ? ` Your ${ZAR(conflict.depositForfeited)} deposit will be forfeited.` : conflict.depositCents > 0 ? " Your deposit will be refunded (within cancellation window)." : ""}
+                            </p>
+                            <button
+                              onClick={() => { setConflictDismissed(true); if (bookingFor === "SELF") {} }}
+                              className="mt-3 rounded-xl bg-amber-600 px-4 py-2 text-xs font-bold text-white hover:bg-amber-700 transition"
+                            >
+                              Proceed anyway — cancel existing appointment
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    <button onClick={confirm}
+                      disabled={submitting || (bookingFor === "CHILD" && userHasAddress === false) || (bookingFor === "SELF" && !!conflict && !conflictDismissed)}
                       className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] py-3.5 text-sm font-black text-white hover:bg-[var(--brand-dark)] disabled:opacity-50">
                       {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
                       {depositDueAtCheckout > 0 ? "Continue to payment" : "Confirm booking"}

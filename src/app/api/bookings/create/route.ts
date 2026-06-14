@@ -215,6 +215,35 @@ export async function POST(request: Request) {
 
   if (couponId) await prisma.coupon.update({ where: { id: couponId }, data: { redemptions: { increment: 1 } } });
 
+  // Auto-cancel any overlapping SELF booking the client has with a different provider.
+  // This runs only for SELF bookings and only when the client explicitly confirmed the conflict.
+  if ((bookingFor ?? "SELF") === "SELF") {
+    const conflictingBookings = await prisma.booking.findMany({
+      where: {
+        clientId: user.id,
+        bookingFor: "SELF",
+        status: "CONFIRMED",
+        id: { not: booking.id },
+        startsAt: { gte: new Date(start.getTime() - 24 * 3600000), lte: new Date(start.getTime() + 24 * 3600000) }
+      },
+      include: { service: { select: { durationMinutes: true } } }
+    });
+    for (const cb of conflictingBookings) {
+      const cbEnd = cb.startsAt.getTime() + (cb.durationMinutes || cb.service.durationMinutes) * 60000;
+      const overlaps = start.getTime() < cbEnd && end.getTime() > cb.startsAt.getTime();
+      if (!overlaps) continue;
+      await prisma.booking.update({
+        where: { id: cb.id },
+        data: {
+          status: "CANCELLED",
+          notes: cb.notes
+            ? `${cb.notes}\n\nCancelled: booked with another provider`
+            : "Cancelled: booked with another provider"
+        }
+      });
+    }
+  }
+
   return NextResponse.json({
     booking: { id: booking.id, status: booking.status, depositCents: booking.depositCents }
   }, { status: 201 });

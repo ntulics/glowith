@@ -14,6 +14,11 @@ export async function GET() {
       workingHoursJson: true,
       workOnPublicHolidays: true,
       providerType: true,
+      cancelNoticeHours: true,
+      cancelFeePercent: true,
+      rescheduleNoticeHours: true,
+      rescheduleFeePercent: true,
+      policyText: true,
       agents: { select: { id: true, businessName: true, avatarUrl: true } }
     }
   });
@@ -23,6 +28,11 @@ export async function GET() {
     workingHoursJson: profile.workingHoursJson ?? null,
     workOnPublicHolidays: profile.workOnPublicHolidays,
     providerType: profile.providerType,
+    cancelNoticeHours: profile.cancelNoticeHours ?? null,
+    cancelFeePercent: profile.cancelFeePercent ?? null,
+    rescheduleNoticeHours: profile.rescheduleNoticeHours ?? null,
+    rescheduleFeePercent: profile.rescheduleFeePercent ?? null,
+    policyText: profile.policyText ?? null,
     agents: profile.agents.map((a) => ({ id: a.id, name: a.businessName, avatarUrl: a.avatarUrl })),
   });
 }
@@ -53,6 +63,11 @@ export async function PUT(request: Request) {
   if (typeof body.workOnPublicHolidays === "boolean") {
     data.workOnPublicHolidays = body.workOnPublicHolidays;
   }
+  if (body.cancelNoticeHours !== undefined) data.cancelNoticeHours = body.cancelNoticeHours === "" || body.cancelNoticeHours === null ? null : Number(body.cancelNoticeHours);
+  if (body.cancelFeePercent !== undefined) data.cancelFeePercent = body.cancelFeePercent === "" || body.cancelFeePercent === null ? null : Number(body.cancelFeePercent);
+  if (body.rescheduleNoticeHours !== undefined) data.rescheduleNoticeHours = body.rescheduleNoticeHours === "" || body.rescheduleNoticeHours === null ? null : Number(body.rescheduleNoticeHours);
+  if (body.rescheduleFeePercent !== undefined) data.rescheduleFeePercent = body.rescheduleFeePercent === "" || body.rescheduleFeePercent === null ? null : Number(body.rescheduleFeePercent);
+  if (body.policyText !== undefined) data.policyText = body.policyText || null;
 
   // Exact pin from the map picker takes precedence.
   if (typeof body.latitude === "number" && typeof body.longitude === "number" && (body.latitude !== 0 || body.longitude !== 0)) {

@@ -31,11 +31,15 @@ export async function POST(request: Request) {
   }
 
   const reference = `glw_${booking.id}_${Date.now()}`;
+  const isMobile = (request.headers.get("x-client") ?? "") === "ios";
+  const callbackUrl = isMobile
+    ? `${BASE}/api/payments/paystack/callback?mobile=1`
+    : `${BASE}/api/payments/paystack/callback`;
   const { authorizationUrl } = await initTransaction({
     email: user.email,
     amountCents: booking.depositCents,
     reference,
-    callbackUrl: `${BASE}/api/payments/paystack/callback`,
+    callbackUrl,
     metadata: { bookingId: booking.id }
   });
 

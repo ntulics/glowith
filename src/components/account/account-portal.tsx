@@ -393,7 +393,9 @@ export function AccountPortal({
     setRescheduling(true);
     setRescheduleError("");
     try {
-      const startsAt = new Date(`${rescheduleDate}T${rescheduleTime}:00`).toISOString();
+      const [yr, mo, dy] = rescheduleDate.split("-").map(Number);
+      const [hr, mn] = rescheduleTime.split(":").map(Number);
+      const startsAt = new Date(yr, mo - 1, dy, hr, mn).toISOString();
       const res = await fetch(`/api/bookings/${rescheduleBooking.id}/reschedule`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },

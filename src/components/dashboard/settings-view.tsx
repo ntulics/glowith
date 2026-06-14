@@ -238,6 +238,12 @@ export function SettingsView({
     DAYS.map((day, i) => ({ day, enabled: i < 5, from: "09:00", to: "17:00" }))
   );
   const [workOnPublicHolidays, setWorkOnPublicHolidays] = useState(true);
+  const [cancelNoticeHours, setCancelNoticeHours] = useState<string>("");
+  const [cancelFeePercent, setCancelFeePercent] = useState<string>("");
+  const [rescheduleNoticeHours, setRescheduleNoticeHours] = useState<string>("");
+  const [rescheduleFeePercent, setRescheduleFeePercent] = useState<string>("");
+  const [policyText, setPolicyText] = useState<string>("");
+  const [policySaved, setPolicySaved] = useState(false);
   const [currency, setCurrency] = useState("ZAR");
   const [paymentMethod, setPaymentMethod] = useState("on-site");
   const [intSearchQuery, setIntSearchQuery] = useState("");
@@ -370,6 +376,11 @@ export function SettingsView({
         if (typeof d.workOnPublicHolidays === "boolean") {
           setWorkOnPublicHolidays(d.workOnPublicHolidays);
         }
+        if (d.cancelNoticeHours != null) setCancelNoticeHours(String(d.cancelNoticeHours));
+        if (d.cancelFeePercent != null) setCancelFeePercent(String(d.cancelFeePercent));
+        if (d.rescheduleNoticeHours != null) setRescheduleNoticeHours(String(d.rescheduleNoticeHours));
+        if (d.rescheduleFeePercent != null) setRescheduleFeePercent(String(d.rescheduleFeePercent));
+        if (d.policyText) setPolicyText(d.policyText);
       })
       .catch(() => {});
   }, []);
@@ -812,6 +823,100 @@ export function SettingsView({
             </div>
           ))}
         </div>
+        {/* ── Cancellation & Rescheduling Policy ── */}
+        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm space-y-5">
+          <div>
+            <h2 className="font-black text-base">Cancellation &amp; rescheduling policy</h2>
+            <p className="mt-1 text-sm text-gray-500">Define your notice windows and fees. Clients will see this policy before confirming a booking.</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-gray-500">Cancel notice (hours)</label>
+              <input type="number" min={0} value={cancelNoticeHours}
+                onChange={(e) => { setCancelNoticeHours(e.target.value); setPolicySaved(false); }}
+                placeholder="e.g. 24"
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none focus:border-[#D94472] focus:bg-white" />
+              <p className="mt-1 text-xs text-gray-400">How many hours before the appointment clients can cancel for free.</p>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-gray-500">Late cancel fee (%)</label>
+              <input type="number" min={0} max={100} value={cancelFeePercent}
+                onChange={(e) => { setCancelFeePercent(e.target.value); setPolicySaved(false); }}
+                placeholder="e.g. 50"
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none focus:border-[#D94472] focus:bg-white" />
+              <p className="mt-1 text-xs text-gray-400">% of deposit forfeited when cancelling within the notice window.</p>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-gray-500">Reschedule notice (hours)</label>
+              <input type="number" min={0} value={rescheduleNoticeHours}
+                onChange={(e) => { setRescheduleNoticeHours(e.target.value); setPolicySaved(false); }}
+                placeholder="e.g. 12"
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none focus:border-[#D94472] focus:bg-white" />
+              <p className="mt-1 text-xs text-gray-400">Hours before the appointment within which rescheduling is allowed.</p>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-gray-500">Late reschedule fee (%)</label>
+              <input type="number" min={0} max={100} value={rescheduleFeePercent}
+                onChange={(e) => { setRescheduleFeePercent(e.target.value); setPolicySaved(false); }}
+                placeholder="e.g. 0"
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none focus:border-[#D94472] focus:bg-white" />
+              <p className="mt-1 text-xs text-gray-400">% of deposit forfeited when rescheduling within the notice window.</p>
+            </div>
+          </div>
+
+          {/* Dynamic placeholder */}
+          {(cancelNoticeHours || rescheduleNoticeHours) && !policyText && (
+            <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-3">
+              <p className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Suggested policy text</p>
+              <p className="text-xs text-gray-600 leading-relaxed">
+                {[
+                  cancelNoticeHours ? `Cancellations within ${cancelNoticeHours}h forfeit ${cancelFeePercent || 0}% of deposit.` : "",
+                  rescheduleNoticeHours ? `Rescheduling allowed up to ${rescheduleNoticeHours}h before your appointment${rescheduleFeePercent && Number(rescheduleFeePercent) > 0 ? ` (${rescheduleFeePercent}% fee applies)` : ""}.` : "",
+                  "No-shows forfeit the full deposit."
+                ].filter(Boolean).join(" ")}
+              </p>
+              <button type="button"
+                onClick={() => {
+                  const text = [
+                    cancelNoticeHours ? `Cancellations within ${cancelNoticeHours}h forfeit ${cancelFeePercent || 0}% of deposit.` : "",
+                    rescheduleNoticeHours ? `Rescheduling allowed up to ${rescheduleNoticeHours}h before your appointment${rescheduleFeePercent && Number(rescheduleFeePercent) > 0 ? ` (${rescheduleFeePercent}% fee applies)` : ""}.` : "",
+                    "No-shows forfeit the full deposit."
+                  ].filter(Boolean).join(" ");
+                  setPolicyText(text);
+                }}
+                className="mt-2 text-xs font-bold text-[#D94472] hover:underline">
+                Use this text →
+              </button>
+            </div>
+          )}
+
+          <div>
+            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-gray-500">Policy text (shown to clients)</label>
+            <textarea value={policyText} onChange={(e) => { setPolicyText(e.target.value); setPolicySaved(false); }}
+              rows={3} maxLength={400}
+              placeholder={`e.g. Cancellations within ${cancelNoticeHours || "24"}h forfeit ${cancelFeePercent || "50"}% of deposit. Rescheduling allowed up to ${rescheduleNoticeHours || "12"}h before your appointment. No-shows forfeit the full deposit.`}
+              className="w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none focus:border-[#D94472] focus:bg-white" />
+            <p className="mt-1 text-xs text-gray-400">{policyText.length}/400 characters. Keep it short — displayed on mobile booking screens.</p>
+          </div>
+
+          <div className="flex items-center justify-end gap-3">
+            {policySaved && <span className="text-xs font-semibold text-emerald-600">Saved ✓</span>}
+            <button type="button"
+              onClick={async () => {
+                await fetch("/api/dashboard/settings", {
+                  method: "PUT", headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ cancelNoticeHours: cancelNoticeHours || null, cancelFeePercent: cancelFeePercent || null, rescheduleNoticeHours: rescheduleNoticeHours || null, rescheduleFeePercent: rescheduleFeePercent || null, policyText: policyText || null })
+                });
+                setPolicySaved(true);
+                setTimeout(() => setPolicySaved(false), 3000);
+              }}
+              className="rounded-xl bg-[#1a1a1a] px-6 py-2.5 text-sm font-bold text-white hover:opacity-90">
+              Save policy
+            </button>
+          </div>
+        </div>
+
         <div className="flex justify-end">
           <button type="button" className="rounded-xl bg-[#1a1a1a] px-6 py-2.5 text-sm font-bold text-white hover:opacity-90">Save changes</button>
         </div>

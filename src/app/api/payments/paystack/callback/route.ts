@@ -9,8 +9,16 @@ const BASE = process.env.NEXTAUTH_URL ?? "https://glowith.co.za";
 // then send the customer to a success page. (The webhook is the authoritative
 // confirmation; this is the user-facing redirect.)
 export async function GET(request: Request) {
-  const reference = new URL(request.url).searchParams.get("reference");
-  if (!reference) return NextResponse.redirect(`${BASE}/booking/confirmed?status=error`);
+  const url = new URL(request.url);
+  const reference = url.searchParams.get("reference");
+  const mobile = url.searchParams.get("mobile") === "1";
+
+  const redirect = (status: "success" | "error") => {
+    if (mobile) return NextResponse.redirect(`glowith://payment/${status}`);
+    return NextResponse.redirect(`${BASE}/booking/confirmed?status=${status}`);
+  };
+
+  if (!reference) return redirect("error");
 
   try {
     const { success } = await verifyTransaction(reference);
@@ -20,10 +28,10 @@ export async function GET(request: Request) {
         where: { id: booking.id },
         data: { status: "CONFIRMED", checkInCode: generateCheckInCode(), checkInCodeExpiresAt: checkInCodeExpiry(booking.startsAt, booking.durationMinutes) }
       })));
-      return NextResponse.redirect(`${BASE}/booking/confirmed?status=success`);
+      return redirect("success");
     }
   } catch {
     /* fall through to error */
   }
-  return NextResponse.redirect(`${BASE}/booking/confirmed?status=error`);
+  return redirect("error");
 }
