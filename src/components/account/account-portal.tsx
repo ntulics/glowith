@@ -51,6 +51,7 @@ type Booking = {
   agentName?: string | null;
   agentHandle?: string | null;
   agentProfileId?: string | null;
+  reviewed?: boolean;
   provider: { id?: string; name: string; handle: string; city?: string | null } & ProviderPolicy;
 };
 
@@ -490,7 +491,7 @@ export function AccountPortal({
   const upcoming = bookings.filter((b) => isUpcoming(b));
   const history = bookings
     .filter((b) => !isUpcoming(b) && !shouldHideFromHistory(b))
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    .sort((a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime());
   const displayed = tab === "upcoming" ? upcoming : history;
 
   return (
@@ -642,20 +643,27 @@ export function AccountPortal({
                           />
                         )}
                         {booking.status === "COMPLETED" && (
-                          <div className="mt-3 rounded-xl border border-pink-100 bg-pink-50 p-3 space-y-2">
+                          <div className={cn("mt-3 rounded-xl border p-3 space-y-2", booking.reviewed ? "border-emerald-100 bg-emerald-50" : "border-pink-100 bg-pink-50")}>
                             <div className="flex items-center gap-2 font-black text-sm text-[var(--ink)]">
-                              <Star className="h-4 w-4 text-[var(--brand)]" />
-                              How was your appointment?
+                              <Star className={cn("h-4 w-4", booking.reviewed ? "fill-amber-400 text-amber-400" : "text-[var(--brand)]")} />
+                              {booking.reviewed ? "Review submitted" : "How was your appointment?"}
                             </div>
-                            <p className="text-xs text-[var(--muted)]">
-                              Rate your {booking.agentName ? "provider and artist" : "provider"} — it helps others find great services.
-                            </p>
+                            {!booking.reviewed && (
+                              <p className="text-xs text-[var(--muted)]">
+                                Rate your {booking.agentName ? "provider and artist" : "provider"} — it helps others find great services.
+                              </p>
+                            )}
                             <Link
                               href={`/account/review/${booking.id}`}
-                              className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--brand)] px-3 py-2 text-xs font-bold text-white hover:bg-[var(--brand-dark)] transition"
+                              className={cn(
+                                "inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition",
+                                booking.reviewed
+                                  ? "border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
+                                  : "bg-[var(--brand)] text-white hover:bg-[var(--brand-dark)]"
+                              )}
                             >
                               <Star className="h-3 w-3" />
-                              {booking.agentName ? `Rate provider & ${booking.agentName}` : `Rate ${booking.provider.name}`}
+                              {booking.reviewed ? "View review" : (booking.agentName ? `Rate provider & ${booking.agentName}` : `Rate ${booking.provider.name}`)}
                             </Link>
                           </div>
                         )}

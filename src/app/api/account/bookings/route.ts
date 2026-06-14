@@ -28,7 +28,8 @@ export async function GET() {
     }
   });
 
-  const bookings = await prisma.booking.findMany({
+  const [bookings, userRatings] = await Promise.all([
+  prisma.booking.findMany({
     where: { clientId: userId },
     include: {
       service: { select: { name: true, durationMinutes: true, priceCents: true } },
@@ -53,7 +54,14 @@ export async function GET() {
       }
     },
     orderBy: { startsAt: "desc" }
-  });
+  }),
+  prisma.rating.findMany({
+    where: { userId },
+    select: { providerProfileId: true }
+  })
+  ]);
+
+  const ratedProviderIds = new Set(userRatings.map((r) => r.providerProfileId));
 
   return NextResponse.json({
     bookings: bookings.map((b) => {
@@ -84,6 +92,7 @@ export async function GET() {
         agentName: agentProfile?.businessName ?? null,
         agentHandle: agentProfile?.handle ?? null,
         agentProfileId: agentProfile?.id ?? null,
+        reviewed: ratedProviderIds.has(providerProfile.id),
         provider: {
           id: providerProfile.id,
           name: providerProfile.businessName,
