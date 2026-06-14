@@ -647,25 +647,16 @@ export function AccountPortal({
                               <Star className="h-4 w-4 text-[var(--brand)]" />
                               How was your appointment?
                             </div>
-                            <p className="text-xs text-[var(--muted)]">Share your experience to help others find great providers.</p>
-                            <div className="flex flex-wrap gap-2">
-                              <Link
-                                href={`/@${booking.provider.handle.replace("@","")}/review?bookingId=${booking.id}`}
-                                className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--brand)] px-3 py-2 text-xs font-bold text-white hover:bg-[var(--brand-dark)] transition"
-                              >
-                                <Star className="h-3 w-3" />
-                                Rate {booking.provider.name}
-                              </Link>
-                              {booking.agentHandle && (
-                                <Link
-                                  href={`/@${booking.agentHandle.replace("@","")}/review?bookingId=${booking.id}`}
-                                  className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--brand)] px-3 py-2 text-xs font-bold text-[var(--brand)] hover:bg-[var(--brand)]/5 transition"
-                                >
-                                  <Star className="h-3 w-3" />
-                                  Rate {booking.agentName}
-                                </Link>
-                              )}
-                            </div>
+                            <p className="text-xs text-[var(--muted)]">
+                              Rate your {booking.agentName ? "provider and artist" : "provider"} — it helps others find great services.
+                            </p>
+                            <Link
+                              href={`/account/review/${booking.id}`}
+                              className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--brand)] px-3 py-2 text-xs font-bold text-white hover:bg-[var(--brand-dark)] transition"
+                            >
+                              <Star className="h-3 w-3" />
+                              {booking.agentName ? `Rate provider & ${booking.agentName}` : `Rate ${booking.provider.name}`}
+                            </Link>
                           </div>
                         )}
                       </div>
